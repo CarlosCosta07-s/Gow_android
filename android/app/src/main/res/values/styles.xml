@@ -3,9 +3,10 @@
     <style name="Theme.GowAndroid" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowNoTitle">true</item>
-        <item name="android:colorAccent">#C7A96B</item>
-        <item name="android:navigationBarColor">#08070B</item>
-        <item name="android:statusBarColor">#08070B</item>
+        <item name="android:colorAccent">#C74632</item>
+        <item name="android:windowBackground">#0A080A</item>
+        <item name="android:navigationBarColor">#0A080A</item>
+        <item name="android:statusBarColor">#0A080A</item>
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>

@@ -2,7 +2,7 @@
 
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
-> Estado atual: APK Debug ARM64 do shell compilado com sucesso na CI (commit `7ed5a254`). Launcher SAF com validação inicial ISO9660 adicionado depois desse build; a compilação dessa última alteração está em andamento. O jogo ainda não está integrado ou jogável.
+> Estado atual: APK Debug ARM64 com launcher SAF/ISO9660 e identidade visual customizada compilado com sucesso na CI. O jogo ainda não está integrado ou jogável.
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml)
 
@@ -23,6 +23,10 @@ Não queremos um emulador genérico, uma ISO dentro do APK ou um caminho final b
 - **SDK:** compile API 37 / target API 36; API mínima 28.
 - **Primeira revisão-alvo:** NTSC-U, serial `SCUS-97399`; outras regiões serão avaliadas depois.
 - **Desenvolvimento:** somente branch `main`.
+
+## Identidade visual e launcher customizado
+
+O aplicativo utiliza um ícone adaptativo próprio com retrato de Kratos, Ômega vermelho e moldura bronze. A tela inicial adota uma estética de pedra escura, vermelho de guerra e bronze antigo, com menu horizontal e estado do disco sempre visível. A interface foi construída com componentes Android nativos; a arte não substitui os botões nem as funções reais.
 
 ## Launcher e seleção de disco
 

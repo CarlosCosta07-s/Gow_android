@@ -9,6 +9,8 @@
     <application
         android:allowBackup="false"
         android:hasCode="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:isGame="true"
         android:label="God of War — Android"
         android:supportsRtl="true"
@@ -19,7 +21,6 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation"
             android:exported="false"
             android:screenOrientation="landscape">
-
             <meta-data
                 android:name="android.app.lib_name"
                 android:value="android-game" />
@@ -27,7 +28,9 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation"
+            android:exported="true"
+            android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
