@@ -12,7 +12,7 @@
         android:isGame="true"
         android:label="God of War — Android"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:theme="@style/Theme.GowAndroid">
 
         <activity
             android:name=".GowGameActivity"
