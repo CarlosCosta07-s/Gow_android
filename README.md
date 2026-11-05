@@ -2,7 +2,7 @@
 
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
-> Estado atual: APK Debug ARM64 com launcher SAF/ISO9660 e identidade visual customizada compilado com sucesso na CI. O jogo ainda não está integrado ou jogável.
+> Estado atual: APK Debug ARM64 com ícone adaptativo e launcher temático compilado com sucesso pela CI no run `42128232489` (commit `e2094dc9`). O jogo ainda não está integrado ou jogável.
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml)
 
@@ -30,7 +30,7 @@ O aplicativo utiliza um ícone adaptativo próprio com retrato de Kratos, Ômega
 
 ## Launcher e seleção de disco
 
-A tela inicial permite selecionar uma imagem pelo Storage Access Framework, manter a permissão quando o provedor Android permite e validar o descritor primário ISO9660 no setor 16. Essa verificação **não identifica o serial nem confirma que o arquivo é God of War**; a leitura de `SYSTEM.CNF` e a identificação da revisão ainda serão implementadas. A implementação foi compilada no run CI `42125956300`. A imagem não é copiada para o aplicativo nem enviada ao GitHub.
+A tela inicial permite selecionar uma imagem pelo Storage Access Framework, manter a permissão quando o provedor Android permite e validar o descritor primário ISO9660 no setor 16. Essa verificação **não identifica o serial nem confirma que o arquivo é God of War**; a leitura de `SYSTEM.CNF` e a identificação da revisão ainda serão implementadas. A implementação SAF/ISO9660 e a versão visual customizada foram compiladas nos runs CI `42125956300` e `42128232489`. A imagem não é copiada para o aplicativo nem enviada ao GitHub.
 
 O botão de teste Vulkan abre a atividade nativa separadamente; ele não inicia o jogo.
 
