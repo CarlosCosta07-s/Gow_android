@@ -63,5 +63,6 @@ android {
 }
 
 dependencies {
+    implementation "androidx.core:core:1.19.1"
     implementation "androidx.games:games-activity:4.4.2"
 }
