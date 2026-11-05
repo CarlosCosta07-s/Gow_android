@@ -1,6 +1,6 @@
 # Testes e diagnóstico
 
-**Build CI:** o APK Debug ARM64 com launcher SAF/validação ISO9660 compilou com sucesso no run `42125956300` (commit `993c1a9e`). Nenhuma execução em aparelho físico foi registrada. Este documento define a evidência necessária para evitar confundir teste de shell com teste do jogo.
+**Build CI:** o APK Debug ARM64 com ícone adaptativo e launcher temático compilou com sucesso no run `42128232489` (commit `e2094dc9`). A build anterior do seletor SAF/ISO9660 também passou no run `42125956300`. Nenhuma execução em aparelho físico foi registrada. Este documento define a evidência necessária para evitar confundir teste de shell com teste do jogo.
 
 ## Ficha por aparelho
 
@@ -17,6 +17,8 @@ Registrar:
 - Temperatura inicial/final quando disponível.
 
 ## Portas de validação
+
+A compilação da interface e do ícone está verificada por CI; visualização e uso em tela física continuam pendentes.
 
 | Porta | O que precisa ser comprovado | Evidência |
 |---|---|---|
