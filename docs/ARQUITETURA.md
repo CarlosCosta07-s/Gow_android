@@ -1,6 +1,6 @@
 # Arquitetura técnica — Gow_android
 
-**Estado:** proposta inicial. Os componentes descritos ainda não estão implementados neste repositório.
+**Estado:** arquitetura inicial com shell Android ARM64 e teste de apresentação Vulkan adicionados; ainda não executa o jogo.
 
 ## Objetivo
 
@@ -13,39 +13,54 @@ O produto final não será um emulador genérico nem dependerá de interpretaç�
 - Plataforma exclusiva: Android.
 - ABI inicial: `arm64-v8a`.
 - Linguagem nativa: C++20.
-- Build nativo: CMake + Android NDK.
-- Aplicativo: Gradle + AndroidX GameActivity.
+- Build nativo: CMake + Android NDK `30.0.16248370`.
+- Aplicativo: Gradle 9.6.0, Android Gradle Plugin 9.5.0 e AndroidX GameActivity 4.4.2.
+- SDK de compilação/alvo: API 36.
+- API mínima inicial: Android 9 / API 28.
 - Gráficos: Vulkan nativo, com surface e swapchain Android reais.
 - Primeiro alvo de compatibilidade: NTSC-U, serial `SCUS-97399`, por ser a revisão mais documentada nas referências auditadas.
 - PAL e outras revisões ficam para uma etapa posterior.
 
-A versão mínima do Android e o requisito Vulkan definitivo serão confirmados com dispositivos reais. Android 9/API 28 e Vulkan 1.1 são apenas referências iniciais observadas em outro projeto, não uma garantia nossa.
+Essas versões fixam a primeira build de CI; serão atualizadas deliberadamente, não por dependências flutuantes.
 
-## Camadas do projeto
+## Estado do shell implementado
+
+O primeiro código executável do projeto foi adicionado em:
+
+- `android/app`: configuração Gradle, manifesto e Activity.
+- `android/app/src/main/java/org/gowandroid/app/GowGameActivity.java`: Activity baseada em AndroidX GameActivity.
+- `android/app/src/main/cpp/main.cpp`: ciclo nativo e smoke test Vulkan.
+- `.github/workflows/android-shell.yml`: build de APK Debug ARM64.
+
+O smoke test atual cria instância Vulkan, surface Android, seleciona GPU e filas de gráficos/apresentação, cria device, swapchain, image views, render pass, framebuffers, command buffers e semáforos. Envia um pass que limpa a imagem e chama apresentação. Trata eventos de criação/encerramento da janela e recriação do swapchain.
+
+**Limite importante:** esse clear/present é apenas um teste de integração Vulkan. Ainda não há frontend GS, shaders do jogo, recursos gráficos de God of War, leitura de ISO, recompilação de ELF ou runtime de jogo. A implementação ainda precisa passar pela CI e ser executada em aparelho real.
+
+## Camadas futuras do port
 
 ### 1. Aplicativo Android
 
 Responsabilidades:
 
-- Tela inicial, seleção do disco e apresentação do estado de compatibilidade.
-- Storage Access Framework para abrir o arquivo escolhido pelo usuário.
+- Tela inicial, seleção do disco e compatibilidade.
+- Storage Access Framework para abrir arquivo escolhido pelo usuário.
 - Permissão persistente de leitura quando o provedor permitir.
-- Identificação da região/revisão e diagnóstico de arquivos inválidos.
+- Identificação da região/revisão e diagnóstico.
 - Orientação horizontal, ciclo de vida, foco, pausa e recuperação da superfície.
 - Configuração de controles, interface de toque e controles físicos.
 - Gerenciamento de saves e exportação/importação por seletor Android.
 
-**Decisão:** usar AndroidX GameActivity como base do novo shell C/C++. A referência CodeAbhi usa NativeActivity; sua lógica de seleção e validação é útil, mas não será copiada sem adaptação. A documentação Android recomenda GameActivity para jogos novos.
+**Decisão:** usar AndroidX GameActivity. A documentação Android recomenda GameActivity para jogos novos; ela fornece uma SurfaceView e entrega eventos/lifecycle ao código C/C++.
 
 ### 2. Disco e dados do usuário
 
 Fluxo previsto:
 
-1. Receber a URI do arquivo pelo seletor Android.
-2. Abrir o descritor de leitura e preservar a permissão concedida.
+1. Receber URI pelo seletor Android.
+2. Abrir descritor de leitura e preservar permissão concedida.
 3. Validar ISO9660, descritor primário, tamanho e estrutura esperada.
 4. Identificar serial e revisão; recusar arquivos incompatíveis com diagnóstico explícito.
-5. Ler diretamente do descritor ou preparar somente os elementos de boot estritamente necessários em diretório privado do app.
+5. Ler diretamente do descritor ou preparar somente elementos de boot estritamente necessários no diretório privado.
 6. Nunca enviar dados do usuário para repositório, Issues, releases ou CI pública.
 
 A ISO não será copiada para o APK nem armazenada no Git.
@@ -54,7 +69,7 @@ A ISO não será copiada para o APK nem armazenada no Git.
 
 Ferramenta do pipeline de desenvolvimento, não parte do loop de jogo:
 
-- Analisar o ELF de entrada do usuário.
+- Analisar ELF de entrada do usuário.
 - Identificar funções e instruções MIPS R5900.
 - Gerar C++ e compilar para `arm64-v8a`.
 - Registrar versão de ferramentas, mapa de funções, opções e hashes dos insumos privados.
@@ -74,55 +89,49 @@ Responsabilidades previstas:
 
 Falhas devem registrar PC, RA, SP, thread e último subsistema confirmado.
 
-### 5. Subsistemas PS2 utilizados pelo jogo
+### 5. Subsistemas PS2 utilizados
 
 Implementar somente os contratos necessários ao título:
 
 - IOP/R3000A e módulos IRX.
 - SIF, DMA, VIF e GIF.
 - CD/DVD e leitura dos arquivos do disco.
-- Cartão de memória virtual e operações de save/load.
+- Cartão de memória virtual e operações save/load.
 - SPU2/LIBSD e temporização de áudio.
 - Entrada equivalente ao DualShock 2.
 
-Cada subsistema terá logs e contadores próprios. Uma falha de leitura ou DMA não deve aparecer como travamento gráfico sem diagnóstico.
+Cada subsistema terá logs e contadores próprios.
 
 ### 6. Renderizador Graphics Synthesizer (GS) via Vulkan
 
-Este é um dos maiores riscos técnicos para Android.
+O smoke test já prova o caminho Android surface/swapchain/clear/present quando a CI e os dispositivos o validarem. Isso não equivale a modelar o Graphics Synthesizer.
 
-A implementação não pode ser confundida com um probe Vulkan. Enumerar uma GPU ou criar uma instância não apresenta os frames do GS.
+Próximas etapas:
 
-Etapas obrigatórias:
+1. Criar um backend GS com interface independente do Android.
+2. Implementar recursos de renderização usados pelo jogo.
+3. Validar texturas, CLUT/paletas, swizzle, framebuffer, depth, blend e alpha test.
+4. Reproduzir passagens e efeitos específicos do jogo.
+5. Comparar capturas e checkpoints com referências conhecidas.
+6. Medir sincronização, filas e memória em GPUs móveis reais.
 
-1. Criar instância Vulkan e habilitar extensões necessárias.
-2. Criar surface usando a janela Android.
-3. Selecionar dispositivo físico e filas de gráficos/apresentação.
-4. Criar swapchain, imagens, views, sincronização e recuperação de resize/orientação.
-5. Desenhar e apresentar um frame de teste, confirmando o caminho de apresentação.
-6. Integrar o frontend GS ao backend Vulkan.
-7. Implementar e validar texturas, CLUT/paletas, swizzle, framebuffer, depth, blend e alpha test usados pelo jogo.
-8. Comparar capturas e checkpoints com referências conhecidas.
-
-**Critério do renderer:** primeira imagem real do jogo apresentada na tela Android. Uma janela vazia, probe Vulkan ou triângulo de teste não conclui esta fase.
+**Critério do renderer:** primeira imagem real do jogo apresentada na tela Android. Um triângulo, clear pass ou probe não conclui esta fase.
 
 ### 7. Áudio
 
-O SPU2/LIBSD deverá alimentar um mixer nativo e uma saída Android de baixa latência. Oboe é a opção inicial para a saída, com buffers e sincronização sob responsabilidade do runtime.
-
-O callback de áudio não deve bloquear, alocar memória imprevisivelmente nem fazer leitura de disco.
+O SPU2/LIBSD deverá alimentar um mixer nativo e saída Android de baixa latência. Oboe é a opção inicial para a saída; buffers e sincronização permanecem responsabilidade do runtime. O callback não deve bloquear, alocar memória imprevisivelmente nem ler disco.
 
 ### 8. Entrada e interface
 
 - Overlay de toque configurável.
 - Mapeamento de botões para a semântica DualShock 2.
 - Controles Bluetooth e USB pelas APIs de entrada Android.
-- Tratamento de pausa, perda de foco, reconexão e retorno ao app.
-- Feedback tátil opcional, sem alterar a lógica original do jogo.
+- Tratamento de pausa, perda de foco, reconexão e retorno.
+- Feedback tátil opcional, sem alterar a lógica original.
 
 ### 9. Frame pacing e desempenho
 
-Separar relógio da lógica do jogo, submissão GPU e apresentação. Avaliar Frame Pacing/Swappy do Android Game Development Kit. Prioridade inicial: estabilidade e velocidade correta do jogo; metas de FPS só serão publicadas após medições em dispositivos e cenas identificados.
+Separar relógio da lógica, submissão GPU e apresentação. Avaliar Frame Pacing/Swappy do Android Game Development Kit. Prioridade: estabilidade e velocidade correta; metas de FPS só serão publicadas após medições em dispositivos e cenas identificados.
 
 ## Estrutura lógica pretendida
 
@@ -137,4 +146,4 @@ docs/          Arquitetura, estado, testes, roadmap e créditos
 third_party/   Dependências externas com versão e licença fixadas
 ```
 
-Os diretórios serão criados quando houver implementação real, testes e documentação para eles. Não criaremos módulos vazios apenas para aparentar progresso.
+Os diretórios de runtime/recompilação serão criados quando houver implementação real, testes e documentação. Não criaremos módulos vazios.
