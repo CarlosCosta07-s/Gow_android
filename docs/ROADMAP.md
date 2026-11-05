@@ -15,10 +15,11 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - [x] Configurar Gradle, Android NDK, CMake e ABI `arm64-v8a`.
 - [x] Adicionar AndroidX GameActivity e Activity nativa.
 - [x] Compilar APK Debug ARM64 e confirmar build CI no commit `7ed5a254`.
-- [ ] Confirmar a CI da última alteração do launcher SAF.
-- [ ] Instalar e executar em aparelho Android real.
+- [x] Confirmar a CI do launcher SAF/ISO9660 no run `42125956300`.
+- [x] Criar ícone adaptativo e launcher temático God of War e confirmar a CI no run `42128232489`.
+- [ ] Instalar e executar em aparelho Android real (incluindo conferência do novo ícone e layout).
 - [x] Adicionar tela inicial e seletor SAF para a imagem do usuário.
-- [x] Solicitar permissão persistente de leitura e validar o descritor primário ISO9660 do setor 16 (CI da última alteração pendente).
+- [x] Solicitar permissão persistente de leitura e validar o descritor primário ISO9660 do setor 16.
 - [ ] Ler `SYSTEM.CNF` e identificar serial/revisão do jogo.
 - [ ] Diagnosticar permissão, formato e região.
 - [ ] Exportar logs sem dados pessoais ou do jogo.
