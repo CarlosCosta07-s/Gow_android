@@ -25,17 +25,18 @@ Essas versões fixam a primeira build de CI; serão atualizadas deliberadamente,
 
 ## Estado do shell implementado
 
-O primeiro código executável do projeto foi adicionado em:
+O código executável inicial do projeto está em:
 
 - `android/app`: configuração Gradle, manifesto e Activity.
+- `android/app/src/main/java/org/gowandroid/app/MainActivity.java`: launcher AppCompat, seletor SAF e validação ISO9660 do setor 16.
 - `android/app/src/main/java/org/gowandroid/app/MainActivity.java`: launcher AppCompat, seletor SAF e validação ISO9660 do setor 16.
 - `android/app/src/main/java/org/gowandroid/app/GowGameActivity.java`: Activity baseada em AndroidX GameActivity.
 - `android/app/src/main/cpp/main.cpp`: ciclo nativo e smoke test Vulkan.
 - `.github/workflows/android-shell.yml`: build de APK Debug ARM64.
 
-O smoke test atual cria instância Vulkan, surface Android, seleciona GPU e filas de gráficos/apresentação, cria device, swapchain, image views, render pass, framebuffers, command buffers e semáforos. Envia um pass que limpa a imagem e chama apresentação. Trata eventos de criação/encerramento da janela e recriação do swapchain.
+O smoke test atual cria instância Vulkan, surface Android, seleciona GPU e filas de gráficos/apresentação, cria device, swapchain, image views, render pass, framebuffers, command buffers e semáforos. Envia um pass que limpa a imagem e chama apresentação. Trata eventos de criação/encerramento da janela e recriação do swapchain. A build ARM64 foi confirmada na CI, incluindo a versão com launcher SAF.
 
-**Limite importante:** esse clear/present é apenas um teste de integração Vulkan. Ainda não há frontend GS, shaders do jogo, recursos gráficos de God of War, identificação do serial/revisão, recompilação de ELF ou runtime de jogo. O shell Vulkan passou pela CI no commit `7ed5a254`, mas ainda precisa ser executado em aparelho real.
+**Limite importante:** esse clear/present é apenas um teste de integração Vulkan. A validação ISO9660 já está implementada no launcher, mas ainda não lê `SYSTEM.CNF` nem identifica serial/revisão. Ainda não há frontend GS, shaders do jogo, recursos gráficos de God of War, recompilação de ELF ou runtime de jogo. O APK foi compilado pela CI, mas ainda precisa ser executado em aparelho real.
 
 ## Camadas futuras do port
 
