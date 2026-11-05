@@ -20,7 +20,7 @@ Não queremos um emulador genérico, uma ISO dentro do APK ou um caminho final b
 - **Código nativo:** C++20, CMake e Android NDK `30.0.16248370`.
 - **Aplicativo:** AndroidX GameActivity 4.4.2.
 - **Build:** Android Gradle Plugin 9.5.0 e Gradle 9.6.0.
-- **SDK:** compile/target API 36; API mínima 28.
+- **SDK:** compile API 37 / target API 36; API mínima 28.
 - **Primeira revisão-alvo:** NTSC-U, serial `SCUS-97399`; outras regiões serão avaliadas depois.
 - **Desenvolvimento:** somente branch `main`.
 
@@ -53,7 +53,7 @@ Veja o [roadmap detalhado](docs/ROADMAP.md).
 
 ## Construção local
 
-Requisitos fixados no projeto: JDK 17, Android SDK Platform 36, Build Tools 36.0.0, Android NDK 30.0.16248370, CMake 3.22.1 e Gradle 9.6.0.
+Requisitos fixados no projeto: JDK 17, Android SDK Platform 37, Build Tools 37.0.0, Android NDK 30.0.16248370, CMake 3.22.1 e Gradle 9.6.0.
 
 Com o SDK/NDK instalados e aceitos:
 
