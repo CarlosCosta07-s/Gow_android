@@ -46,10 +46,17 @@ jobs:
         run: |
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" --install \
-            "platforms;android-37" \
+            "platforms;android-37.0" \
             "build-tools;37.0.0" \
             "ndk;30.0.16248370" \
             "cmake;3.22.1"
+
+          # Android 17's SDK package is published as android-37.0.
+          # Keep a compatibility alias for build-tool versions that resolve
+          # compileSdk 37 through the legacy android-37 directory name.
+          if [ -d "$ANDROID_SDK_ROOT/platforms/android-37.0" ] && [ ! -e "$ANDROID_SDK_ROOT/platforms/android-37" ]; then
+            ln -s android-37.0 "$ANDROID_SDK_ROOT/platforms/android-37"
+          fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
