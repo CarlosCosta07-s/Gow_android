@@ -1,6 +1,6 @@
 # Testes e diagnóstico
 
-Nenhuma build ou teste em aparelho foi executado por este repositório neste commit. Este documento define a evidência necessária para evitar confundir um teste de shell com um teste do jogo.
+**Build CI:** o APK Debug ARM64 foi compilado com sucesso no run `42125687906` (commit `7ed5a254`). O launcher SAF/ISO9660 foi adicionado depois e aguarda sua própria confirmação CI. Nenhuma execução em aparelho físico foi registrada. Este documento define a evidência necessária para evitar confundir teste de shell com teste do jogo.
 
 ## Ficha por aparelho
 
@@ -22,12 +22,13 @@ Registrar:
 |---|---|---|
 | A — Instalação | APK instala, abre e fecha sem crash. | Logcat e identificação da build. |
 | B — Seleção | SAF abre o arquivo e mantém a permissão. | Resultado da permissão e estado do seletor. |
-| C — Identificação | ISO9660, serial e revisão são reconhecidos. | Log de validação sem caminho privado. |
-| D — Vulkan | Surface, swapchain, filas e primeira apresentação de teste funcionam. | Logs de criação, resize e present. |
-| E — Runtime | EE progride por estágios conhecidos. | PC/RA/SP, thread e última etapa. |
-| F — Primeiro frame | GS apresenta imagem real do jogo. | Captura de tela e log correlacionado. |
-| G — Gameplay | Menu, novo jogo, combate e transições funcionam. | Lista de cenários e resultados. |
-| H — Áudio/save | Som, FMV e save/load funcionam. | Testes e integridade do save. |
+| C — ISO9660 | O descritor primário do setor 16 é validado. | Estado da tela e log sem caminho privado. |
+| D — Identificação | `SYSTEM.CNF`, serial e revisão são reconhecidos. | Log de validação sem caminho privado. |
+| E — Vulkan | Surface, swapchain, filas e primeira apresentação de teste funcionam. | Logs de criação, resize e present. |
+| F — Runtime | EE progride por estágios conhecidos. | PC/RA/SP, thread e última etapa. |
+| G — Primeiro frame | GS apresenta imagem real do jogo. | Captura de tela e log correlacionado. |
+| H — Gameplay | Menu, novo jogo, combate e transições funcionam. | Lista de cenários e resultados. |
+| I — Áudio/save | Som, FMV e save/load funcionam. | Testes e integridade do save. |
 
 ## Categorias de log
 
