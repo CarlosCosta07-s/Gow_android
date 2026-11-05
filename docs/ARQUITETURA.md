@@ -1,6 +1,6 @@
 # Arquitetura técnica — Gow_android
 
-**Estado:** arquitetura inicial com shell Android ARM64 e teste de apresentação Vulkan adicionados; ainda não executa o jogo.
+**Estado:** shell Android ARM64 com build CI confirmada, launcher SAF e validação inicial ISO9660 adicionados; ainda não executa o jogo. A CI da alteração mais recente do launcher deve ser confirmada.
 
 ## Objetivo
 
@@ -28,13 +28,14 @@ Essas versões fixam a primeira build de CI; serão atualizadas deliberadamente,
 O primeiro código executável do projeto foi adicionado em:
 
 - `android/app`: configuração Gradle, manifesto e Activity.
+- `android/app/src/main/java/org/gowandroid/app/MainActivity.java`: launcher AppCompat, seletor SAF e validação ISO9660 do setor 16.
 - `android/app/src/main/java/org/gowandroid/app/GowGameActivity.java`: Activity baseada em AndroidX GameActivity.
 - `android/app/src/main/cpp/main.cpp`: ciclo nativo e smoke test Vulkan.
 - `.github/workflows/android-shell.yml`: build de APK Debug ARM64.
 
 O smoke test atual cria instância Vulkan, surface Android, seleciona GPU e filas de gráficos/apresentação, cria device, swapchain, image views, render pass, framebuffers, command buffers e semáforos. Envia um pass que limpa a imagem e chama apresentação. Trata eventos de criação/encerramento da janela e recriação do swapchain.
 
-**Limite importante:** esse clear/present é apenas um teste de integração Vulkan. Ainda não há frontend GS, shaders do jogo, recursos gráficos de God of War, leitura de ISO, recompilação de ELF ou runtime de jogo. A implementação ainda precisa passar pela CI e ser executada em aparelho real.
+**Limite importante:** esse clear/present é apenas um teste de integração Vulkan. Ainda não há frontend GS, shaders do jogo, recursos gráficos de God of War, identificação do serial/revisão, recompilação de ELF ou runtime de jogo. O shell Vulkan passou pela CI no commit `7ed5a254`, mas ainda precisa ser executado em aparelho real.
 
 ## Camadas futuras do port
 
@@ -56,10 +57,10 @@ Responsabilidades:
 
 Fluxo previsto:
 
-1. Receber URI pelo seletor Android.
-2. Abrir descritor de leitura e preservar permissão concedida.
-3. Validar ISO9660, descritor primário, tamanho e estrutura esperada.
-4. Identificar serial e revisão; recusar arquivos incompatíveis com diagnóstico explícito.
+1. Receber URI pelo seletor Android (`MainActivity` já implementa esta etapa).
+2. Abrir o fluxo de leitura e tentar preservar a permissão concedida.
+3. Validar ISO9660, descritor primário no setor 16 (implementado; CI ainda pendente para a última alteração).
+4. Ler `SYSTEM.CNF` para identificar serial e revisão; esta etapa ainda não está implementada.
 5. Ler diretamente do descritor ou preparar somente elementos de boot estritamente necessários no diretório privado.
 6. Nunca enviar dados do usuário para repositório, Issues, releases ou CI pública.
 
