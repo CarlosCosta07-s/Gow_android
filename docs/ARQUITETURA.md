@@ -14,8 +14,8 @@ O produto final não será um emulador genérico nem dependerá de interpretaç�
 - ABI inicial: `arm64-v8a`.
 - Linguagem nativa: C++20.
 - Build nativo: CMake + Android NDK `30.0.16248370`.
-- Aplicativo: Gradle 9.6.0, Android Gradle Plugin 9.5.0 e AndroidX GameActivity 4.4.2.
-- SDK de compilação/alvo: API 36.
+- Aplicativo: Gradle 9.6.0, Android Gradle Plugin 9.5.0 e AndroidX AppCompat 1.8.0, Core 1.19.1 e GameActivity 4.4.2.
+- SDK de compilação: API 37; target SDK: API 36.
 - API mínima inicial: Android 9 / API 28.
 - Gráficos: Vulkan nativo, com surface e swapchain Android reais.
 - Primeiro alvo de compatibilidade: NTSC-U, serial `SCUS-97399`, por ser a revisão mais documentada nas referências auditadas.
