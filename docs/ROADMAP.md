@@ -14,10 +14,12 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 
 - [x] Configurar Gradle, Android NDK, CMake e ABI `arm64-v8a`.
 - [x] Adicionar AndroidX GameActivity e Activity nativa.
-- [ ] Compilar APK Debug e confirmar build CI.
+- [x] Compilar APK Debug ARM64 e confirmar build CI no commit `7ed5a254`.
+- [ ] Confirmar a CI da última alteração do launcher SAF.
 - [ ] Instalar e executar em aparelho Android real.
-- [ ] Adicionar seletor SAF e permissões persistentes.
-- [ ] Validar ISO9660 e identificar serial/revisão.
+- [x] Adicionar tela inicial e seletor SAF para a imagem do usuário.
+- [x] Solicitar permissão persistente de leitura e validar o descritor primário ISO9660 do setor 16 (CI da última alteração pendente).
+- [ ] Ler `SYSTEM.CNF` e identificar serial/revisão do jogo.
 - [ ] Diagnosticar permissão, formato e região.
 - [ ] Exportar logs sem dados pessoais ou do jogo.
 
