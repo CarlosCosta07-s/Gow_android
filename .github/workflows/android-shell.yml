@@ -57,13 +57,30 @@ jobs:
           gradle-version: "9.6.0"
 
       - name: Build debug APK
+        id: build
+        shell: bash
         working-directory: android
-        run: gradle --no-daemon assembleDebug --stacktrace
+        run: |
+          set +e
+          gradle --no-daemon assembleDebug --stacktrace --info 2>&1 | tee "$RUNNER_TEMP/gow-android-build.log"
+          BUILD_STATUS=${PIPESTATUS[0]}
+          echo "exit_code=$BUILD_STATUS" >> "$GITHUB_OUTPUT"
+          exit "$BUILD_STATUS"
 
       - name: Upload debug APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: gow-android-arm64-shell
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gow-android-build-log
+          path: ${{ runner.temp }}/gow-android-build.log
+          if-no-files-found: warn
           retention-days: 7
