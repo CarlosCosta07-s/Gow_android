@@ -1,6 +1,6 @@
 # Testes e diagnóstico
 
-**Build CI:** o APK Debug ARM64 foi compilado com sucesso no run `42125687906` (commit `7ed5a254`). O launcher SAF/ISO9660 foi adicionado depois e aguarda sua própria confirmação CI. Nenhuma execução em aparelho físico foi registrada. Este documento define a evidência necessária para evitar confundir teste de shell com teste do jogo.
+**Build CI:** o APK Debug ARM64 com launcher SAF/validação ISO9660 compilou com sucesso no run `42125956300` (commit `993c1a9e`). Nenhuma execução em aparelho físico foi registrada. Este documento define a evidência necessária para evitar confundir teste de shell com teste do jogo.
 
 ## Ficha por aparelho
 
@@ -22,7 +22,7 @@ Registrar:
 |---|---|---|
 | A — Instalação | APK instala, abre e fecha sem crash. | Logcat e identificação da build. |
 | B — Seleção | SAF abre o arquivo e mantém a permissão. | Resultado da permissão e estado do seletor. |
-| C — ISO9660 | O descritor primário do setor 16 é validado. | Estado da tela e log sem caminho privado. |
+| C — ISO9660 | O descritor primário do setor 16 é validado (código presente; execução em aparelho pendente). | Estado da tela e log sem caminho privado. |
 | D — Identificação | `SYSTEM.CNF`, serial e revisão são reconhecidos. | Log de validação sem caminho privado. |
 | E — Vulkan | Surface, swapchain, filas e primeira apresentação de teste funcionam. | Logs de criação, resize e present. |
 | F — Runtime | EE progride por estágios conhecidos. | PC/RA/SP, thread e última etapa. |
