@@ -4,15 +4,16 @@ Este projeto reconhece os autores dos projetos e bibliotecas consultados. **Refe
 
 ## Estado de integração
 
-O shell Android usa a dependência Maven `androidx.games:games-activity:4.4.2`. O artefato é consumido pelo Gradle; seu código não foi copiado manualmente para este repositório. Manter a licença e os avisos distribuídos com a versão efetivamente empacotada.
+O shell Android utiliza AndroidX Core e AndroidX GameActivity como dependências Maven; seus códigos não foram copiados manualmente para este repositório. Manter os avisos das versões efetivamente empacotadas.
 
 Nenhum código-fonte do runtime God of War, PS2Recomp ou de outro port foi importado neste estado. As fontes abaixo foram auditadas como referências. Para cada futura integração, registrar componente, caminhos, autor(es), URL, commit/tag, licença e modificações.
 
-## Dependência já integrada
+## Dependências integradas
 
 | Componente | Uso | Versão / licença |
 |---|---|---|
-| [AndroidX GameActivity](https://developer.android.com/games/agdk/game-activity) | Activity de jogo e ponte de eventos/lifecycle para C++. | `androidx.games:games-activity:4.4.2`; biblioteca Jetpack distribuída sob Apache-2.0. |
+| [AndroidX Core](https://developer.android.com/jetpack/androidx/releases/core) | Tipos e APIs AndroidX usados pela GameActivity, incluindo compatibilidade de insets. | `androidx.core:core:1.19.1`; Apache-2.0. |
+| [AndroidX GameActivity](https://developer.android.com/games/agdk/game-activity) | Activity de jogo e ponte de eventos/lifecycle para C++. | `androidx.games:games-activity:4.4.2`; Apache-2.0. |
 | [Android NDK](https://developer.android.com/ndk) | Compilação nativa ARM64 e APIs Android/Vulkan. | NDK `30.0.16248370`, toolchain Android. |
 
 ## Referências de engenharia
