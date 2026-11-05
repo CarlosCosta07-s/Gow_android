@@ -2,7 +2,7 @@
 
 **Data da auditoria:** 2026-11-05  
 **Branch de desenvolvimento:** `main`  
-**Estado global:** shell Android ARM64, launcher SAF e validação inicial ISO9660 compilados com sucesso na CI. Nenhum runtime do jogo está integrado. A identidade visual do launcher foi implementada; a build desta atualização está pendente.
+**Estado global:** shell Android ARM64, launcher SAF/ISO9660, ícone adaptativo e interface temática compilados com sucesso na CI. Nenhum runtime do jogo está integrado.
 
 ## Gow_android
 
@@ -13,8 +13,9 @@
 - Projeto Gradle Android com AndroidX AppCompat 1.8.0, Core 1.19.1 e GameActivity 4.4.2.
 - Configurado para compileSdk 37, targetSdk 36, minSdk 28 e ABI `arm64-v8a`.
 - Shell C++/Vulkan cria surface Android, seleciona GPU/filas, cria swapchain, render pass, framebuffers, semáforos e fence, limpa a imagem e chama apresentação.
-- Launcher AppCompat temático, com ícone adaptativo, painel visual, menu e estados de disco; mantém o seletor Storage Access Framework, tentativa de permissão persistente, validação ISO9660 no setor 16 e botão separado para o smoke test Vulkan.
-- GitHub Actions `42125956300`, commit `993c1a9ec010a00db688da2affddad7dab09f07c`, concluiu com `success`: instalação explícita de Android SDK Platform 37.0, `assembleDebug` e upload do APK.
+- Launcher AppCompat temático, com ícone adaptativo próprio, painel visual, botões de menu e estados de disco; mantém o seletor Storage Access Framework, tentativa de permissão persistente, validação ISO9660 no setor 16 e botão separado para o smoke test Vulkan.
+- GitHub Actions `42125956300`, commit `993c1a9ec010a00db688da2affddad7dab09f07c`, concluiu com `success` para o launcher SAF/ISO9660.
+- GitHub Actions `42128232489`, commit `e2094dc922cff86313a1e0f46a92bdffae74fdea`, concluiu com `success`: compilou o launcher temático, os recursos do ícone adaptativo e o APK Debug ARM64, e publicou o artefato.
 - Build anterior `42125687906`, commit `7ed5a254e0fcfa3a7b77db47a2d236f047acac71`, também concluiu com sucesso.
 - O APK gerado contém `lib/arm64-v8a/libandroid-game.so` e `lib/arm64-v8a/libc++_shared.so`.
 
@@ -22,8 +23,8 @@ A checagem ISO atual **só confirma a presença de um descritor primário ISO966
 
 ## [NÃO TESTADO — aparelho físico e jogo]
 
-- Proporções e legibilidade da nova interface em diferentes tamanhos de tela.
-- Instalação e atualização do ícone adaptativo em dispositivo físico.
+- Proporções/legibilidade da nova interface em aparelhos de dimensões distintas.
+- Instalação e atualização do ícone adaptativo na tela inicial de um aparelho real.
 
 - Instalação e abertura do APK em aparelho Android físico.
 - Clear/present Vulkan em GPU móvel real e recuperação após lifecycle.
