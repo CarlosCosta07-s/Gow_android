@@ -2,7 +2,7 @@
 
 **Data da auditoria:** 2026-11-05  
 **Branch de desenvolvimento:** `main`  
-**Estado global:** fundação documental; sem código executável do port neste commit.
+**Estado global:** shell Android e smoke test de apresentação Vulkan implementados; build CI ainda em execução; nenhum gameplay integrado.
 
 ## Gow_android
 
@@ -10,23 +10,35 @@
 
 - Repositório público `CarlosCosta07-s/Gow_android`.
 - Branch padrão `main`.
-- Commit inicial anterior à documentação: `0089c81687cbd61069b0419d5094156c47de02f4`.
-- O repositório inicial continha apenas `README.md`.
-- Não havia aplicativo Android, runtime, recompilador, renderizador, APK ou testes.
+- Fundação documental, créditos, licença e regras de proteção de dados adicionados.
+- Projeto Gradle Android criado com AndroidX GameActivity 4.4.2.
+- Configurado para Android API 28+ e ABI `arm64-v8a`.
+- Código C++ nativo implementa criação da instância Vulkan, surface Android, seleção de GPU/filas, swapchain, render pass, framebuffers, semáforos, fence, clear pass e apresentação.
+- Workflow `.github/workflows/android-shell.yml` adicionado.
 
-Este commit organiza arquitetura, roadmap, referências, política legal e créditos. Ele não implementa o motor do jogo.
+**[NÃO TESTADO]**
 
-## CodeAbhi826/God-Of-War-Recomp
+- Compilação completa do APK.
+- Instalação e execução em aparelho real.
+- Apresentação de frame em dispositivo físico e recuperação após pausa/retomada.
+- Seleção e leitura de ISO.
+- Recompilação ou execução de código do jogo.
+
+## CI
+
+A execução `42124077586`, disparada por push em 2026-11-05, foi observada inicialmente em estado `in_progress` durante a etapa de localização do Android SDK. A conclusão deverá ser atualizada após consultar o resultado final da execução.
+
+## Referência CodeAbhi826/God-Of-War-Recomp
 
 **[VERIFICADO — documentação e arquivos públicos consultados; sem execução independente]**
 
-- A branch `android` contém shell Android, Gradle, NDK/CMake, runtime e workflows ARM64.
-- Há seleção por SAF e validação ISO9660.
-- O código Vulkan consultado é um probe e não um renderer GS completo.
-- O README declara que ainda não há release jogável e identifica a ausência do GS Android renderer como bloqueio para apresentar o primeiro frame.
-- O build público é somente shell; a build completa depende de insumos privados.
+- Branch `android` contém shell Android, Gradle, NDK/CMake, runtime e workflows ARM64.
+- Possui seleção por SAF e validação ISO9660.
+- O código Vulkan consultado é um probe, não um renderer GS completo.
+- O README declara que ainda não há release jogável e identifica a ausência do GS Android renderer como bloqueio.
+- O build público é shell; o build completo depende de insumos privados.
 
-## KIexster e Waffle565
+## Referências KIexster e Waffle565
 
 **[VERIFICADO — conforme documentação pública; sem execução independente]**
 
@@ -36,11 +48,12 @@ Este commit organiza arquitetura, roadmap, referências, política legal e créd
 
 ## Bloqueios reais
 
-1. Fixar base de código e licença dos componentes.
-2. Compilar shell Android reproduzível.
-3. Construir apresentação Vulkan Android real.
-4. Integrar recompilação estática e runtime.
-5. Apresentar a primeira imagem do jogo.
-6. Validar controles, gameplay, áudio, FMVs e saves.
+1. Confirmar build do shell pela CI e executar em aparelho.
+2. Adicionar seletor SAF e validação de disco/revisão.
+3. Fixar base de recompilação e licenças.
+4. Integrar runtime estático ARM64.
+5. Ligar frontend GS ao backend Vulkan.
+6. Apresentar a primeira imagem do jogo.
+7. Validar controles, gameplay, áudio, FMVs e saves.
 
-Nenhuma build ou teste em aparelho foi executado por este commit.
+Nenhum gameplay foi testado ou declarado funcional.
