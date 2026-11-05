@@ -1,6 +1,6 @@
 # Arquitetura técnica — Gow_android
 
-**Estado:** shell Android ARM64 com build CI confirmada, launcher SAF e validação inicial ISO9660 adicionados; ainda não executa o jogo. A CI da alteração mais recente do launcher deve ser confirmada.
+**Estado:** shell Android ARM64, launcher SAF/ISO9660, ícone adaptativo e interface temática compilados com sucesso pela CI; ainda não executa o jogo.
 
 ## Objetivo
 
@@ -31,14 +31,13 @@ O código executável inicial do projeto está em:
 - `android/app/src/main/java/org/gowandroid/app/MainActivity.java`: launcher AppCompat temático, menu nativo, seletor SAF e validação ISO9660 do setor 16.
 - `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`: ícone adaptativo do aplicativo.
 - `android/app/src/main/res/drawable-nodpi/ic_launcher_foreground.webp`: arte original do ícone do projeto.
-- `android/app/src/main/java/org/gowandroid/app/MainActivity.java`: launcher AppCompat, seletor SAF e validação ISO9660 do setor 16.
 - `android/app/src/main/java/org/gowandroid/app/GowGameActivity.java`: Activity baseada em AndroidX GameActivity.
 - `android/app/src/main/cpp/main.cpp`: ciclo nativo e smoke test Vulkan.
 - `.github/workflows/android-shell.yml`: build de APK Debug ARM64.
 
 O smoke test atual cria instância Vulkan, surface Android, seleciona GPU e filas de gráficos/apresentação, cria device, swapchain, image views, render pass, framebuffers, command buffers e semáforos. Envia um pass que limpa a imagem e chama apresentação. Trata eventos de criação/encerramento da janela e recriação do swapchain. A build ARM64 foi confirmada na CI, incluindo a versão com launcher SAF.
 
-**Limite importante:** esse clear/present é apenas um teste de integração Vulkan. A validação ISO9660 já está implementada no launcher, mas ainda não lê `SYSTEM.CNF` nem identifica serial/revisão. A tela customizada mantém as ações de seleção de disco, teste Vulkan, configurações, sobre e sair. Ainda não há frontend GS, shaders do jogo, recursos gráficos de God of War, recompilação de ELF ou runtime de jogo. O APK foi compilado pela CI, mas ainda precisa ser executado em aparelho real.
+**Limite importante:** esse clear/present é apenas um teste de integração Vulkan. A interface temática e os recursos do ícone adaptativo foram compilados na CI do run `42128232489`. A validação ISO9660 já está implementada no launcher, mas ainda não lê `SYSTEM.CNF` nem identifica serial/revisão. A tela customizada mantém as ações de seleção de disco, teste Vulkan, configurações, sobre e sair. Ainda não há frontend GS, shaders do jogo, recursos gráficos de God of War, recompilação de ELF ou runtime de jogo. O APK foi compilado pela CI, mas ainda precisa ser executado em aparelho real.
 
 ## Camadas futuras do port
 
