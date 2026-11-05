@@ -1,0 +1,53 @@
+# Android / Gradle
+.gradle/
+**/.gradle/
+**/.cxx/
+**/build/
+local.properties
+*.apk
+*.aab
+
+# Native build artifacts
+out/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+*.o
+*.a
+*.so
+*.dll
+*.exe
+
+# Private game material: never commit, upload to CI, or attach to issues
+/game/
+/disc/
+/discs/
+/private-builder/
+/generated-game-code/
+/extracted-game-data/
+*.iso
+*.bin
+*.cue
+*.img
+*.elf
+*.irx
+*.pak
+*.ps2
+*.sav
+*.srm
+*.mcd
+*.memcard
+
+# Local logs and captures
+/logs/
+/captures/
+/screenshots/
+*.log
+*.dmp
+
+# Editors / operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
