@@ -26,7 +26,7 @@ Não queremos um emulador genérico, uma ISO dentro do APK ou um caminho final b
 
 ## Launcher e seleção de disco
 
-A tela inicial permite selecionar uma imagem pelo Storage Access Framework, manter a permissão quando o provedor Android permite e validar o descritor primário ISO9660 no setor 16. Essa verificação **não identifica o serial nem confirma que o arquivo é God of War**; a leitura de `SYSTEM.CNF` e a identificação da revisão ainda serão implementadas. A imagem não é copiada para o aplicativo nem enviada ao GitHub.
+A tela inicial permite selecionar uma imagem pelo Storage Access Framework, manter a permissão quando o provedor Android permite e validar o descritor primário ISO9660 no setor 16. Essa verificação **não identifica o serial nem confirma que o arquivo é God of War**; a leitura de `SYSTEM.CNF` e a identificação da revisão ainda serão implementadas. A implementação foi compilada no run CI `42125956300`. A imagem não é copiada para o aplicativo nem enviada ao GitHub.
 
 O botão de teste Vulkan abre a atividade nativa separadamente; ele não inicia o jogo.
 
