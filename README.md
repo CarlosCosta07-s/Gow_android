@@ -2,7 +2,7 @@
 
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
-> Estado atual: shell Android com smoke test Vulkan implementado. O build ainda precisa ser confirmado pela CI e por aparelho real. O jogo ainda não está integrado ou jogável.
+> Estado atual: APK Debug ARM64 do shell compilado com sucesso na CI (commit `7ed5a254`). Launcher SAF com validação inicial ISO9660 adicionado depois desse build; a compilação dessa última alteração está em andamento. O jogo ainda não está integrado ou jogável.
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml)
 
@@ -24,11 +24,17 @@ Não queremos um emulador genérico, uma ISO dentro do APK ou um caminho final b
 - **Primeira revisão-alvo:** NTSC-U, serial `SCUS-97399`; outras regiões serão avaliadas depois.
 - **Desenvolvimento:** somente branch `main`.
 
+## Launcher e seleção de disco
+
+A tela inicial permite selecionar uma imagem pelo Storage Access Framework, manter a permissão quando o provedor Android permite e validar o descritor primário ISO9660 no setor 16. Essa verificação **não identifica o serial nem confirma que o arquivo é God of War**; a leitura de `SYSTEM.CNF` e a identificação da revisão ainda serão implementadas. A imagem não é copiada para o aplicativo nem enviada ao GitHub.
+
+O botão de teste Vulkan abre a atividade nativa separadamente; ele não inicia o jogo.
+
 ## Primeiro marco implementado
 
 O aplicativo nativo usa GameActivity e inicializa Vulkan a partir da janela Android. O código cria surface, seleciona um dispositivo e filas compatíveis, cria swapchain e render pass, limpa uma imagem e a apresenta na tela. Também trata encerramento da janela e recriação do swapchain.
 
-Isso é um **smoke test de apresentação**, não o renderer do PS2. Ainda não executa código de God of War, não lê ISO, não possui GS, não possui controles de jogo e não é um APK jogável.
+Isso é um **smoke test de apresentação**, não o renderer do PS2. Ainda não executa código de God of War, não possui GS, não possui controles de jogo e não é um APK jogável.
 
 ## Referências técnicas
 
