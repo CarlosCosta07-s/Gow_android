@@ -56,6 +56,8 @@ std::string gBootRelativePath;
 bool gBootPathConfigurationReceived = false;
 PS2Runtime *gActiveRuntime = nullptr;
 bool gGsBackendAttached = false;
+std::atomic<bool> gGsUnsupportedStateWarned{false};
+std::atomic<bool> gGsRenderTargetWarned{false};
 
 void reportRuntimeStatus(android_app *app, const char *message, bool failed) {
     if (app == nullptr || message == nullptr) {
@@ -238,6 +240,18 @@ public:
     void enqueueGsBatch(const gow::android::GsGpuBatch &batch) {
         if (!ready_ || batch.vertices.empty() ||
             batch.targetWidth == 0u || batch.targetHeight == 0u) return;
+
+        if ((batch.textured || batch.blend || batch.depthTest ||
+             batch.depthWrite || batch.fogEnabled) &&
+            !gGsUnsupportedStateWarned.exchange(true)) {
+            logMessage(ANDROID_LOG_WARN,
+                "GS primitive pipeline is solid-color only: texture sampling, GS blending, depth and fog are not implemented yet");
+        }
+        if ((batch.frameBase != 0u || batch.framePsm != GS_PSM_CT32) &&
+            !gGsRenderTargetWarned.exchange(true)) {
+            logMessage(ANDROID_LOG_WARN,
+                "GS render-target VRAM/PSM composition is not implemented; experimental primitives are sent directly to the Android surface");
+        }
 
         std::lock_guard<std::mutex> lock(gsQueueMutex_);
         constexpr size_t kMaxQueuedGsVertices = 262144u;
@@ -576,6 +590,8 @@ private:
         }
         vkDestroyShaderModule(device_, fragmentModule, nullptr);
         vkDestroyShaderModule(device_, vertexModule, nullptr);
+        logMessage(ANDROID_LOG_INFO,
+            "Android GS Vulkan solid-color point/line/triangle pipelines created; full GS rasterization is still incomplete");
         return true;
     }
 
