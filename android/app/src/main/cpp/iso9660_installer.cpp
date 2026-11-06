@@ -25,7 +25,7 @@
 namespace gow::disc {
 namespace {
 
-constexpr size_t kCopyBufferSize = 1024u * 1024u;
+constexpr size_t kCopyBufferSize = 4u * 1024u * 1024u;
 constexpr uint64_t kCopyProgressInterval = 4u * 1024u * 1024u;
 constexpr size_t kMaxManifestFiles = 65536u;
 constexpr size_t kMaxRelativePathLength = 1024u;
@@ -465,6 +465,23 @@ bool openDestinationParent(int stageFd,
     return true;
 }
 
+int openDirectoryRelativeAt(int rootFd, const std::string &relativePath) {
+    std::vector<std::string> parts;
+    if (!splitRelativePath(relativePath, parts)) return -1;
+
+    int currentFd = ::dup(rootFd);
+    if (currentFd < 0) return -1;
+    for (const std::string &part : parts) {
+        const int nextFd = ::openat(
+            currentFd, part.c_str(),
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+        ::close(currentFd);
+        if (nextFd < 0) return -1;
+        currentFd = nextFd;
+    }
+    return currentFd;
+}
+
 void notifyProgress(IsoInstallResult &result,
                     const IsoInstallProgressCallback callback,
                     void *userData,
@@ -562,6 +579,13 @@ IsoInstallResult installIsoManifestImpl(
                           result.totalBytes, result.error)) {
         return result;
     }
+    // Read the source ISO in physical-sector order to reduce seek churn on
+    // file-backed document providers and slow removable storage.
+    std::stable_sort(
+        resolved.begin(), resolved.end(),
+        [](const ResolvedInstallFile &left, const ResolvedInstallFile &right) {
+            return left.source.byteOffset < right.source.byteOffset;
+        });
     const uint64_t extractedBytes = result.totalBytes;
     uint64_t integrityManifestExpectedBytes = 0u;
     if ((discLayout == nullptr) != (metadataInfo == nullptr)) {
@@ -665,6 +689,8 @@ IsoInstallResult installIsoManifestImpl(
     bool copySucceeded = keepGoing;
     std::vector<IntegrityEntry> integrityEntries;
     if (discLayout != nullptr) integrityEntries.reserve(resolved.size() + 2u);
+    std::unordered_set<std::string> touchedDirectories;
+    touchedDirectories.reserve(std::min<size_t>(resolved.size(), 4096u));
 
     for (const auto &entry : resolved) {
         if (!copySucceeded) break;
@@ -728,13 +754,12 @@ IsoInstallResult installIsoManifestImpl(
             }
         }
 
-        if (fileSucceeded && ::fsync(outputFd) != 0) {
+        // fdatasync persists file contents and the size needed to read them.
+        // Parent directories are synchronized once per directory below rather
+        // than once for every file, avoiding thousands of redundant barriers.
+        if (fileSucceeded && ::fdatasync(outputFd) != 0) {
             fileSucceeded = false;
-            result.error = "Could not flush an extracted file to private storage.";
-        }
-        if (fileSucceeded && ::fsync(parentFd) != 0) {
-            fileSucceeded = false;
-            result.error = "Could not flush an extracted file's parent directory.";
+            result.error = "Could not flush extracted file data to private storage.";
         }
         if (::close(outputFd) != 0 && fileSucceeded) {
             fileSucceeded = false;
@@ -744,6 +769,12 @@ IsoInstallResult installIsoManifestImpl(
         if (!fileSucceeded) {
             copySucceeded = false;
             break;
+        }
+
+        const size_t parentSeparator = entry.destinationPath.rfind('/');
+        if (parentSeparator != std::string::npos) {
+            touchedDirectories.emplace(
+                entry.destinationPath.substr(0u, parentSeparator));
         }
 
         if (discLayout != nullptr) {
@@ -759,6 +790,25 @@ IsoInstallResult installIsoManifestImpl(
         if (!keepGoing) {
             copySucceeded = false;
             break;
+        }
+    }
+
+    if (copySucceeded) {
+        for (const std::string &relativeDirectory : touchedDirectories) {
+            const int directoryFd =
+                openDirectoryRelativeAt(stageFd, relativeDirectory);
+            if (directoryFd < 0) {
+                copySucceeded = false;
+                result.error = "Could not reopen an extracted directory for synchronization.";
+                break;
+            }
+            const bool synchronized = ::fsync(directoryFd) == 0;
+            const bool closed = ::close(directoryFd) == 0;
+            if (!synchronized || !closed) {
+                copySucceeded = false;
+                result.error = "Could not synchronize an extracted directory.";
+                break;
+            }
         }
     }
 
