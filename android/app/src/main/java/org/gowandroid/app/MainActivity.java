@@ -783,6 +783,7 @@ public final class MainActivity extends AppCompatActivity {
         discStatus.setTextColor(COLOR_MUTED);
         selectedDiscValid = false;
         selectedDiscSerial = null;
+        selectedDiscBootPath = null;
 
         ioExecutor.execute(() -> {
             String name = queryDisplayName(uri);
@@ -956,7 +957,7 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private static String normalizeIsoPathForInstall(String path) throws IOException {
-        String normalized = path.replace('\\\\', '/').trim();
+        String normalized = path.replace('\\', '/').trim();
         while (normalized.startsWith("/")) {
             normalized = normalized.substring(1);
         }
