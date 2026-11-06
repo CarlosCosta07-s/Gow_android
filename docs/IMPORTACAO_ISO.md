@@ -21,6 +21,7 @@ A extração é seletiva e dirigida por manifesto. O projeto não assume que tod
 8. Cada arquivo e o diretório que o contém são sincronizados; a pasta de staging é sincronizada e publicada por rename no mesmo filesystem. Falhas e cancelamentos removem o staging.
 9. Antes da cópia, o instalador consulta o espaço disponível no armazenamento privado. O FORGE oferece janela de progresso e cancelamento.
 10. Depois da publicação, o FORGE abre a pasta `disc` no provider nativo `CdRootVfs`.
+11. O FORGE valida o arquivo local indicado por `BOOT2`: ELF32 little-endian, MIPS, `ET_EXEC`, tabela de segmentos, limites `PT_LOAD` e cobertura do entry point. A validação lê apenas o cabeçalho e a tabela de program headers.
 
 ## Manifesto inicial
 
@@ -41,6 +42,7 @@ A versão atual reconhece os executáveis `SCUS_973.99` (NTSC-U) e `SCES_531.33`
 - A extração não carrega a imagem inteira na memória; usa um buffer de 64 KiB.
 - A pasta publicada é `files/installations/gow_boot_seed`, no armazenamento privado do aplicativo.
 - O `CdRootVfs` é somente leitura, faz acesso por descritores relativos à raiz, rejeita traversal e symlinks, aceita apenas arquivos regulares, limita listagens a 65.536 entradas e mantém handles para leituras por offset. A busca de componentes é case-insensitive ASCII e ignora sufixos ISO `;versão`; duas entradas que colidam após essa normalização são rejeitadas.
+- A validação ELF local não carrega o executável inteiro na memória; verifica os metadados ELF32/MIPS e os limites dos segmentos carregáveis. Ela não autentica serial/revisão e não executa o ELF.
 - O provider expõe a API C ABI `gowAndroidCdRootOpenFile/ReadFile/CloseFile` e o sinalizador `gowAndroidCdRootIsReady`. O patch local do runtime Waffle foi atualizado para usar o prefixo `gowcdroot:/` no lugar do provider direto da ISO; a compilação desse patch ainda está em validação na CI.
 - Se essa pasta já existir, a importação não a substitui automaticamente.
 
@@ -48,7 +50,7 @@ A versão atual reconhece os executáveis `SCUS_973.99` (NTSC-U) e `SCES_531.33`
 
 A pasta `gow_boot_seed` não é uma instalação completa. Ela contém apenas `SYSTEM.CNF` e o executável indicado por `BOOT2`. Ainda precisamos identificar os arquivos de dados e módulos realmente acessados no boot e no gameplay, incorporá-los ao manifesto versionado, integrar a chamada do VFS ao fluxo real de inicialização do PS2Runtime e ligar o carregamento do ELF ao pipeline PS2Recomp.
 
-A importação bem-sucedida também não significa que o jogo inicializa. O provider cdRoot já existe e está exposto ao patch de preparação do runtime, mas o PS2Runtime ainda não é iniciado pelo launcher e não foi executado gameplay real nesta etapa.
+A importação e a validação ELF bem-sucedidas também não significam que o jogo inicializa. O provider cdRoot já existe e está exposto ao patch de preparação do runtime, mas o PS2Runtime ainda não é iniciado pelo launcher e não foi executado gameplay real nesta etapa.
 
 ## Referências de engenharia
 
