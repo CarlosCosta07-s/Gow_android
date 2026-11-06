@@ -7,7 +7,10 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.ParcelFileDescriptor;
 import android.provider.OpenableColumns;
+import android.system.ErrnoException;
+import android.system.Os;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -25,7 +28,8 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -59,6 +63,11 @@ public final class MainActivity extends AppCompatActivity {
 
     private Uri selectedDiscUri;
     private boolean selectedDiscValid;
+    private String selectedDiscSerial;
+
+    // The native runtime reads this descriptor through /proc/self/fd/<n>.
+    // Keep it open while the launcher and NativeActivity share the same process.
+    private static ParcelFileDescriptor selectedDiscDescriptor;
 
     private final ActivityResultLauncher<String[]> openDocumentLauncher =
             registerForActivityResult(
@@ -513,14 +522,15 @@ public final class MainActivity extends AppCompatActivity {
         }
 
         String message = selectedDiscValid
-                ? "O descritor ISO9660 foi encontrado, mas o launcher ainda não identificou "
-                        + "o SYSTEM.CNF nem integrou o runtime necessário para iniciar God of War. "
-                        + "A imagem foi selecionada; a execução do jogo ainda está em desenvolvimento."
-                : "A imagem selecionada ainda não passou pela validação ISO9660. "
-                        + "Selecione outro arquivo ou tente novamente.";
+                ? "Disco identificado: " + selectedDiscSerial + ".\\n\\n"
+                        + "O FORGE já consegue confirmar a identidade do disco por meio do "
+                        + "SYSTEM.CNF. O runtime nativo ainda está em integração; o jogo só será "
+                        + "iniciado quando a recompilação estática e o boot estiverem prontos."
+                : "A imagem ainda não passou pela identificação ISO9660/SYSTEM.CNF. "
+                        + "Selecione uma imagem compatível de God of War (2005).";
 
         new AlertDialog.Builder(this)
-                .setTitle(selectedDiscValid ? "Runtime em desenvolvimento" : "Imagem não validada")
+                .setTitle(selectedDiscValid ? "Disco reconhecido" : "Imagem não validada")
                 .setMessage(message)
                 .setPositiveButton("Entendi", null)
                 .setNeutralButton("Trocar imagem",
@@ -603,31 +613,48 @@ Vulkan (renderizador do jogo em desenvolvimento)
             selectDiscButton.setAlpha(0.55f);
         }
         discName.setText("Verificando imagem...");
-        discStatus.setText("Lendo o descritor primário ISO9660.");
+        discStatus.setText("Lendo ISO9660 e identificando SYSTEM.CNF.");
         discStatus.setTextColor(COLOR_MUTED);
         selectedDiscValid = false;
+        selectedDiscSerial = null;
 
         ioExecutor.execute(() -> {
             String name = queryDisplayName(uri);
             String result;
             boolean valid = false;
+            ParcelFileDescriptor candidate = null;
+            String serial = null;
 
             try {
-                validateIso9660(uri);
+                candidate = getContentResolver().openFileDescriptor(uri, "r");
+                if (candidate == null) {
+                    throw new IOException("O provedor não conseguiu abrir o arquivo.");
+                }
+
+                serial = identifyGodOfWarDisc(candidate);
+                ParcelFileDescriptor previous = selectedDiscDescriptor;
+                selectedDiscDescriptor = candidate;
+                candidate = null;
+                closeQuietly(previous);
+
                 valid = true;
-                result = "ISO9660 válido. Serial e revisão ainda não identificados.";
-            } catch (IOException | SecurityException exception) {
-                result = "Falha na validação: " + safeMessage(exception);
+                result = "God of War (2005) reconhecido · " + serial;
+            } catch (IOException | SecurityException | ErrnoException exception) {
+                result = "Falha na identificação: " + safeMessage(exception);
+            } finally {
+                closeQuietly(candidate);
             }
 
             final boolean isValid = valid;
             final String finalName = name;
             final String finalResult = result;
+            final String finalSerial = serial;
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) {
                     return;
                 }
                 selectedDiscValid = isValid;
+                selectedDiscSerial = finalSerial;
                 discName.setText(finalName);
                 discStatus.setText(finalResult);
                 discStatus.setTextColor(
@@ -640,54 +667,158 @@ Vulkan (renderizador do jogo em desenvolvimento)
         });
     }
 
-    private void validateIso9660(Uri uri) throws IOException {
-        try (InputStream input = getContentResolver().openInputStream(uri)) {
-            if (input == null) {
-                throw new IOException("O provedor não conseguiu abrir o arquivo.");
-            }
-
-            skipFully(input, PRIMARY_VOLUME_DESCRIPTOR_OFFSET);
-            byte[] descriptor = new byte[ISO_SECTOR_SIZE];
-            readFully(input, descriptor);
-
-            if ((descriptor[0] & 0xFF) != 1
-                    || descriptor[1] != 'C'
-                    || descriptor[2] != 'D'
-                    || descriptor[3] != '0'
-                    || descriptor[4] != '0'
-                    || descriptor[5] != '1'
-                    || (descriptor[6] & 0xFF) != 1) {
-                throw new IOException(
-                        "O setor 16 não contém um descritor primário ISO9660 válido.");
-            }
+    /**
+     * Validates an ISO9660 primary volume descriptor and reads the root
+     * SYSTEM.CNF file to identify the actual God of War executable.
+     * This intentionally supports 2048-byte ISO sectors; raw 2352-byte BIN
+     * and compressed CHD images require a separate disc-image reader.
+     */
+    private String identifyGodOfWarDisc(ParcelFileDescriptor descriptor)
+            throws IOException, ErrnoException {
+        byte[] pvd = readAt(descriptor, PRIMARY_VOLUME_DESCRIPTOR_OFFSET, ISO_SECTOR_SIZE);
+        if ((pvd[0] & 0xFF) != 1
+                || pvd[1] != 'C'
+                || pvd[2] != 'D'
+                || pvd[3] != '0'
+                || pvd[4] != '0'
+                || pvd[5] != '1'
+                || (pvd[6] & 0xFF) != 1) {
+            throw new IOException(
+                    "O setor 16 não contém um descritor primário ISO9660 válido.");
         }
-    }
 
-    private static void skipFully(InputStream input, long byteCount) throws IOException {
-        long remaining = byteCount;
-        while (remaining > 0) {
-            long skipped = input.skip(remaining);
-            if (skipped > 0) {
-                remaining -= skipped;
+        int rootRecordLength = pvd[156] & 0xFF;
+        if (rootRecordLength < 34) {
+            throw new IOException("O descritor ISO9660 não contém um diretório raiz válido.");
+        }
+
+        long rootExtent = readUInt32Le(pvd, 158);
+        long rootSize = readUInt32Le(pvd, 166);
+        if (rootSize <= 0 || rootSize > 16L * 1024L * 1024L) {
+            throw new IOException("Tamanho do diretório raiz ISO9660 inválido.");
+        }
+
+        byte[] rootDirectory = readAt(
+                descriptor, rootExtent * ISO_SECTOR_SIZE, (int) rootSize);
+        long systemCnfExtent = -1L;
+        long systemCnfSize = -1L;
+
+        int offset = 0;
+        while (offset < rootDirectory.length) {
+            int recordLength = rootDirectory[offset] & 0xFF;
+            if (recordLength == 0) {
+                offset = ((offset / ISO_SECTOR_SIZE) + 1) * ISO_SECTOR_SIZE;
                 continue;
             }
-            if (input.read() == -1) {
-                throw new IOException("Arquivo muito pequeno para conter o descritor ISO9660.");
+            if (recordLength < 34 || offset + recordLength > rootDirectory.length) {
+                throw new IOException("Registro de diretório ISO9660 inválido.");
             }
-            remaining--;
+
+            int identifierLength = rootDirectory[offset + 32] & 0xFF;
+            if (identifierLength > 0
+                    && offset + 33 + identifierLength <= offset + recordLength) {
+                String identifier = new String(
+                        rootDirectory, offset + 33, identifierLength,
+                        StandardCharsets.US_ASCII).toUpperCase(Locale.ROOT);
+                if ("SYSTEM.CNF".equals(identifier)
+                        || identifier.startsWith("SYSTEM.CNF;")) {
+                    systemCnfExtent = readUInt32Le(rootDirectory, offset + 2);
+                    systemCnfSize = readUInt32Le(rootDirectory, offset + 10);
+                    break;
+                }
+            }
+            offset += recordLength;
         }
+
+        if (systemCnfExtent < 0 || systemCnfSize <= 0 || systemCnfSize > 64L * 1024L) {
+            throw new IOException("SYSTEM.CNF não foi encontrado na raiz do disco.");
+        }
+
+        byte[] systemCnf = readAt(
+                descriptor, systemCnfExtent * ISO_SECTOR_SIZE, (int) systemCnfSize);
+        String text = new String(systemCnf, StandardCharsets.US_ASCII);
+        String bootTarget = null;
+
+        for (String line : text.split("\\r?\\n")) {
+            int equals = line.indexOf('=');
+            if (equals < 0) {
+                continue;
+            }
+            String key = line.substring(0, equals).trim();
+            if ("BOOT2".equalsIgnoreCase(key)) {
+                bootTarget = line.substring(equals + 1).trim();
+                break;
+            }
+        }
+
+        if (bootTarget == null || bootTarget.isEmpty()) {
+            throw new IOException("SYSTEM.CNF não contém a entrada BOOT2.");
+        }
+
+        String executablePath = bootTarget.replace('\\', '/');
+        int colon = executablePath.indexOf(':');
+        if (colon >= 0) {
+            executablePath = executablePath.substring(colon + 1);
+        }
+        int slash = executablePath.lastIndexOf('/');
+        String executable = slash >= 0
+                ? executablePath.substring(slash + 1)
+                : executablePath;
+        int version = executable.indexOf(';');
+        if (version >= 0) {
+            executable = executable.substring(0, version);
+        }
+        String serial = executable.trim().toUpperCase(Locale.ROOT);
+
+        if ("SCUS_973.99".equals(serial)) {
+            return "SCUS_973.99 (NTSC-U)";
+        }
+        if ("SCES_531.33".equals(serial)) {
+            return "SCES_531.33 (PAL)";
+        }
+        throw new IOException(
+                "SYSTEM.CNF aponta para " + serial
+                        + ". Esta versão reconhece SCUS_973.99 (NTSC-U) e SCES_531.33 (PAL).");
     }
 
-    private static void readFully(InputStream input, byte[] buffer) throws IOException {
-        int offset = 0;
-        while (offset < buffer.length) {
-            int count = input.read(buffer, offset, buffer.length - offset);
-            if (count < 0) {
-                throw new IOException("Fim inesperado ao ler o descritor ISO9660.");
+    private static byte[] readAt(
+            ParcelFileDescriptor descriptor, long offset, int length)
+            throws IOException, ErrnoException {
+        byte[] buffer = new byte[length];
+        int total = 0;
+        while (total < length) {
+            int count = Os.pread(
+                    descriptor.getFileDescriptor(),
+                    buffer,
+                    total,
+                    length - total,
+                    offset + total);
+            if (count <= 0) {
+                throw new IOException("Fim inesperado ao ler a imagem ISO9660.");
             }
-            if (count > 0) {
-                offset += count;
-            }
+            total += count;
+        }
+        return buffer;
+    }
+
+    private static long readUInt32Le(byte[] data, int offset) throws IOException {
+        if (offset < 0 || offset + 4 > data.length) {
+            throw new IOException("Campo ISO9660 fora dos limites.");
+        }
+        return (data[offset] & 0xFFL)
+                | ((data[offset + 1] & 0xFFL) << 8)
+                | ((data[offset + 2] & 0xFFL) << 16)
+                | ((data[offset + 3] & 0xFFL) << 24);
+    }
+
+    private static void closeQuietly(ParcelFileDescriptor descriptor) {
+        if (descriptor == null) {
+            return;
+        }
+        try {
+            descriptor.close();
+        } catch (IOException ignored) {
+            // The descriptor may already have been closed by Android.
         }
     }
 
