@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
