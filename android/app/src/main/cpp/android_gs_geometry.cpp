@@ -10,13 +10,26 @@ namespace {
 GsGpuVertex convertVertex(
     const GSVertex &vertex,
     const GSVertex &flatColor,
+    uint8_t stateDepthPsm,
     float xOffset,
     float yOffset) {
     GsGpuVertex result;
     result.x = vertex.x - xOffset;
     result.y = vertex.y - yOffset;
+    double depthMaximum = 4294967295.0;
+    switch (stateDepthPsm) {
+    case GS_PSM_Z16:
+    case GS_PSM_Z16S:
+        depthMaximum = 65535.0;
+        break;
+    case GS_PSM_Z24:
+        depthMaximum = 16777215.0;
+        break;
+    default:
+        break;
+    }
     result.z = static_cast<float>(std::clamp(
-        vertex.z / 4294967295.0, 0.0, 1.0));
+        vertex.z / depthMaximum, 0.0, 1.0));
     result.r = static_cast<float>(flatColor.r) / 255.0f;
     result.g = static_cast<float>(flatColor.g) / 255.0f;
     result.b = static_cast<float>(flatColor.b) / 255.0f;
@@ -101,11 +114,11 @@ bool expandGsPrimitiveBatch(
     const float xOffset = static_cast<float>(context.xyoffset.ofx) / 16.0f;
     const float yOffset = static_cast<float>(context.xyoffset.ofy) / 16.0f;
     GsGpuVertex converted[3]{};
-    const GSVertex &flatColor = source.vertices[0];
+    const GSVertex &flatColor = source.vertices[source.vertexCount - 1u];
     for (uint32_t i = 0u; i < source.vertexCount; ++i) {
         const GSVertex &color = state.prim.iip ? source.vertices[i] : flatColor;
         converted[i] = convertVertex(
-            source.vertices[i], color, xOffset, yOffset);
+            source.vertices[i], color, context.zbuf.psm, xOffset, yOffset);
     }
 
     switch (state.prim.type) {
