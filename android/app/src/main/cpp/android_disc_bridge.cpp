@@ -2,11 +2,13 @@
 #include "cdroot_vfs.h"
 #include "iso9660_installer.h"
 #include "iso9660_reader.h"
+#include "ps2_elf_validator.h"
 
 #include <jni.h>
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <exception>
 #include <mutex>
 #include <string>
@@ -172,6 +174,42 @@ Java_org_gowandroid_app_MainActivity_nativeSetCdRootDirectory(
         return JNI_FALSE;
     }
     return g_cdRootVfs.openRoot(path, nullptr) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_gowandroid_app_MainActivity_nativeValidateCdRootElf(
+    JNIEnv *env, jclass, jstring relativePath) {
+    auto makeResult = [env](const std::string &message) -> jstring {
+        return env->NewStringUTF(message.c_str());
+    };
+
+    try {
+        std::string path;
+        if (!copyJavaString(env, relativePath, path) || path.empty()) {
+            return makeResult("O caminho privado do executável está vazio ou inválido.");
+        }
+
+        gow::disc::Ps2ElfInfo info{};
+        std::string error;
+        if (!gow::disc::validatePs2Elf(g_cdRootVfs, path, info, &error)) {
+            return makeResult(error.empty()
+                ? "O executável BOOT2 não passou pela validação ELF32/MIPS."
+                : error);
+        }
+
+        char summary[192]{};
+        std::snprintf(
+            summary, sizeof(summary),
+            "OK: ELF32/MIPS válido · entry=0x%08X · PT_LOAD=%zu · %llu bytes",
+            info.entryPoint,
+            info.loadableSegmentCount,
+            static_cast<unsigned long long>(info.fileSize));
+        return makeResult(summary);
+    } catch (const std::exception &exception) {
+        return makeResult(std::string("Falha interna na validação ELF: ") + exception.what());
+    } catch (...) {
+        return makeResult("Falha interna desconhecida na validação ELF.");
+    }
 }
 
 // Imports a small, explicit set of boot files into private app storage. It does
