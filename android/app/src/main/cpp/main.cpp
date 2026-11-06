@@ -591,7 +591,7 @@ private:
         vkDestroyShaderModule(device_, fragmentModule, nullptr);
         vkDestroyShaderModule(device_, vertexModule, nullptr);
         logMessage(ANDROID_LOG_INFO,
-            "Android GS Vulkan solid-color point/line/triangle pipelines created; full GS rasterization is still incomplete");
+            "Android Vulkan surface and frame presenter ready; GS primitive batches are routed through VRAM before CRTC presentation");
         return true;
     }
 
@@ -1479,17 +1479,12 @@ private:
 
 VulkanSmokeRenderer gRenderer;
 
-void submitGsGeometry(void *userData, const gow::android::GsGpuBatch &batch) {
-    auto *renderer = static_cast<VulkanSmokeRenderer *>(userData);
-    if (renderer != nullptr) renderer->enqueueGsBatch(batch);
-}
-
 bool attachAndroidGsBackend() {
     if (gActiveRuntime == nullptr || !gRenderer.isReady()) return false;
     if (gGsBackendAttached) return true;
     try {
         auto backend = std::make_unique<gow::android::AndroidGSVulkanBackend>(
-            &gRenderer, &submitGsGeometry);
+            nullptr, nullptr);
         gActiveRuntime->gs().setRasterBackend(std::move(backend));
         gGsBackendAttached = true;
         logMessage(ANDROID_LOG_INFO,
