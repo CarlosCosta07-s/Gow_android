@@ -67,6 +67,31 @@ jobs:
               print(result.stderr, file=sys.stderr)
               raise SystemExit("VU1 strict gate did not reject an empty capture.")
           print("VU1 strict gate correctly rejected a capture with zero native blocks.")
+
+          import struct
+          callout_dir = root / "callout-microcode"
+          callout_dir.mkdir()
+          callout = bytearray(16 * 1024)
+          struct.pack_into("<II", callout, 0, 0xFE000000, 0)
+          (callout_dir / "interpreter-callout.bin").write_bytes(callout)
+          callout_output = root / "callout-generated"
+          callout_result = subprocess.run(
+              [
+                  sys.executable,
+                  "-I",
+                  "port/kiexter/tools/vu1n_gen.py",
+                  str(callout_output),
+                  str(callout_dir),
+                  "--strict",
+              ],
+              capture_output=True,
+              text=True,
+          )
+          if callout_result.returncode != 2 or "interpreter_callouts=1" not in callout_result.stderr:
+              print(callout_result.stdout)
+              print(callout_result.stderr, file=sys.stderr)
+              raise SystemExit("VU1 strict gate accepted a block that calls the exact interpreter.")
+          print("VU1 strict gate correctly rejected an AOT block with an exact-engine callout.")
           PY
 
       - name: Build pinned host recompiler without game files
