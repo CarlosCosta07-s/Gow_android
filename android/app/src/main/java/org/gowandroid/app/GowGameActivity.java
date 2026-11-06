@@ -24,6 +24,8 @@ public final class GowGameActivity extends GameActivity {
             "org.gowandroid.app.extra.DISC_FD";
 
     private static native boolean nativeSetDiscFileDescriptor(int descriptor);
+    private static native void nativeSetActivityReference(GowGameActivity activity);
+    private static native void nativeClearActivityReference();
 
     private TextView nativeStatusView;
     private String pendingNativeStatus;
@@ -36,6 +38,7 @@ public final class GowGameActivity extends GameActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        nativeSetActivityReference(this);
         createNativeStatusOverlay();
 
         int discDescriptor = getIntent().getIntExtra(EXTRA_DISC_FD, -1);
@@ -55,6 +58,12 @@ public final class GowGameActivity extends GameActivity {
                         | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                         | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+    }
+
+    @Override
+    protected void onDestroy() {
+        nativeClearActivityReference();
+        super.onDestroy();
     }
 
     private void createNativeStatusOverlay() {
