@@ -220,7 +220,7 @@ bool testDualLayerDiscLayout() {
     if (gow::disc::sha256Hex(sha.finish()) !=
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") {
         std::fclose(file);
-        std::cerr << "FAIL: SHA-256 known-answer test failed\\n";
+        std::cerr << "FAIL: SHA-256 known-answer test failed\n";
         return false;
     }
 
@@ -228,7 +228,7 @@ bool testDualLayerDiscLayout() {
     char *privateRoot = ::mkdtemp(privateRootTemplate);
     if (privateRoot == nullptr) {
         std::fclose(file);
-        std::cerr << "FAIL: could not create disc integrity fixture root\\n";
+        std::cerr << "FAIL: could not create disc integrity fixture root\n";
         return false;
     }
 
@@ -244,7 +244,7 @@ bool testDualLayerDiscLayout() {
         reader.close();
         std::fclose(file);
         std::cerr << "FAIL: dual-layer installation integrity verification failed: "
-                  << installed.error << " / " << goodIntegrity.error << '\\n';
+                  << installed.error << " / " << goodIntegrity.error << '\n';
         return false;
     }
 
@@ -257,7 +257,7 @@ bool testDualLayerDiscLayout() {
             std::filesystem::remove_all(root);
             reader.close();
             std::fclose(file);
-            std::cerr << "FAIL: could not open integrity tamper fixture\\n";
+            std::cerr << "FAIL: could not open integrity tamper fixture\n";
             return false;
         }
         tamper.seekp(0);
@@ -271,7 +271,7 @@ bool testDualLayerDiscLayout() {
         reader.close();
         std::fclose(file);
         std::cerr << "FAIL: same-size file corruption was not detected: "
-                  << tamperedIntegrity.error << '\\n';
+                  << tamperedIntegrity.error << '\n';
         return false;
     }
 
@@ -287,7 +287,7 @@ bool testDualLayerDiscLayout() {
         reader.close();
         std::fclose(file);
         std::cerr << "FAIL: missing ISO file was not detected: "
-                  << missingIntegrity.error << '\\n';
+                  << missingIntegrity.error << '\n';
         return false;
     }
 
@@ -315,7 +315,7 @@ bool testDualLayerDiscLayout() {
         reader.close();
         std::fclose(file);
         std::cerr << "FAIL: integrity verification followed or accepted a symlink: "
-                  << symlinkIntegrity.error << '\\n';
+                  << symlinkIntegrity.error << '\n';
         return false;
     }
 
