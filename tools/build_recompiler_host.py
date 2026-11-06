@@ -410,6 +410,38 @@ def main() -> int:
     )
 
     vu_cmake = recompiler_source / "ps2xRuntime/CMakeLists.txt"
+    diagnostic_sources = [
+        "src/lib/ee_ref/ee_diff.cpp",
+        "src/lib/ee_watch.cpp",
+        "src/lib/ee_ref/eeref.cpp",
+        "src/lib/ee_ref/R5900OpcodeImpl.cpp",
+        "src/lib/ee_ref/R5900OpcodeTables.cpp",
+        "src/lib/ee_ref/MMI.cpp",
+        "src/lib/ee_ref/FPU.cpp",
+        "src/lib/vu_pcsx2/pcsx2_vu0_cop2.cpp",
+        "src/lib/vu_pcsx2/pcsx2_vu1_bridge.cpp",
+        "src/lib/vu_pcsx2/VUops.cpp",
+        "src/lib/vu_pcsx2/VUflags.cpp",
+        "src/lib/vu_pcsx2/VU1microInterp.cpp",
+    ]
+    for source in diagnostic_sources:
+        replace_exactly_once(
+            vu_cmake,
+            f"    {source}\\n",
+            "",
+            f"remove diagnostic-only source from strict VU1 target: {source}",
+        )
+    replace_exactly_once(
+        vu_cmake,
+        "    src/lib/games_database.cpp\\n)\\n",
+        "    src/lib/games_database.cpp\\n)\\n"
+        "if(NOT PS2X_VU1_NATIVE_ONLY)\\n"
+        "    target_sources(ps2_runtime PRIVATE\\n"
+        + "".join(f"        {source}\\n" for source in diagnostic_sources)
+        + "    )\\n"
+        "endif()\\n",
+        "keep PCSX2 differential files only in non-strict diagnostic builds",
+    )
     replace_exactly_once(
         vu_cmake,
         'option(PS2X_ENABLE_IOP_RPC_TRACE "Log unhandled IOP/SIF RPC trace suggestions" ON)\n',
@@ -528,6 +560,18 @@ def main() -> int:
     if len(vu_core_entries) != 1 or "PS2X_VU1_NATIVE_ONLY=1" not in vu_core_entries[0].get("command", ""):
         raise RuntimeError("VU1 runtime source was not compiled exactly once with strict native-only mode.")
     print("Verified: ps2_vu1_core.cpp compiled with PS2X_VU1_NATIVE_ONLY=1.")
+    diagnostic_entries = [
+        entry for entry in vu_entries
+        if "/ee_ref/" in entry.get("file", "").replace("\\\\", "/")
+        or "/vu_pcsx2/" in entry.get("file", "").replace("\\\\", "/")
+        or Path(entry.get("file", "")).name == "ee_watch.cpp"
+    ]
+    if diagnostic_entries:
+        raise RuntimeError(
+            "Strict VU1 runtime unexpectedly compiled PCSX2 diagnostic sources: "
+            + ", ".join(entry["file"] for entry in diagnostic_entries)
+        )
+    print("Verified: PCSX2 differential interpreter sources are excluded from the strict runtime target.")
 
     executable_names = {"ps2_recomp", "ps2_recomp.exe"}
     candidates = [
