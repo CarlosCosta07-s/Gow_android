@@ -170,8 +170,13 @@ bool removeDirectoryFdContents(int directoryFd) {
     }
 
     bool success = true;
-    errno = 0;
-    while (dirent *entry = ::readdir(directory)) {
+    while (true) {
+        errno = 0;
+        dirent *entry = ::readdir(directory);
+        if (!entry) {
+            if (errno != 0) success = false;
+            break;
+        }
         if (std::strcmp(entry->d_name, ".") == 0 ||
             std::strcmp(entry->d_name, "..") == 0) {
             continue;
@@ -195,9 +200,7 @@ bool removeDirectoryFdContents(int directoryFd) {
             success = false;
             break;
         }
-        errno = 0;
     }
-    if (errno != 0) success = false;
     ::closedir(directory);
     return success;
 }
