@@ -121,7 +121,6 @@ public final class MainActivity extends AppCompatActivity {
     private String selectedDiscSerial;
     private String selectedDiscBootPath;
     private boolean installingDisc;
-    private boolean selectedDiscInstallationVerified;
     private volatile boolean cancelDiscInstallRequested;
     private String preparedElfSummary;
 
@@ -921,7 +920,6 @@ public final class MainActivity extends AppCompatActivity {
         discInstallProgressBar = null;
         discInstallProgressText = null;
         installingDisc = false;
-        selectedDiscInstallationVerified = installationValid && !cancelled;
         refreshExportElfButtonState();
         if (installDiscButton != null) {
             installDiscButton.setEnabled(true);
@@ -1205,7 +1203,6 @@ public final class MainActivity extends AppCompatActivity {
         discInstallProgressBar = null;
         discInstallProgressText = null;
         installingDisc = false;
-        selectedDiscInstallationVerified = success;
         refreshExportElfButtonState();
         if (installDiscButton != null) {
             installDiscButton.setEnabled(true);
@@ -1263,8 +1260,7 @@ public final class MainActivity extends AppCompatActivity {
         boolean ntScU = selectedDiscBootPath != null
                 && "SCUS_973.99".equalsIgnoreCase(new File(selectedDiscBootPath).getName());
         File cdRoot = privateDiscRootForSelectedGame();
-        boolean ready = selectedDiscValid && ntScU && selectedDiscInstallationVerified
-                && cdRoot != null
+        boolean ready = selectedDiscValid && ntScU && cdRoot != null
                 && new File(cdRoot, ".gow_disc_integrity").isFile()
                 && !installingDisc;
         exportElfButton.setEnabled(ready);
@@ -1283,7 +1279,7 @@ public final class MainActivity extends AppCompatActivity {
         }
         new AlertDialog.Builder(this)
                 .setTitle("Exportar executável para AOT")
-                .setMessage("O FORGE vai copiar somente SCUS_973.99 para um local escolhido por você e conferir o SHA-256 registrado na instalação. A ISO e os demais arquivos permanecerão no armazenamento privado. O ELF será usado como entrada para gerar o código C++ nativo em um computador. Não envie esse arquivo ao GitHub, CI ou releases.")
+                .setMessage("O FORGE vai validar e copiar somente SCUS_973.99 para um local escolhido por você, comparando o tamanho e o SHA-256 desse ELF com o manifesto privado. Isso não verifica os outros arquivos do disco nem libera o gameplay: a verificação integral continua obrigatória antes de qualquer tentativa de iniciar o jogo. A ISO e os demais arquivos permanecerão no armazenamento privado. O ELF será usado como entrada para gerar o código C++ nativo em um computador. Não envie esse arquivo ao GitHub, CI ou releases.")
                 .setPositiveButton("Escolher local", (dialog, which) ->
                         createElfDocumentLauncher.launch("SCUS_973.99"))
                 .setNegativeButton("Cancelar", null)
@@ -1494,7 +1490,6 @@ public final class MainActivity extends AppCompatActivity {
         selectedDiscUri = uri;
         selectedDiscValid = false;
         selectedDiscBootPath = null;
-        selectedDiscInstallationVerified = false;
         refreshExportElfButtonState();
 
         try {
@@ -1533,7 +1528,6 @@ public final class MainActivity extends AppCompatActivity {
         selectedDiscValid = false;
         selectedDiscSerial = null;
         selectedDiscBootPath = null;
-        selectedDiscInstallationVerified = false;
         refreshExportElfButtonState();
 
         ioExecutor.execute(() -> {
