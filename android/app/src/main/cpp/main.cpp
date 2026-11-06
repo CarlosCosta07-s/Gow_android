@@ -19,7 +19,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 #include <string>
 #include <condition_variable>
@@ -50,6 +52,55 @@ constexpr uint32_t kVulkanApiVersion = VK_API_VERSION_1_0;
 
 void logMessage(int priority, const char* message) {
     __android_log_write(priority, kTag, message);
+}
+
+bool configurePrivateAotCaptureDirectories(const std::string &privateCdRoot) {
+    try {
+        const std::filesystem::path discRoot(privateCdRoot);
+        const std::filesystem::path installationsDir =
+            discRoot.parent_path().parent_path();
+        const std::filesystem::path appFilesDir = installationsDir.parent_path();
+        if (!discRoot.is_absolute() || discRoot.filename() != "disc" ||
+            installationsDir.filename() != "installations" ||
+            appFilesDir.empty()) {
+            logMessage(
+                ANDROID_LOG_WARN,
+                "Private AOT capture disabled: cdRoot is outside the expected app-private installation layout");
+            return false;
+        }
+
+        const std::filesystem::path captureRoot =
+            appFilesDir / "gow-aot-captures";
+        const std::filesystem::path vu1Dir = captureRoot / "vu1";
+        const std::filesystem::path iopDir = captureRoot / "iop";
+        std::filesystem::create_directories(vu1Dir);
+        std::filesystem::create_directories(iopDir);
+
+        const std::string vu1Path = vu1Dir.string();
+        const std::string iopPath = iopDir.string();
+        if (::setenv("GOW_VU1_CAPTURA", vu1Path.c_str(), 1) != 0 ||
+            ::setenv("PS2X_IOP_DUMP_MODULES", iopPath.c_str(), 1) != 0) {
+            logMessage(
+                ANDROID_LOG_WARN,
+                "Private AOT capture disabled: could not configure runtime capture paths");
+            return false;
+        }
+
+        logMessage(
+            ANDROID_LOG_INFO,
+            "Private AOT capture enabled under app files: gow-aot-captures/{vu1,iop}");
+        return true;
+    } catch (const std::exception &exception) {
+        __android_log_print(
+            ANDROID_LOG_WARN, kTag,
+            "Private AOT capture setup failed: %s", exception.what());
+        return false;
+    } catch (...) {
+        logMessage(
+            ANDROID_LOG_WARN,
+            "Private AOT capture setup failed with an unknown error");
+        return false;
+    }
 }
 
 std::mutex gActivityReferenceMutex;
@@ -1743,6 +1794,12 @@ Java_org_gowandroid_app_GowGameActivity_nativeConfigurePrivateBoot(
     }
 
     const bool rootReady = inputsValid && gowAndroidCdRootSetPath(rootPath.c_str());
+    if (rootReady) {
+        (void)configurePrivateAotCaptureDirectories(rootPath);
+    } else {
+        ::unsetenv("GOW_VU1_CAPTURA");
+        ::unsetenv("PS2X_IOP_DUMP_MODULES");
+    }
     {
         std::lock_guard<std::mutex> lock(gBootPathMutex);
         gBootRelativePath = rootReady ? std::move(candidate) : std::string{};
