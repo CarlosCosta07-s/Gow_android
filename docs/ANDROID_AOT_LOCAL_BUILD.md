@@ -59,6 +59,6 @@ Opções úteis:
 
 O orquestrador agora faz uma pré-validação estática da tabela gerada antes do Gradle; fixtures de CI cobrem tabela válida, tabela vazia, ausência do entrypoint e mapeamento incorreto de slot. Um build AOT local validado poderá então testar se o código foi ligado e se o BOOT2 privado é carregado. Isso ainda não foi executado com o ELF do usuário nem em aparelho.
 
-**Ainda não é gameplay.** O build Android atual mantém `PS2Runtime::run()` bloqueado. O backend GS/Vulkan Android, presenter do GS, cadeia real de boot (incluindo IRX/VU1 AOT e serviços PS2) e áudio Android ainda precisam ser implementados e validados. Um resultado positivo na porta ELF/AOT não significa que o menu do jogo ou uma cena já possa ser executada.
+**Ainda não é gameplay.** O runtime Android já prepara `startGuestExecutionAndroid()` numa thread separada e o encerra com `join()`; porém `android_main()` não chama esse worker. A tabela AOT pública continua vazia e `PS2Runtime::run()` permanece bloqueado. Além de executar esse fluxo local com o ELF do usuário, ainda faltam cobertura real de VU1/IRX, serviços da cadeia de boot, integração do GS/Vulkan e presenter ao ciclo de gameplay e áudio Android. Um resultado positivo na porta ELF/AOT não significa que o menu do jogo ou uma cena já possa ser executada.
 
 O fluxo local não envia o ELF nem o C++ gerado a nenhum serviço. O usuário deve manter a ISO original e os dados privados correspondentes à mesma revisão do executável.
