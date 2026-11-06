@@ -116,6 +116,43 @@ int main() {
         }
         backend.Submit(sprite);
 
+        // Textured sprites must decode texels from the shared GS VRAM image,
+        // apply UV sampling and TFX, and still land in the selected FBP.
+        backend.WriteVram(GS_PSM_CT32, 64u, 1u, 0u, 0u, 0xFF0000FFu);
+        backend.WriteVram(GS_PSM_CT32, 64u, 1u, 1u, 0u, 0xFF00FF00u);
+        backend.WriteVram(GS_PSM_CT32, 64u, 1u, 0u, 1u, 0xFFFF0000u);
+        backend.WriteVram(GS_PSM_CT32, 64u, 1u, 1u, 1u, 0xFFFFFFFFu);
+
+        GSPrimitiveBatch texturedSprite{};
+        texturedSprite.vertexCount = 2u;
+        texturedSprite.state.context.frame = triangle.state.context.frame;
+        texturedSprite.state.context.scissor = triangle.state.context.scissor;
+        texturedSprite.state.context.tex0.tbp0 = 64u;
+        texturedSprite.state.context.tex0.tbw = 1u;
+        texturedSprite.state.context.tex0.psm = GS_PSM_CT32;
+        texturedSprite.state.context.tex0.tcc = 1u;
+        texturedSprite.state.context.tex0.tfx = 0u;
+        texturedSprite.state.prim.type = GS_PRIM_SPRITE;
+        texturedSprite.state.prim.tme = true;
+        texturedSprite.state.prim.fst = true;
+        texturedSprite.state.textureWidth = 2u;
+        texturedSprite.state.textureHeight = 2u;
+        texturedSprite.vertices[0].x = 36.0f;
+        texturedSprite.vertices[0].y = 12.0f;
+        texturedSprite.vertices[0].u = 0u;
+        texturedSprite.vertices[0].v = 0u;
+        texturedSprite.vertices[1].x = 40.0f;
+        texturedSprite.vertices[1].y = 16.0f;
+        texturedSprite.vertices[1].u = 32u;
+        texturedSprite.vertices[1].v = 32u;
+        for (auto &vertex : texturedSprite.vertices) {
+            vertex.r = 128u;
+            vertex.g = 128u;
+            vertex.b = 128u;
+            vertex.a = 128u;
+        }
+        backend.Submit(texturedSprite);
+
         GSPresentationRequest presentation{};
         presentation.pmode = 1u;
         presentation.dispfb1 =
