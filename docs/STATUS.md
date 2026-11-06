@@ -32,6 +32,18 @@ Fonte: [KIexster/god-of-war-recomp](https://github.com/KIexster/god-of-war-recom
 - O build KIexster fixa [PS2Recomp](https://github.com/ran-j/PS2Recomp) no commit `c5a9d02573410a2085a4b4b831b0b68ba3515440`, licença GPL-3.0.
 - Nenhum runtime Waffle completo, PS2Recomp ou renderer desktop foi importado ainda. O antigo submódulo CodeAbhi foi removido.
 
+## [VERIFICADO] Bloqueios identificados na configuração Waffle
+
+Auditoria estática do CMake e dos fontes no snapshot Waffle runtime ba16c8d70eb5ae73267732e3c0e36cb3b6e90ebc:
+
+- O alvo ps2_runtime inclui fontes ee_ref e vu_pcsx2 descritas pelo CMake como teste diferencial/diagnóstico PCSX2. Elas não devem compor o caminho de execução final; se houver build de diagnóstico separado, manter os avisos GPL-3.0-or-later.
+- ps2_vu1_core.cpp implementa VU1Interpreter. A geração/ligação dos blocos VU1 AOT no CMake de referência é condicional e excluída quando Android está ativo; o caminho final precisa gerar AOT no host e impedir fallback para microprogramas sem cobertura.
+- gs_gl.cpp é backend OpenGL e ps2_audio_device.cpp usa miniaudio/Raylib do host; substituir por GS/Vulkan Android e saída de áudio Android.
+- ps2_pad_rumble_win.cpp é específico de Windows. ps2_android_runtime.cpp contém apenas um TODO de controles touch.
+- ps2_vif1_interpreter.cpp decodifica comandos VIF1/UNPACK; não é o interpretador de instruções MIPS do EE. A decisão sobre sua permanência é por função de hardware, separada da regra contra fallback de CPU.
+
+Esse snapshot é referência para identificar fronteiras. Nenhum desses arquivos foi importado para o projeto e não há runtime de jogo compilado.
+
 ## [PREPARADO, NÃO TESTADO] Pipeline de recompilação host
 
 - Foi criado tools/build_recompiler_host.py para compilar o alvo ps2_recomp no computador e gerar C++ em diretório privado.
