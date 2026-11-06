@@ -52,7 +52,7 @@ $env:GOW_BUILD_JOBS = "1"
 No Linux:
 
 ```bash
-GOW_BUILD_JOBS=1 python3 tools/build_android_game.py --elf "$HOME/gow-private/SCUS_973.99" --work-dir "/tmp/gowport"
+GOW_BUILD_JOBS=1 python3 tools/build_android_game.py --elf "$HOME/gow-private/SCUS_973.99" --capture-bootstrap --work-dir "/tmp/gowport"
 ```
 
 Não aumente o paralelismo antes de confirmar a memória disponível durante a compilação das unidades AOT.
@@ -72,17 +72,64 @@ python tools/build_android_game.py `
 ```bash
 python3 tools/build_android_game.py \
   --elf "$HOME/gow-private/SCUS_973.99" \
+  --capture-bootstrap \
   --work-dir "/tmp/gowport"
 ```
 
-O script executa, em sequência:
+O orquestrador executa, em sequência:
 
-1. Valida as regras de privacidade: ELF e workspace precisam ficar fora do repositório; o staging de código precisa estar sob `android/app/build/` e ser ignorado pelo Git.
-2. Chama `tools/build_recompiler_host.py` para validar o ELF32/MIPS, compilar as ferramentas host, executar o PS2Recomp e exportar os arquivos C++/headers.
-3. Confere a presença de `register_functions.cpp`, `ps2_recompiled_functions.h`, `ps2_recompiled_stubs.h` e das unidades C++ de funções.
-4. Analisa a tabela gerada: rejeita zero slots, ausência de registros, endereços desalinhados/fora da faixa, slots incorretos ou duplicados e exige que o endereço de entrada do ELF esteja registrado. Esse é o mesmo requisito que a porta Android verifica antes de aceitar a carga.
-5. Só então executa `gradlew assembleDebug`. O CMake detecta `android/app/build/gow-generated-game/` automaticamente e substitui a tabela vazia do shell pelo código AOT gerado.
-6. Exibe o caminho e o SHA-256 do APK resultante.
+1. Valida as regras de privacidade e prepara a revisão fixada do runtime Waffle numa pasta local privada.
+2. Valida o ELF32/MIPS, compila as ferramentas host, executa PS2Recomp e exporta os arquivos C++/headers do EE.
+3. Confere a presença de `register_functions.cpp`, `ps2_recompiled_functions.h`, `ps2_recompiled_stubs.h`, slots consistentes e uma função registrada no endereço de entrada.
+4. No modo de captura, remove qualquer staging VU1/IOP antigo e compila um APK explicitamente diagnóstico. O Android continua com EE, VU1 e IOP em modo nativo estrito: um bloco/módulo ausente encerra a execução com diagnóstico, nunca com fallback interpretado.
+5. No modo com capturas, valida o ZIP, cada micro-memória VU1 (16 KiB), o manifesto IOP, tamanhos e hashes FNV-1a; gera C++ VU1/IOP; liga somente blocos VU1 nativos e registra a cobertura restante. Capturas parciais geram um APK de próxima iteração; cobertura integral do material capturado permite avançar, mas não prova que todos os microprogramas futuros do jogo já foram observados.
+6. Só então executa `gradlew assembleDebug`. O CMake inclui o C++ privado do EE, os blocos VU1 e os módulos IRX/IOP quando existem; dados e código gerado permanecem em `android/app/build/`.
+7. Exibe o caminho e o SHA-256 do APK resultante.
+
+
+## Ciclo incremental de captura VU1/IOP
+
+O primeiro APK com código EE deve ser gerado em **modo de captura estrita**, não como se já fosse uma build de gameplay completa:
+
+```powershell
+python tools/build_android_game.py `
+  --elf "D:\\GowPrivate\\SCUS_973.99" `
+  --capture-bootstrap `
+  --work-dir "C:\\gowport"
+```
+
+No Linux:
+
+```bash
+python3 tools/build_android_game.py \
+  --elf "$HOME/gow-private/SCUS_973.99" \
+  --capture-bootstrap \
+  --work-dir "/tmp/gowport"
+```
+
+Instale esse APK no aparelho que contém a instalação privada, abra **FORGE → Verificar runtime** e deixe a tentativa de boot prosseguir até atingir um primeiro módulo ou bloco VU1 sem AOT. O runtime deve parar com diagnóstico. Enquanto inicializa os subsistemas, ele guarda em `files/gow-aot-captures/vu1/` as micro-memórias de 16 KiB e em `files/gow-aot-captures/iop/` os módulos IRX relocados, junto com `modules.txt` (base, tamanho e hash FNV-1a).
+
+Na tela Debug, toque em **Exportar dados AOT** e salve `gow-aot-captures.zip` num local acessível ao computador de build. O ZIP é dado derivado do disco do usuário: mantenha-o privado e não o envie para GitHub, CI, issues ou releases.
+
+Recompile no computador, incorporando as capturas:
+
+```powershell
+python tools/build_android_game.py `
+  --elf "D:\\GowPrivate\\SCUS_973.99" `
+  --aot-captures "D:\\GowPrivate\\gow-aot-captures.zip" `
+  --work-dir "C:\\gowport"
+```
+
+Linux:
+
+```bash
+python3 tools/build_android_game.py \
+  --elf "$HOME/gow-private/SCUS_973.99" \
+  --aot-captures "$HOME/gow-private/gow-aot-captures.zip" \
+  --work-dir "/tmp/gowport"
+```
+
+Repita o ciclo com o novo APK quando ele parar num módulo/microprograma ainda não capturado. O gerador VU1 em modo `--strict-partial` **omite** blocos que exigiriam callouts ao motor exato; o runtime nunca os interpreta. Uma captura VU1 nova pode acrescentar blocos nativos; um IRX novo acrescenta uma unidade nativa ao registro. O arquivo `native-aot-summary.json` relata a cobertura vista. `full_native_aot=true` significa que os dados VU1/IOP presentes no ZIP foram gerados sem lacunas conhecidas naquele material; **não** comprova cobertura de todos os microprogramas ou módulos que o jogo poderá carregar mais adiante.
 
 ## Saídas locais
 
