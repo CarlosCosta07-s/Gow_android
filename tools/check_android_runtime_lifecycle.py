@@ -99,8 +99,16 @@ def main() -> int:
         '"(Ljava/lang/String;Z)V"',
         "CallVoidMethod",
         "DetachCurrentThread",
+        "NewGlobalRef(activity)",
+        "NewLocalRef(gActivityReference)",
+        "Java_org_gowandroid_app_GowGameActivity_nativeSetActivityReference",
+        "Java_org_gowandroid_app_GowGameActivity_nativeClearActivityReference",
     ):
         require(required in native_main, f"JNI runtime-status bridge is missing: {required}")
+    require(
+        "app->activity->clazz" not in native_main,
+        "GameActivity status bridge must not rely on NativeActivity::clazz.",
+    )
 
     require(
         native_main.count("reportRuntimeStatus(") >= 5
@@ -109,6 +117,9 @@ def main() -> int:
         "Native startup does not report progress and initialization failures.",
     )
     for required in (
+        "nativeSetActivityReference(this)",
+        "nativeClearActivityReference()",
+        "protected void onDestroy()",
         "createNativeStatusOverlay()",
         "onNativeRuntimeStatus(String message, boolean isError)",
         "runOnUiThread(() ->",
