@@ -7,7 +7,7 @@
 namespace gow::android {
 namespace {
 
-constexpr uint64_t kMaxPixelCount = 64ull * 1024ull * 1024ull;
+constexpr uint64_t kMaxPixelCount = 16ull * 1024ull * 1024ull;
 
 bool checkedRgbaSize(uint32_t width, uint32_t height, size_t &bytes) {
     if (width == 0u || height == 0u) return false;
@@ -49,6 +49,9 @@ bool scaleRgbaToFit(
 
     try {
         destination.assign(targetRequired, 0u);
+        for (size_t offset = 3u; offset < destination.size(); offset += 4u) {
+            destination[offset] = 255u;
+        }
     } catch (...) {
         error = "Could not allocate the Vulkan upload frame.";
         destination.clear();
