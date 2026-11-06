@@ -14,6 +14,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <condition_variable>
@@ -242,6 +243,7 @@ public:
         pendingFrameWidth_ = width;
         pendingFrameHeight_ = height;
         hasPendingFrame_ = true;
+        frameUploadDirty_ = true;
     }
 
     void drawFrame() {
@@ -410,6 +412,7 @@ private:
         }
         uploadBufferCapacity_ = 0u;
         uploadMemoryFlags_ = 0u;
+        uploadBufferReady_ = false;
     }
 
     bool ensureUploadBuffer(VkDeviceSize requiredBytes) {
@@ -491,40 +494,49 @@ private:
         uint32_t imageIndex) {
         if (!frameUploadSupported_) return false;
 
-        std::string scaleError;
-        if (!gow::android::scaleRgbaToFit(
-                pendingFramePixels_.data(),
-                pendingFramePixels_.size(),
-                pendingFrameWidth_,
-                pendingFrameHeight_,
-                swapchainExtent_.width,
-                swapchainExtent_.height,
-                uploadPixels_,
-                scaleError)) {
-            __android_log_print(
-                ANDROID_LOG_WARN, kTag,
-                "GS frame upload rejected: %s", scaleError.c_str());
-            return false;
-        }
-        if (swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM) {
-            gow::android::convertRgbaToBgraInPlace(uploadPixels_);
-        }
-
-        const VkDeviceSize requiredBytes =
-            static_cast<VkDeviceSize>(uploadPixels_.size());
-        if (!ensureUploadBuffer(requiredBytes)) return false;
-        std::memcpy(uploadMapped_, uploadPixels_.data(), uploadPixels_.size());
-
-        if ((uploadMemoryFlags_ & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u) {
-            VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
-            range.memory = uploadMemory_;
-            range.offset = 0u;
-            range.size = VK_WHOLE_SIZE;
-            if (!isSuccess(
-                    vkFlushMappedMemoryRanges(device_, 1u, &range),
-                    "vkFlushMappedMemoryRanges(GS frame upload)")) {
+        const bool targetChanged =
+            uploadTargetWidth_ != swapchainExtent_.width ||
+            uploadTargetHeight_ != swapchainExtent_.height;
+        if (frameUploadDirty_ || targetChanged || !uploadBufferReady_) {
+            std::string scaleError;
+            if (!gow::android::scaleRgbaToFit(
+                    pendingFramePixels_.data(),
+                    pendingFramePixels_.size(),
+                    pendingFrameWidth_,
+                    pendingFrameHeight_,
+                    swapchainExtent_.width,
+                    swapchainExtent_.height,
+                    uploadPixels_,
+                    scaleError)) {
+                __android_log_print(
+                    ANDROID_LOG_WARN, kTag,
+                    "GS frame upload rejected: %s", scaleError.c_str());
                 return false;
             }
+            if (swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM) {
+                gow::android::convertRgbaToBgraInPlace(uploadPixels_);
+            }
+
+            const VkDeviceSize requiredBytes =
+                static_cast<VkDeviceSize>(uploadPixels_.size());
+            if (!ensureUploadBuffer(requiredBytes)) return false;
+            std::memcpy(uploadMapped_, uploadPixels_.data(), uploadPixels_.size());
+
+            if ((uploadMemoryFlags_ & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u) {
+                VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+                range.memory = uploadMemory_;
+                range.offset = 0u;
+                range.size = VK_WHOLE_SIZE;
+                if (!isSuccess(
+                        vkFlushMappedMemoryRanges(device_, 1u, &range),
+                        "vkFlushMappedMemoryRanges(GS frame upload)")) {
+                    return false;
+                }
+            }
+            uploadTargetWidth_ = swapchainExtent_.width;
+            uploadTargetHeight_ = swapchainExtent_.height;
+            frameUploadDirty_ = false;
+            uploadBufferReady_ = true;
         }
 
         VkImageMemoryBarrier toTransfer{
@@ -1110,7 +1122,11 @@ private:
     std::vector<uint8_t> uploadPixels_;
     uint32_t pendingFrameWidth_ = 0u;
     uint32_t pendingFrameHeight_ = 0u;
+    uint32_t uploadTargetWidth_ = 0u;
+    uint32_t uploadTargetHeight_ = 0u;
     bool hasPendingFrame_ = false;
+    bool frameUploadDirty_ = false;
+    bool uploadBufferReady_ = false;
     bool frameUploadSupported_ = false;
     VkRenderPass renderPass_ = VK_NULL_HANDLE;
     std::vector<VkFramebuffer> framebuffers_;
