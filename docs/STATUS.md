@@ -1,6 +1,6 @@
 # Estado do projeto
 
-**Data da auditoria:** 2026-11-05  
+**Data da auditoria:** 2026-11-06  
 **Branch de desenvolvimento:** `main`  
 **Objetivo:** port nativo de God of War (PS2, 2005) para Android ARM64, usando recompilação estática e runtime de serviços PS2 nativo; não é um emulador.
 
@@ -44,17 +44,23 @@ Auditoria estática do CMake e dos fontes no snapshot Waffle runtime 49ca62c1d20
 
 Esse snapshot é referência para identificar fronteiras. Nenhum desses arquivos foi importado para o projeto e não há runtime de jogo compilado.
 
-## [PREPARADO, NÃO TESTADO] Pipeline de recompilação host
+## [VERIFICADO] Ferramenta PS2Recomp no host
 
-- Foi criado tools/build_recompiler_host.py para compilar o alvo ps2_recomp no computador e gerar C++ em diretório privado.
-- O script fixa KIexster em a226151feb6ed22937e42be485aaf28a83acd166 e PS2Recomp em c5a9d02573410a2085a4b4b831b0b68ba3515440.
-- A geração host aplica somente o patch-base Waffle, desativa os alvos runtime/analyzer/test/Studio e mantém o ELF e o C++ gerado fora do repositório.
-- A triagem dos patches e os critérios de seleção do runtime estão em docs/PIPELINE_RECOMPILADOR.md e docs/BASE_KIEXTER.md.
-- **Ainda não foi executado nem compilado neste ambiente.** Não há evidência de geração C++ ou de build ARM64 decorrente desta preparação.
+- O script tools/build_recompiler_host.py passou em py_compile e no CLI --help.
+- O modo --build-only baixou as revisões fixadas, aplicou ps2recomp-waffle-runtime.patch e compilou o alvo ps2_recomp com sucesso na execução GitHub Actions 42146201136, commit a8e373fda6d4f7ab88980dcb18d7f06d818e51ad.
+- O log confirmou a compilação das dependências, de ps2_recomp_lib e do executável ps2_recomp.
+- A execução não acessou ELF, ISO ou outro arquivo do jogo e não gerou C++ derivado do jogo.
+
+## [PREPARADO, NÃO TESTADO] Geração do C++ do jogo
+
+- O mesmo script aceita --elf e usa funcmap.csv + recomp.template.toml para gerar C++ em diretório privado.
+- Esta etapa ainda não foi executada com o ELF SCUS_973.99 do usuário.
+- A triagem dos patches e as instruções estão em docs/PIPELINE_RECOMPILADOR.md e a seleção do runtime está em docs/BASE_KIEXTER.md.
+- Não há ainda evidência de geração C++ do jogo, compilação ARM64 ou integração ao APK.
 
 ## [NÃO TESTADO] Runtime e jogo
 
-- Pipeline PS2Recomp integrado ao projeto e gerando C++ do ELF privado.
+- Geração do C++ do ELF privado com PS2Recomp (o executável host foi compilado, mas o ELF ainda não foi processado).
 - Compilação do código gerado para Android ARM64.
 - Runtime EE e serviços PS2 selecionados/adaptados para Android.
 - Geração VU1 AOT cobrindo todos os microprogramas usados pelo jogo.
