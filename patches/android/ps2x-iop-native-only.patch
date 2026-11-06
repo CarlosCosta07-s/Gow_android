@@ -1,0 +1,42 @@
+diff --git a/ps2xIOP/src/emulator/iop_emulator.cpp b/ps2xIOP/src/emulator/iop_emulator.cpp
+--- a/ps2xIOP/src/emulator/iop_emulator.cpp
++++ b/ps2xIOP/src/emulator/iop_emulator.cpp
+@@ -495,7 +495,19 @@
+                         return !cpu.stopped;
+                     }
+             }
++#if defined(PS2X_IOP_NATIVE_ONLY)
++            std::ostringstream out;
++            out << "[IOP:native-required] refusing fallback to interpreted IOP instruction"
++                << " pc=0x" << std::hex << cpu.pc
++                << " ra=0x" << cpu.gpr[31]
++                << " branchPending=" << std::dec << (cpu.branchPending ? 1 : 0);
++            log(LogLevel::Error, out.str());
++            cpu.stopped = true;
++            return false;
++#else
+             ++interpretedInstructions;
+ 
+             // GOW-Port: muestreo del PC del IOP (PS2X_IOP_PC_EVERY=<instrucciones>), leido una vez al crear el IOP.
+@@ -519,6 +531,7 @@
+             ++totalCycles;
+             return running;
++#endif
+         }
+ 
+         uint32_t runCpu(CpuState &cpu, uint32_t instructionBudget)
+diff --git a/ps2xIOP/CMakeLists.txt b/ps2xIOP/CMakeLists.txt
+--- a/ps2xIOP/CMakeLists.txt
++++ b/ps2xIOP/CMakeLists.txt
+@@ -38,6 +38,11 @@
+     set_source_files_properties(\${PS2X_IOP_NATIVE_SOURCES} PROPERTIES COMPILE_OPTIONS "/bigobj")
+ endif()
+ 
++if(ANDROID)
++    # Android final path: never fall back to the IOP guest-instruction interpreter.
++    target_compile_definitions(ps2_iop PRIVATE PS2X_IOP_NATIVE_ONLY=1)
++endif()
++
+ target_compile_features(ps2_iop PUBLIC cxx_std_20)
+ 
+ target_include_directories(ps2_iop
