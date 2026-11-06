@@ -510,6 +510,16 @@ public final class MainActivity extends AppCompatActivity {
         return card;
     }
 
+    private View createDivider() {
+        View divider = new View(this);
+        divider.setBackground(new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{COLOR_RED, COLOR_BRONZE, 0x2260402F}));
+        divider.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(2)));
+        return divider;
+    }
+
     private TextView sectionLabel(String value) {
         TextView label = text(
                 value,
