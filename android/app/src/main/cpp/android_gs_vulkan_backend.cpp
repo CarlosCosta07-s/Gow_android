@@ -5,7 +5,11 @@
 #include "runtime/gs/ps2_gs_common.h"
 
 #include <algorithm>
+#if defined(__ANDROID__)
 #include <android/log.h>
+#else
+#include <cstdio>
+#endif
 #include <atomic>
 #include <exception>
 #include <stdexcept>
@@ -70,10 +74,17 @@ void AndroidGSVulkanBackend::Submit(const GSPrimitiveBatch &batch) {
         bool expected = false;
         if (gUnsupportedBatchLogged.compare_exchange_strong(
                 expected, true, std::memory_order_acq_rel)) {
+#if defined(__ANDROID__)
             __android_log_print(
                 ANDROID_LOG_WARN, "GowAndroid",
                 "GS CPU rasterizer skipped a batch with unsupported state: %s",
                 error.empty() ? "no detail supplied" : error.c_str());
+#else
+            std::fprintf(
+                stderr,
+                "[GowAndroid][GS] skipped a batch with unsupported state: %s\\n",
+                error.empty() ? "no detail supplied" : error.c_str());
+#endif
         }
         return;
     }
