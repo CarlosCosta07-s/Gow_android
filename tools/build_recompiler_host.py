@@ -317,6 +317,17 @@ def main() -> int:
         "#endif\n",
         "select NEON compatibility layer on Android ARM64 and SSE on host x86-64",
     )
+    threaded_gs = recompiler_source / "ps2xRuntime/src/lib/gs/gs_threaded_backend.cpp"
+    replace_exactly_once(
+        threaded_gs,
+        "#include <xmmintrin.h>\n",
+        "#if defined(__aarch64__) && defined(__ARM_NEON)\n"
+        '#include "runtime/ps2_vu1_neon_compat.h"\n'
+        "#else\n"
+        "#include <xmmintrin.h>\n"
+        "#endif\n",
+        "select NEON FPCR/FPSR state support for the threaded GS worker",
+    )
 
     # Strict VU1 policy: never fall back to the cycle-exact interpreter.
     vu_core = recompiler_source / "ps2xRuntime/src/lib/vu/ps2_vu1_core.cpp"
@@ -511,11 +522,13 @@ def main() -> int:
             or os.environ.get("ANDROID_HOME")
         )
         ndk_version = os.environ.get("GOW_ANDROID_NDK_VERSION", "30.0.16248370")
-        ndk_root = (
-            os.environ.get("ANDROID_NDK_HOME")
-            or os.environ.get("ANDROID_NDK_ROOT")
-            or (str(Path(sdk_root) / "ndk" / ndk_version) if sdk_root else None)
-        )
+        sdk_pinned_ndk = Path(sdk_root) / "ndk" / ndk_version if sdk_root else None
+        if sdk_pinned_ndk and (sdk_pinned_ndk / "build/cmake/android.toolchain.cmake").is_file():
+            ndk_root = str(sdk_pinned_ndk)
+        else:
+            ndk_root = os.environ.get("ANDROID_NDK_HOME") or os.environ.get("ANDROID_NDK_ROOT")
+        if ndk_root:
+            print(f"Using Android NDK: {ndk_root}")
         if not ndk_root:
             raise RuntimeError(
                 "Android SDK/NDK not found. Set ANDROID_SDK_ROOT or ANDROID_NDK_HOME."
