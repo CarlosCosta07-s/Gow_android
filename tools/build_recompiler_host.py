@@ -149,7 +149,18 @@ def main() -> int:
 
     cmake = shutil.which("cmake")
     if not cmake:
-        raise RuntimeError("CMake 3.20+ was not found on PATH.")
+        raise RuntimeError("CMake 3.21+ was not found on PATH.")
+    version_line = subprocess.run(
+        [cmake, "--version"], capture_output=True, text=True, check=True
+    ).stdout.splitlines()[0]
+    try:
+        cmake_version = tuple(int(part) for part in version_line.split()[-1].split(".")[:2])
+    except (IndexError, ValueError) as error:
+        raise RuntimeError(f"Could not parse CMake version: {version_line}") from error
+    if cmake_version < (3, 21):
+        raise RuntimeError(
+            f"CMake 3.21 or newer is required; found {version_line}."
+        )
     generator = shutil.which("ninja")
 
     configure = [
