@@ -6,6 +6,8 @@ on:
     paths:
       - "tools/build_recompiler_host.py"
       - "tools/build_android_game.py"
+      - "tools/build_android_native_aot.py"
+      - "tools/test_android_native_aot.py"
       - "tools/test_android_game_build.py"
       - "tools/sync_android_aot_captures.py"
       - "tools/test_sync_android_aot_captures.py"
