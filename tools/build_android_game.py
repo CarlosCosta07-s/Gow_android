@@ -30,6 +30,7 @@ class BuildPlan:
     elf: Path
     work_dir: Path
     generated_dir: Path
+    prepare_runtime_command: tuple[str, ...]
     recompiler_command: tuple[str, ...]
     gradle_command: tuple[str, ...]
     apk_path: Path
@@ -102,6 +103,13 @@ def create_build_plan(
     if not generator.is_file():
         raise ValueError(f"Host recompiler entry point is missing: {generator}")
 
+    prepare_runtime_command = (
+        python,
+        str(generator),
+        "--prepare-android-runtime",
+        "--work-dir",
+        str(work),
+    )
     recompiler_command = (
         python,
         str(generator),
@@ -121,15 +129,21 @@ def create_build_plan(
         elf=elf,
         work_dir=work,
         generated_dir=generated,
+        prepare_runtime_command=prepare_runtime_command,
         recompiler_command=recompiler_command,
         gradle_command=gradle_command,
         apk_path=root / "android/app/build/outputs/apk/debug/app-debug.apk",
     )
 
 
-def _run(command: tuple[str, ...], cwd: Path) -> None:
+def _run(
+    command: tuple[str, ...],
+    cwd: Path,
+    *,
+    environment: dict[str, str] | None = None,
+) -> None:
     print("$ " + shlex.join(command), flush=True)
-    subprocess.run(command, cwd=str(cwd), check=True)
+    subprocess.run(command, cwd=str(cwd), check=True, env=environment)
 
 
 def _require_ignored_generated_dir(root: Path, generated_dir: Path) -> None:
@@ -278,6 +292,16 @@ def main() -> int:
         default=str(default_work),
         help="private ASCII-only recompiler workspace outside the repository",
     )
+    build_mode = parser.add_mutually_exclusive_group(required=True)
+    build_mode.add_argument(
+        "--capture-bootstrap",
+        action="store_true",
+        help="build an explicit diagnostic APK that captures VU1/IOP code and stops on missing native AOT",
+    )
+    build_mode.add_argument(
+        "--aot-captures",
+        help="ZIP exported from GowGameActivity containing private vu1/ and iop/ captures for a full native build",
+    )
     parser.add_argument(
         "--generate-only",
         action="store_true",
@@ -293,39 +317,90 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     plan = create_build_plan(root, Path(args.elf), Path(args.work_dir))
     _require_ignored_generated_dir(root, plan.generated_dir)
+    build_root = (root / "android/app/build").resolve()
+    generated_vu1 = build_root / "gow-generated-vu1"
+    generated_iop = build_root / "gow-generated-iop"
+    for generated_path in (generated_vu1, generated_iop):
+        if generated_path.exists() and generated_path.is_symlink():
+            raise ValueError(f"Generated staging may not be a symlink: {generated_path}")
+        _require_ignored_generated_dir(root, generated_path)
     elf_info = validate_ps2_elf(plan.elf)
+
+    captures_zip: Path | None = None
+    if args.aot_captures:
+        captures_zip = Path(args.aot_captures).expanduser().resolve()
+        if not captures_zip.is_file():
+            raise ValueError(f"Private AOT capture ZIP was not found: {captures_zip}")
+        if _is_within(captures_zip, root):
+            raise ValueError("Keep the user's AOT capture ZIP outside the public repository.")
+        if not str(captures_zip).isascii():
+            raise ValueError("The private AOT capture ZIP path must use ASCII characters.")
 
     print(f"Private ELF: {plan.elf}")
     print(f"Validated ELF entry point: 0x{elf_info.entry_point:08X}")
     print(f"Private workspace: {plan.work_dir}")
-    print(f"Git-ignored C++ staging: {plan.generated_dir}")
-    print("No ELF, generated C++, IRX, ISO, save or other game-derived data is uploaded.")
+    print(f"Git-ignored EE C++ staging: {plan.generated_dir}")
+    print("Mode: " + ("capture bootstrap (strict stop on missing VU1/IOP AOT)" if args.capture_bootstrap
+                      else "full static AOT (EE + VU1 + IOP)"))
+    print("No ELF, generated C++, IRX, microcode, ISO, save or other game-derived data is uploaded.")
+    print("$ " + shlex.join(plan.prepare_runtime_command))
     print("$ " + shlex.join(plan.recompiler_command))
+    if captures_zip is not None:
+        native_aot_command = (
+            sys.executable,
+            str(root / "tools/build_android_native_aot.py"),
+            "--captures-zip",
+            str(captures_zip),
+            "--work-dir",
+            str(plan.work_dir / "native-aot"),
+            "--output-root",
+            str(build_root),
+        )
+        print("$ " + shlex.join(native_aot_command))
+    else:
+        native_aot_command = None
     if not args.generate_only:
         print("$ " + shlex.join(plan.gradle_command))
 
     if args.plan_only:
-        print("Plan validated. No files were generated and no build was started.")
+        print("Plan validated. No private files were read and no build was started.")
         return 0
 
+    _run(plan.prepare_runtime_command, root)
     _run(plan.recompiler_command, root)
     generated = _verify_generated_outputs(
         plan.generated_dir,
         expected_entry_point=elf_info.entry_point,
     )
     print(
-        "Verified private AOT output: "
+        "Verified private EE AOT output: "
         f"{generated.translation_units} C++ translation units; "
         f"{generated.registered_functions} registered functions; "
         f"{generated.table_slots} table slots; "
         f"ELF entry 0x{generated.entry_point:08X} is covered."
     )
 
+    if native_aot_command is not None:
+        _run(native_aot_command, root)
+    else:
+        for generated_path in (generated_vu1, generated_iop):
+            if generated_path.exists():
+                import shutil
+                shutil.rmtree(generated_path)
+        print(
+            "Capture-bootstrap build: VU1/IOP generated AOT is intentionally absent. "
+            "The runtime will capture loaded microcode/modules and stop on the first missing native block."
+        )
+
     if args.generate_only:
         print("Native C++ generated and staged. Android APK build was intentionally skipped.")
         return 0
 
-    _run(plan.gradle_command, root)
+    gradle_environment = os.environ.copy()
+    gradle_environment["GOW_ANDROID_CAPTURE_BOOTSTRAP"] = (
+        "1" if args.capture_bootstrap else "0"
+    )
+    _run(plan.gradle_command, root, environment=gradle_environment)
     if not plan.apk_path.is_file():
         raise RuntimeError(f"Gradle reported success, but APK is missing: {plan.apk_path}")
 
@@ -337,8 +412,12 @@ def main() -> int:
     print("")
     print(f"APK: {plan.apk_path}")
     print(f"SHA-256: {digest}")
-    print("This APK contains code generated locally from the ELF supplied by the user.")
-    print("Test it only with the matching original disc image and keep the game data private.")
+    if args.capture_bootstrap:
+        print("This is a capture-bootstrap APK, not a gameplay build.")
+        print("Start the strict native guest once, export the VU1/IOP capture ZIP from the app, then rebuild with --aot-captures.")
+    else:
+        print("This APK contains private EE, VU1 and IOP code generated locally from the user's own captures.")
+        print("Test it only with the matching original disc image and keep the game data private.")
     return 0
 
 
