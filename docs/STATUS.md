@@ -230,3 +230,12 @@ O painel informa explicitamente que o jogo ainda não iniciou quando o núcleo h
 **Uso:** consulte `docs/ANDROID_AOT_LOCAL_BUILD.md`. O script possui `--plan-only` e `--generate-only`. A CI verifica regras de caminho, perfil regional, comando Windows/Gradle, CLI e sintaxe; ela não gera C++ do jogo real, pois não recebe o ELF do usuário.
 
 **Limite:** este fluxo local ainda não foi executado com um ELF real do usuário. Mesmo com a tabela AOT ligada, `PS2Runtime::run()` permanece bloqueado até GS/Vulkan, presenter, boot/IRX/VU1 e áudio estarem conectados.
+## Presenter de frames Vulkan Android — CIs 230 e 231
+
+**[IMPLEMENTADO; COMPILAÇÃO E TESTE HOST APROVADOS]** A `GowGameActivity` agora tem uma rota opcional de apresentação de frames RGBA: `GS::copyLatchedHostPresentationFrame()` pode entregar o frame ao `VulkanSmokeRenderer`, que ajusta proporção/letterboxing, converte RGBA/BGRA quando necessário e usa um `VkBuffer` host-visible para `vkCmdCopyBufferToImage` na imagem adquirida da swapchain. A implementação acompanha o layout Vulkan de cada imagem, trata memória não coerente com flush e reutiliza o buffer/pixels escalados entre frames iguais.
+
+**[VERIFICADO NA CI]** Run `42255177609` (230) aprovou o teste host do scaler RGBA e compilou o APK Debug ARM64. Run `42255283925` (231) repetiu a build com invalidação do cache quando a swapchain é recriada; também aprovou. Artefato `gow-android-arm64-shell` ID `13522097351`, disponível até 13/11/2026.
+
+**Limite essencial:** o caminho está atrás de `GOW_ANDROID_ENABLE_VULKAN_SMOKE=ON`, que continua OFF por padrão. É somente um consumidor de `PresentationFrame`, não um `GSRasterBackend` de gameplay. O `GSNullBackend` ainda é o backend em uso, não são emitidos triângulos/texels GS e o clear-only permanece como fallback. Nenhum frame real de God of War foi apresentado.
+
+**Próxima etapa real do GS:** implementar e ligar um `GSRasterBackend` Android que preserve VRAM/PSM, transferências, CLUT, depth, alpha test, DATE, blending, rasterização de primitivas e composição de DISPLAY/PMODE; só então a ponte de apresentação pode receber pixels do jogo.
