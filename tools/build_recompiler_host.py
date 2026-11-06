@@ -484,6 +484,43 @@ def main() -> int:
         )
     print("Verified: compile_commands.json contains no iop_cpu.cpp interpreter source.")
 
+    # Compile the Waffle runtime's VU1 core with strict AOT dispatch. No game microcode
+    # is supplied; this validates compilation of the no-interpreter fallback path.
+    vu_build_dir = work / "build-vu1-native-only"
+    vu_configure = [
+        cmake,
+        "-S", str(recompiler_source),
+        "-B", str(vu_build_dir),
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DPS2X_BUILD_RECOMP=OFF",
+        "-DPS2X_BUILD_RUNTIME=ON",
+        "-DPS2X_BUILD_ANALYZER=OFF",
+        "-DPS2X_BUILD_TEST=OFF",
+        "-DPS2X_BUILD_STUDIO=OFF",
+        "-DPS2X_IOP_NATIVE_ONLY=ON",
+        "-DPS2X_VU1_NATIVE_ONLY=ON",
+        "-DPS2X_ENABLE_FFMPEG=OFF",
+        "-DPS2X_ENABLE_DEBUG_UI=OFF",
+        "-DPS2X_ENABLE_RUNNER_UNITY_BUILD=OFF",
+        "-DPS2X_ENABLE_RUNNER_PCH=OFF",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+    ]
+    if generator:
+        vu_configure.extend(["-G", "Ninja"])
+    run(vu_configure)
+    run([cmake, "--build", str(vu_build_dir), "--target", "ps2_runtime", "--parallel"])
+    vu_compile_db = vu_build_dir / "compile_commands.json"
+    if not vu_compile_db.is_file():
+        raise RuntimeError("CMake did not emit the strict VU1 compile database.")
+    vu_entries = json.loads(vu_compile_db.read_text(encoding="utf-8"))
+    vu_core_entries = [
+        entry for entry in vu_entries
+        if Path(entry.get("file", "")).name == "ps2_vu1_core.cpp"
+    ]
+    if len(vu_core_entries) != 1 or "PS2X_VU1_NATIVE_ONLY=1" not in vu_core_entries[0].get("command", ""):
+        raise RuntimeError("VU1 runtime source was not compiled exactly once with strict native-only mode.")
+    print("Verified: ps2_vu1_core.cpp compiled with PS2X_VU1_NATIVE_ONLY=1.")
+
     executable_names = {"ps2_recomp", "ps2_recomp.exe"}
     candidates = [
         path for path in build_dir.rglob("*")
