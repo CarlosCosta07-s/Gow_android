@@ -340,7 +340,7 @@ extern "C" bool gowRuntimeLoadElfAndCheckAot(
 // silent until an Android audio backend is connected. It never calls run().
 extern "C" bool gowRuntimeStartGuestExecutionAndroid(
     PS2Runtime *runtime, char *message, size_t capacity) noexcept {
-    if (message != nullptr && capacity != 0u) message[0] = '\\0';
+    if (message != nullptr && capacity != 0u) message[0] = '\0';
     if (runtime == nullptr) {
         writeMessage(message, capacity, "PS2Runtime não foi criado.");
         return false;
