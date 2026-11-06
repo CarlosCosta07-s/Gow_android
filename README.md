@@ -118,6 +118,7 @@ A licença GPL-3.0 deste repositório cobre somente o código que seus autores p
 - [Créditos e avisos de terceiros](THIRD_PARTY_NOTICES.md)
 - [Política de direitos e dados](docs/LEGAL_E_DADOS.md)
 - [Testes e diagnóstico](docs/TESTES_E_DIAGNOSTICO.md)
+- [Matriz de validação de cenas gráficas reais](docs/GS_SCENE_VALIDATION.md)
 - [Estado verificado](docs/STATUS.md)
 
 ## Licença
