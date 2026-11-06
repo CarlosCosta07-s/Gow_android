@@ -387,6 +387,9 @@ def main() -> int:
     for required in (
         'compiledProgramFor(vuCode, codeSize, memory)',
         'capture microcode before strict AOT lookup',
+        'GOW_VU1N_MISS_LOG',
+        'std::fopen(missLog, "a")',
+        'std::fprintf(missFile, "%04x\\\\n", pc)',
         'PS2X_IOP_NATIVE_SOURCE_DIR',
         'route private generated IRX AOT files into the IOP target',
     ):
@@ -437,6 +440,7 @@ def main() -> int:
         "normalize_and_validate_iop_dump",
         "--strict-partial",
         "vu1n_heads_combined.txt",
+        "vu1/vu1n_heads.txt",
         "full_native_aot",
     ):
         require(required in native_aot_source, f"Private native AOT builder is missing: {required}")
