@@ -27,11 +27,11 @@
 
 **[VERIFICADO NA CI ANDROID, run `42225710064`]** O novo `installIsoDisc()` enumera os arquivos ISO9660 nas duas camadas, extrai `disc/<caminho-original>` em staging, gera `.disc_layout` e `.disc_meta` antes de publicar e limpa o staging em caso de falha/cancelamento. O FORGE usa esse fluxo completo. A CI também compila a ponte JNI que chama a implementação real de `DiscSource` e a configuração de `PS2Runtime::IoPaths`. A validação usa apenas ISO sintética; ainda não há teste com ISO real em aparelho nem boot/gameplay.
 
-**[VERIFICADO NA CI ANDROID, run `42225710064`]** O runtime recebe a raiz privada como caminho físico, não como token virtual. A nova função JNI chama `PS2Runtime::configureIoPathsFromElf()` — o mesmo ponto de configuração usado por `loadELF()` — e verifica que `IoPaths.cdRoot` contém `.disc_layout`, `.disc_meta` e que `IoPaths.elfPath` existe. Isso valida a configuração de caminhos sem chamar `PS2Runtime::initialize()`, `loadELF()` ou `run()`.
+**[PONTE COMPILADA NA CI ANDROID, run `42225710064`]** O runtime recebe a raiz privada como caminho físico, não como token virtual. A função C ABI/JNI chama `PS2Runtime::configureIoPathsFromElf()` — o mesmo ponto usado por `loadELF()` — e verifica `IoPaths.cdRoot`, `.disc_layout`, `.disc_meta` e `IoPaths.elfPath` quando é acionada após a instalação. A CI comprova compilação/link da ponte; não invoca essa validação com uma instalação real nem chama `PS2Runtime::initialize()`, `loadELF()` ou `run()`.
 
 **[VERIFICADO NO HOST E NA CI ANDROID, runs `42218565639` e `42225710064`] Gerador e integração de metadados:** fixtures ISO sintéticas verificam o conteúdo de `.disc_layout`, os registros de `.disc_meta` (LSN little-endian + setor original), arquivos ausentes/tamanho errado/symlink, layout divergente e limpeza de temporários. O instalador mede o espaço, permite cancelamento durante análise/geração e publica os dois metadados dentro do staging antes do rename final. O teste de integração compila a implementação real de `ps2x::iop::DiscSource` do Waffle e valida `openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` numa ISO sintética de dupla camada.
 
-**Próxima prioridade:** validar em aparelho a instalação com a ISO do usuário; depois exercitar o caminho real de `sceCdRead` do IOP e disponibilizar/carregar os módulos IRX necessários. Nenhuma ISO, ELF, IRX ou arquivo extraído deve ser enviado ao GitHub.
+**Próxima prioridade:** concluir a CI do probe Android CDVD e validar em aparelho a instalação com a ISO do usuário. Depois, integrar o serviço CDVD ao IOP/runtime vivo, exercitar chamadas originadas pelo jogo e disponibilizar/carregar os módulos IRX necessários. Nenhuma ISO, ELF, IRX ou arquivo extraído deve ser enviado ao GitHub.
 
 ## [COMPILADO, NÃO TESTADO EM APARELHO] Refinamento do launcher, novo ícone, hora e bateria
 
@@ -45,8 +45,9 @@
 - `Iso9660Reader` abre o PVD ISO9660 no setor 16, resolve arquivos por diretórios/extents, enumera os filhos imediatos e lê por offset sem carregar a imagem inteira.
 - `listDirectory()` e o parser aplicam limites de tamanho/profundidade/entradas e rejeitam traversal, registros/extents inválidos e caminhos ambíguos.
 - `iso9660_installer.cpp` mantém a API genérica de manifesto e acrescenta `installIsoDisc()`: enumera todos os arquivos ISO9660 suportados, extrai-os em blocos de 64 KiB para `disc/`, calcula o espaço dos metadados e os escreve no staging antes da publicação atômica.
-- O FORGE chama `nativeInstallIsoDisc()`, monta o `cdRoot`, chama a configuração estática de `PS2Runtime::IoPaths`, valida o ELF local e abre a pasta com a implementação real de `DiscSource::openExtracted()`. A checagem lê o PVD no LSN 16, o PVD da segunda camada quando houver e o primeiro setor do BOOT2.
-- A CI run `42225710064` aprovou a integração sintética, o build Android ARM64 e o APK Debug. A CI não usa ISO/ELF reais e não executa o runtime nem chamadas reais de `sceCdRead`.
+- O FORGE chama `nativeInstallIsoDisc()`, monta o `cdRoot`, chama a configuração de `PS2Runtime::IoPaths`, valida o ELF local e abre a pasta com a implementação real de `DiscSource::openExtracted()`. A checagem verifica o PVD no LSN 16, o descritor da segunda camada quando houver e o primeiro setor do BOOT2.
+- Um teste host adicional compila a implementação real de `IopCdvd` e chama `dispatchImport(10)` (`sceCdSearchFile`) e `dispatchImport(6)` (`sceCdRead`) contra a instalação sintética: verifica dados copiados para a RAM IOP na camada 0 e 1, busca de arquivo aninhado e rejeição de leitura além do disco. Run `42226830317`: aprovado.
+- Um probe C ABI/JNI `nativeValidateIopCdvd()` também foi adicionado ao FORGE. Ele cria uma instância de teste do dispatcher IOP apontada para a raiz privada, procura BOOT2 e lê seu setor inicial para conferir a assinatura ELF. A CI `42227233881` está validando a compilação ARM64 dessa ponte; o teste host anterior não equivale a uma sessão viva do jogo.
 
 ## [VERIFICADO] Provider local cdRoot
 
@@ -57,7 +58,7 @@
 - Fixtures sintéticas do ELF cobrem um executável válido, magic inválido e entry point fora de `PT_LOAD`. O teste valida também a busca local case-insensitive com sufixo ISO `;1`.
 - A primeira implementação compartilhou acidentalmente o offset do descritor raiz via `dup()`. Foi corrigida usando `openat(rootFd, ".", ...)` para gerar descrição de arquivo independente por operação.
 - A CI Android run `42187116530` concluiu os testes host, compilou o APK Debug ARM64 e publicou o artefato. A validação foi feita com ELF sintético; nenhum executável real de God of War foi usado.
-- O provider `CdRootVfs` continua atendendo operações por caminho. O JNI agora também valida a classe real `DiscSource` contra a instalação privada e verifica que o `IoPaths.cdRoot` está configurado para ela. Ainda não há teste com dados reais nem execução da rotina CDVD do IOP.
+- O provider `CdRootVfs` continua atendendo operações por caminho. O JNI valida a classe real `DiscSource` e contém o novo probe CDVD/IOP; o teste host atravessa `IopCdvd::dispatchImport` com uma instância isolada e armazenamento sintético. Ainda não há teste com dados reais nem execução do IOP que pertence a uma sessão de gameplay.
 
 
 ## [VERIFICADO] Shell FORGE e instalação privada do disco
@@ -65,8 +66,8 @@
 - O FORGE usa Storage Access Framework para selecionar a imagem e identifica `SYSTEM.CNF`/`BOOT2`, reconhecendo inicialmente `SCUS_973.99` (NTSC-U) e `SCES_531.33` (PAL).
 - A ação `INSTALAR JOGO` reabre e revalida a imagem, enumera a árvore ISO9660 completa suportada, extrai os arquivos para armazenamento privado e gera `.disc_layout`/`.disc_meta` dentro do staging antes da publicação.
 - Após a publicação, o FORGE abre `<instalação>/disc` no `CdRootVfs` e valida o BOOT2 local como ELF32 little-endian MIPS, incluindo segmentos carregáveis e entry point.
-- A instalação valida o ELF, o `IoPaths.cdRoot` do runtime e a implementação real de `DiscSource::openExtracted()` usando os metadados privados. Essa verificação não inicializa o runtime nem executa instruções do jogo.
-- A CI run `42225710064` passou com fixtures sintéticas e APK Debug ARM64. Ainda não há teste em aparelho com ISO do usuário, chamadas reais do IOP/CDVD, `loadELF()` ou gameplay.
+- A instalação valida o ELF, a configuração de `IoPaths` e a implementação real de `DiscSource::openExtracted()`. O probe adicional cria uma instância isolada de `IopCdvd` para exercitar busca e leitura do BOOT2; não inicializa o runtime de gameplay nem executa instruções do ELF.
+- O host test CDVD passou no run `42226830317`. O build Android do probe JNI está no run `42227233881`; no momento desta revisão, o APK ainda está em compilação. Ainda não há teste em aparelho com ISO do usuário, IOP vivo, `loadELF()` ou gameplay.
 
 
 ## [VERIFICADO] Componentes KIexter importados
@@ -152,7 +153,7 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle/KIext
 - O launcher ainda não inicia a GameActivity/runtime depois da preparação.
 - O PS2Runtime ainda não recebe o ELF privado e não executa `loadELF()`/serviços de boot.
 - A pasta legada `gow_boot_seed`, criada por versões anteriores do fluxo parcial, pode permanecer nos dados privados de instalações atualizadas; ela não é usada pelo fluxo atual. A instalação atual cria diretórios por serial e extrai a árvore ISO9660 completa, mas ainda não comprova a cadeia de boot nem a disponibilidade/cobertura AOT dos módulos IRX.
-- O patch Waffle para encaminhar `cdrom0:` ao `CdRootVfs` e configurar o caminho físico em `IoPaths.cdRoot` compilou no build host estrito e no target Android ARM64. A CI `42225710064` também configurou o `IoPaths` estático pelo mesmo método usado em `loadELF()` e validou a implementação real de `DiscSource::openExtracted()`; ainda falta exercitar o dispatcher CDVD/IOP e uma chamada real de `sceCdRead` durante uma sessão.
+- O patch Waffle para encaminhar `cdrom0:` ao `CdRootVfs` e configurar o caminho físico em `IoPaths.cdRoot` compilou no host estrito e no target Android ARM64. A ponte para a configuração de `IoPaths` está compilada; a validação efetiva desse caminho ocorre quando o app instala uma imagem. O dispatcher CDVD foi exercitado por teste host sintético e o probe Android correspondente foi adicionado, mas ainda falta executar o serviço CDVD do IOP que pertence a uma sessão real.
 - Não há cobertura comprovada de VU1 AOT/IRX para o conteúdo da cópia do usuário.
 - Backend GS/Vulkan Android, presenter completo e saída de áudio Android ainda não estão integrados ao ciclo de gameplay.
 - Primeira imagem, menus, controles touch visuais, áudio, FMVs, saves, desempenho e compatibilidade ainda não foram testados em aparelhos reais.

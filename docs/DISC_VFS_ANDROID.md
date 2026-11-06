@@ -100,8 +100,9 @@ A auditoria do contrato de referência e o formato dos metadados estão em [DISC
 
 1. Validar em aparelho a instalação e as checagens `IoPaths`/DiscSource com a ISO do usuário, sem compartilhar a imagem ou os dados extraídos.
 2. Adicionar verificação de integridade persistente e recuperação/reinstalação por serial/revisão.
-3. Disponibilizar os IRX no layout esperado e instrumentar os caminhos de arquivo e CDVD usados durante o boot.
-4. Exercitar o dispatcher CDVD do IOP e a chamada real `sceCdRead` com fixtures sintéticas antes de ligar o jogo.
+3. Validar em aparelho o novo probe JNI `nativeValidateIopCdvd()` com a ISO do usuário.
+4. Disponibilizar os IRX no layout esperado e instrumentar os caminhos de arquivo e CDVD usados durante o boot.
+5. Conectar o IOP/CDVD ao IOP vivo do runtime e verificar chamadas `sceCdRead` originadas pelo código do jogo; o fixture host atual testa o dispatcher isoladamente.
 5. Adaptar a inicialização do PS2Runtime para GameActivity, separando GS, áudio e serviços que hoje dependem de Raylib.
 6. Gerar/compilar o C++ privado do ELF e ligar `loadELF()` ao runner Android.
 7. Integrar GS/Vulkan e apresentar a primeira imagem real.
