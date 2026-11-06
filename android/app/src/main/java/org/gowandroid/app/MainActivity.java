@@ -1341,6 +1341,7 @@ public final class MainActivity extends AppCompatActivity {
         discStatus.setTextColor(COLOR_MUTED);
         ioExecutor.execute(() -> {
             String failure = null;
+            boolean destinationMayContainPartialFile = false;
             try {
                 if (!cdRoot.isDirectory()) {
                     throw new IOException("A pasta privada da instalação não existe.");
@@ -1368,6 +1369,7 @@ public final class MainActivity extends AppCompatActivity {
                 long copiedBytes = 0L;
                 OutputStream rawOutput = getContentResolver().openOutputStream(destination, "w");
                 if (rawOutput == null) throw new IOException("O provedor escolhido não abriu o destino para gravação.");
+                destinationMayContainPartialFile = true;
                 try (InputStream input = new BufferedInputStream(new FileInputStream(elf));
                      OutputStream output = new BufferedOutputStream(rawOutput)) {
                     byte[] buffer = new byte[1024 * 1024];
@@ -1381,12 +1383,16 @@ public final class MainActivity extends AppCompatActivity {
                 }
                 String actualHash = sha256Hex(digest.digest());
                 if (copiedBytes != expected.size || !expected.sha256.equals(actualHash)) {
-                    try { DocumentsContract.deleteDocument(getContentResolver(), destination); }
-                    catch (Exception ignored) { /* Provider may not support deletion. */ }
-                    throw new IOException("A cópia não corresponde ao SHA-256 registrado. Descarte qualquer arquivo parcial e tente novamente.");
+                    throw new IOException("A cópia não corresponde ao SHA-256 registrado.");
                 }
+                destinationMayContainPartialFile = false;
             } catch (Exception exception) {
                 failure = safeMessage(exception);
+                if (destinationMayContainPartialFile) {
+                    try { DocumentsContract.deleteDocument(getContentResolver(), destination); }
+                    catch (Exception ignored) { /* Provider may not support deletion. */ }
+                    failure += " Se o provedor não conseguiu apagar o destino, remova o arquivo parcial manualmente.";
+                }
             }
             final String finalFailure = failure;
             runOnUiThread(() -> {
