@@ -130,6 +130,14 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 - A conclusão do build não prova boot, rendering GS, áudio, controles ou gameplay. Nenhum ELF, IRX, microcódigo ou dado de jogo foi adicionado ao repositório.
 - A construção/inicialização do objeto PS2Runtime e a integração do seu ciclo de vida com GameActivity ainda precisam de um smoke test controlado; PS2Runtime::initialize() não deve ser chamado antes da substituição dos adaptadores desktop de janela, gráficos e áudio.
 
+## [VERIFICADO NA CI] Codificação DualShock 2 e leitor ISO9660 nativo
+
+- O teste host do pacote DualShock 2 passou na execução Android `42160254242`.
+- O teste host do leitor ISO9660 passou na primeira etapa do workflow `42160790601`; ele constrói uma imagem ISO sintética e verifica PVD, lookup em diretório, sufixo de versão, caminho traversal e leitura aleatória atravessando setor.
+- `iso9660_reader.cpp` está incluído no target Android `android-game`; a compilação final do APK desse workflow ainda está pendente.
+- Os testes não usam uma ISO real de God of War e não comprovam montagem no VFS do runtime.
+- O leitor ainda não recebe o FD do SAF via GowGameActivity, não substitui o `PS2IopHostAdapter` e não liga `cdRoot` à ISO. Consulte `docs/DISC_VFS_ANDROID.md`.
+
 ## [COMPILADO NA CI; EXECUÇÃO EM APARELHO NÃO TESTADA] Ciclo GameActivity e ponte Android de controle
 
 - O alvo `android-game` cria o objeto `PS2Runtime` no início de `android_main` e o destrói ao encerrar a atividade. É um teste de construção/destruição no código; a CI compila, mas não inicia a Activity num aparelho Android.
