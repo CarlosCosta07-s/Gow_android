@@ -2,7 +2,7 @@
 
 **Data da auditoria:** 2026-11-05  
 **Branch de desenvolvimento:** `main`  
-**Estado global:** FORGE abre em aparelho Android real (confirmado pelo mantenedor). O shell e o seletor SAF/ISO9660 foram compilados pela CI em revisões anteriores. O parser de SYSTEM.CNF e a retirada do teste Vulkan isolado são alterações posteriores e ainda aguardam nova compilação CI. Nenhum runtime ou gameplay de God of War está integrado.
+**Estado global:** FORGE abre em aparelho Android real (confirmado pelo mantenedor). O shell, a retirada do teste Vulkan isolado e o parser inicial SYSTEM.CNF foram compilados com sucesso pela CI. O parser ainda aguarda validação com imagens reais no aparelho. Nenhum runtime ou gameplay de God of War está integrado.
 
 ## Gow_android
 
@@ -26,13 +26,12 @@
 
 - O launcher agora abre o arquivo escolhido pelo SAF com `ParcelFileDescriptor` e lê por offset usando `pread`.
 - O parser valida o descritor primário ISO9660, lê o diretório raiz, procura `SYSTEM.CNF`, interpreta a entrada `BOOT2` e reconhece inicialmente `SCUS_973.99` (NTSC-U) e `SCES_531.33` (PAL).
-- A implementação foi enviada à branch `main`, mas ainda não há resultado de build CI ou teste em aparelho para essa alteração.
+- A implementação foi enviada à branch `main` e compilou com sucesso no run `42142814087` (commit `18839524eb1061c5331b5762213dadaa51d55dd3`). Ainda não foi validada com imagem real no aparelho.
 - A ação JOGAR ainda não inicia uma sessão. O runtime de boot não foi integrado.
 
 ## [NÃO TESTADO — aparelho físico e jogo]
 
-- Nova compilação CI após remoção do botão Vulkan e implementação do parser SYSTEM.CNF.
-- Leitura de SYSTEM.CNF com imagens válidas, inválidas, PAL/NTSC-U e provedores SAF diferentes.
+- Validação da leitura de SYSTEM.CNF com imagens válidas, inválidas, PAL/NTSC-U e provedores SAF diferentes no aparelho Android.
 - Execução do ELF recompilado e serviços nativos de EE/IOP/VU.
 - Backend GS/Vulkan apresentando comandos reais e primeira imagem do jogo.
 - Menus, gameplay, áudio, FMVs, controles, saves e desempenho térmico.
@@ -58,8 +57,7 @@
 
 ## Próximos bloqueios reais
 
-1. Obter build CI bem-sucedida após as alterações recentes e corrigir eventuais erros de compilação.
-2. Validar o parser SYSTEM.CNF com imagens de teste do usuário, sem enviar dados do disco à CI.
+1. Validar o parser SYSTEM.CNF com imagens de teste do usuário no aparelho, sem enviar dados do disco à CI.
 3. Implementar nosso próprio parser ELF, decoder MIPS R5900, analisador de funções e gerador C++/ARM64.
 4. Implementar runtime nativo próprio para memória/EE e serviços PS2 necessários ao jogo.
 5. Implementar frontend GS e backend Vulkan próprios e apresentar a primeira imagem real.
