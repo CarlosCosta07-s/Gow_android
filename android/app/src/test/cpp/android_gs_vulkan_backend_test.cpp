@@ -356,7 +356,15 @@ int main() {
         require(indexed4BottomRight[0] == 255u && indexed4BottomRight[1] == 255u &&
                 indexed4BottomRight[2] == 255u && indexed4BottomRight[3] == 255u,
                 "T4 GS sprite did not resolve its bottom-right 16-entry CLUT color.");
-        const auto emptyPixel = pixelAt(60u, 30u);
+        const auto csm1First = pixelAt(56u, 12u);
+        require(csm1First[0] == 255u && csm1First[1] == 0u &&
+                csm1First[2] == 0u && csm1First[3] == 255u,
+                "CSM1 T8 texture did not load CLUT entry 8 from the swapped source index 16.");
+        const auto csm1Second = pixelAt(59u, 12u);
+        require(csm1Second[0] == 0u && csm1Second[1] == 0u &&
+                csm1Second[2] == 255u && csm1Second[3] == 255u,
+                "CSM1 T8 texture did not load CLUT entry 16 from the swapped source index 8.");
+        const auto emptyPixel = pixelAt(61u, 30u);
         require(emptyPixel[0] == 0u && emptyPixel[1] == 0u &&
                 emptyPixel[2] == 0u,
                 "CRTC frame contains unexpected color outside the rasterized primitives.");
