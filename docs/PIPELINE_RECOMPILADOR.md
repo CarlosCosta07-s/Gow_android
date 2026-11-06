@@ -86,9 +86,9 @@ O primeiro resultado esperado é apenas um conjunto não vazio de arquivos C++ g
 
 ## Gate de cobertura para VU1
 
-O gerador port/kiexter/tools/vu1n_gen.py possui a opção --strict. Ao receber capturas privadas de microcódigo, ele enumera os blocos descobertos e falha se não houver imagens válidas, se nenhum bloco for gerado ou se qualquer bloco descoberto não tiver tradução nativa. Isso é deliberadamente conservador: pode exigir ampliar o gerador ou registrar novas entradas em vu1n_heads.txt antes que o pacote seja aceito.
+O gerador port/kiexter/tools/vu1n_gen.py possui a opção --strict. Ao receber capturas privadas de microcódigo, ele enumera os blocos descobertos e falha se não houver imagens válidas, se nenhum bloco for gerado, se qualquer bloco não tiver tradução nativa ou se o C++ produzido contiver callLower/callUpper (chamadas à engine exata). Isso é deliberadamente conservador: pode exigir ampliar o gerador ou registrar novas entradas em vu1n_heads.txt antes que o pacote seja aceito.
 
-A CI usa uma imagem sintética vazia de 16 KiB para verificar somente que --strict rejeita uma cobertura nula. Esse teste não valida microcódigo do God of War. A geração real deve ocorrer no computador do usuário, com dumps privados; os .cpp gerados permanecem fora do Git e da CI pública. O runtime VU1 também precisará de uma trava equivalente para rejeitar misses em tempo de execução, e a build Android deverá compilar/linkar os blocos gerados no target correto.
+A CI usa duas imagens sintéticas de 16 KiB: uma vazia para cobertura nula e outra com uma instrução lower não suportada para verificar que o gerador rejeita callLower/callUpper. Os testes passaram na execução 42149014790; nenhum usa microcódigo do God of War. A geração real deve ocorrer no computador do usuário, com dumps privados; os .cpp gerados permanecem fora do Git e da CI pública. O runtime VU1 também precisará de uma trava equivalente para rejeitar misses em tempo de execução, e a build Android deverá compilar/linkar os blocos gerados no target correto.
 
 ## Seleção inicial dos patches KIexster
 
