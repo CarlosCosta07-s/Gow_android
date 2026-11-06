@@ -130,6 +130,30 @@ def main() -> int:
     ):
         require(required in activity, f"GameActivity diagnostic overlay is missing: {required}")
 
+    runtime_bridge_path = project_root / "android/app/src/main/cpp/runtime_link_bridge.cpp"
+    require(runtime_bridge_path.is_file(), "Android runtime link bridge is missing.")
+    runtime_bridge = runtime_bridge_path.read_text(encoding="utf-8")
+    load_start = runtime_bridge.find("extern \\"C\\" bool gowRuntimeLoadElfAndCheckAot(")
+    load_end = runtime_bridge.find("extern \\"C\\" bool gowRuntimeValidateIopCdvd(", load_start)
+    require(
+        load_start >= 0 and load_end > load_start,
+        "Guarded private ELF/AOT loader bridge is missing.",
+    )
+    load_body = runtime_bridge[load_start:load_end]
+    for required in (
+        "g_ps2RecompiledFunctionTableSlotCount == 0u",
+        "runtime->loadELF(candidate.string())",
+        "runtime->cpu().pc",
+        "runtime->hasFunction(entryPoint)",
+        "std::filesystem::weakly_canonical",
+        "guest execution ainda bloqueada",
+    ):
+        require(required in load_body, f"Private ELF/AOT loader gate is missing: {required}")
+    require(
+        "runtime->run(" not in load_body and "PS2Runtime::run(" not in load_body,
+        "Private ELF/AOT validation must never start guest execution.",
+    )
+
     print("Verified: Android PS2 core initialization is headless, uses a null GS backend,")
     print("and cannot enter Raylib desktop initialization or guest execution.")
     return 0
