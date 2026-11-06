@@ -17,6 +17,7 @@ import hashlib
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -274,33 +275,146 @@ def _verify_generated_outputs(
     )
 
 
+
+def parse_system_cnf_boot_path(system_cnf: str) -> str:
+    """Return the BOOT2 path from an ISO9660 SYSTEM.CNF file."""
+    match = re.search(
+        r"(?im)^\s*BOOT2\s*=\s*cdrom0\s*:\s*\\?([^\r\n;]+)",
+        system_cnf,
+    )
+    if match is None:
+        raise ValueError("The ISO SYSTEM.CNF does not contain a supported BOOT2 entry.")
+    value = match.group(1).strip().replace("\\", "/")
+    parts = [part for part in value.split("/") if part]
+    if not parts or any(part in (".", "..") for part in parts):
+        raise ValueError("The ISO SYSTEM.CNF contains an unsafe BOOT2 path.")
+    return "/".join(parts)
+
+
+def locate_ntsc_u_elf(extracted_disc: Path) -> Path:
+    """Resolve the supported ELF only from the ISO-extracted private disc tree."""
+    root = extracted_disc.expanduser().resolve()
+    if not root.is_dir() or root.is_symlink():
+        raise ValueError(f"Private ISO extraction directory is missing or unsafe: {root}")
+
+    system_cnf_candidates = [
+        item for item in root.iterdir()
+        if item.is_file() and item.name.casefold() == "system.cnf"
+    ]
+    if len(system_cnf_candidates) != 1:
+        raise ValueError("The extracted ISO must contain exactly one root SYSTEM.CNF.")
+    boot_path = parse_system_cnf_boot_path(
+        system_cnf_candidates[0].read_text(encoding="ascii", errors="replace")
+    )
+    boot_name = Path(boot_path).name.upper()
+    if boot_name != "SCUS_973.99":
+        raise ValueError(
+            "This AOT profile only supports NTSC-U SCUS_973.99; "
+            f"SYSTEM.CNF points to {boot_name or 'an unknown executable'}."
+        )
+
+    candidate = root.joinpath(*boot_path.split("/"))
+    if not candidate.is_file():
+        matches = [
+            item for item in root.rglob("*")
+            if item.is_file() and item.name.casefold() == "scus_973.99"
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                "The ISO extractor did not produce exactly one SCUS_973.99 "
+                "at the path declared by SYSTEM.CNF."
+            )
+        candidate = matches[0]
+
+    resolved = candidate.resolve()
+    if not _is_within(resolved, root) or candidate.is_symlink():
+        raise ValueError("The extracted BOOT2 ELF escapes the private disc workspace.")
+    return resolved
+
+
+def extract_iso_elf(
+    iso_path: Path,
+    work_dir: Path,
+    repo_root: Path,
+    *,
+    python_executable: str | None = None,
+) -> Path:
+    """Extract a user's ISO with the pinned KIexster ISO tool; no manual ELF export."""
+    iso = iso_path.expanduser().resolve()
+    work = work_dir.expanduser().resolve()
+    root = repo_root.expanduser().resolve()
+    if not iso.is_file():
+        raise ValueError(f"Original God of War ISO was not found: {iso}")
+    if _is_within(iso, root):
+        raise ValueError("Keep the original ISO outside the public Git repository.")
+    if _is_within(work, root):
+        raise ValueError("The private ISO workspace must be outside the Git repository.")
+    if not str(work).isascii():
+        raise ValueError("The private workspace path must use ASCII characters.")
+
+    extractor = work / "sources" / "KIexter" / "tools" / "iso_extract.py"
+    if not extractor.is_file() or extractor.is_symlink():
+        raise RuntimeError(
+            "The pinned KIexster ISO extractor is unavailable. "
+            "Run the Android runtime preparation step before extracting the ISO."
+        )
+
+    destination = work / "iso-extracted"
+    if destination.exists():
+        if destination.is_symlink() or not _is_within(destination.resolve(), work):
+            raise ValueError("Refusing to replace an unsafe private ISO extraction directory.")
+        shutil.rmtree(destination)
+    destination.mkdir(parents=True, exist_ok=True)
+
+    command = (
+        python_executable or sys.executable,
+        "-I",
+        str(extractor),
+        str(iso),
+        str(destination),
+        "--layout",
+    )
+    print("Extracting the original ISO privately; ELF, IRX and disc layout are internal build inputs.")
+    print("$ " + shlex.join(command), flush=True)
+    subprocess.run(command, cwd=str(extractor.parents[2]), check=True)
+
+    for required in (".disc_layout", ".disc_meta"):
+        if not (destination / required).is_file():
+            raise RuntimeError(f"The ISO extraction did not produce {required}.")
+    return locate_ntsc_u_elf(destination)
+
+
 def main() -> int:
     default_work = Path("C:/gowport") if os.name == "nt" else Path("/tmp/gowport")
     parser = argparse.ArgumentParser(
         description=(
-            "Generate native C++ from a user's own God of War PS2 ELF and "
-            "build a local Android ARM64 Debug APK. No game files are uploaded."
+            "Build an Android ARM64 God of War APK from the user's original ISO. "
+            "The ISO is the only game input; the ELF and disc files are extracted privately."
         )
     )
-    parser.add_argument(
+    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument(
+        "--iso",
+        help="path to the user's original NTSC-U God of War ISO (the only required game input)",
+    )
+    source_group.add_argument(
         "--elf",
-        required=True,
-        help="path to the user's extracted SCUS_973.99 ELF (outside this repository)",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--work-dir",
         default=str(default_work),
-        help="private ASCII-only recompiler workspace outside the repository",
+        help="private ASCII-only build workspace outside the repository",
     )
-    build_mode = parser.add_mutually_exclusive_group(required=True)
+    build_mode = parser.add_mutually_exclusive_group()
     build_mode.add_argument(
         "--capture-bootstrap",
         action="store_true",
-        help="build an explicit diagnostic APK that captures VU1/IOP code and stops on missing native AOT",
+        help="explicitly build the first strict AOT capture APK (the default when no capture set is supplied)",
     )
     build_mode.add_argument(
         "--aot-captures",
-        help="ZIP exported from GowGameActivity containing private vu1/ and iop/ captures for a full native build",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--generate-only",
@@ -310,40 +424,102 @@ def main() -> int:
     parser.add_argument(
         "--plan-only",
         action="store_true",
-        help="validate paths and print the exact local commands without executing them",
+        help="validate the ISO/build paths and print the extraction/build plan without reading the ISO",
     )
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]
-    plan = create_build_plan(root, Path(args.elf), Path(args.work_dir))
-    _require_ignored_generated_dir(root, plan.generated_dir)
-    build_root = (root / "android/app/build").resolve()
-    generated_vu1 = build_root / "gow-generated-vu1"
-    generated_iop = build_root / "gow-generated-iop"
-    for generated_path in (generated_vu1, generated_iop):
-        if generated_path.exists() and generated_path.is_symlink():
-            raise ValueError(f"Generated staging may not be a symlink: {generated_path}")
-        _require_ignored_generated_dir(root, generated_path)
-    elf_info = validate_ps2_elf(plan.elf)
+    work = Path(args.work_dir).expanduser().resolve()
+    generator = root / "tools/build_recompiler_host.py"
+    if _is_within(work, root):
+        parser.error("The private workspace must be outside the public Git repository.")
+    if not str(work).isascii():
+        parser.error("Use an ASCII-only --work-dir, for example C:/gowport or /tmp/gowport.")
+    if not generator.is_file():
+        parser.error(f"Host recompiler entry point is missing: {generator}")
+
+    iso_path: Path | None = None
+    elf_path: Path | None = None
+    if args.iso:
+        iso_path = Path(args.iso).expanduser().resolve()
+        if not iso_path.is_file():
+            parser.error(f"Original God of War ISO not found: {iso_path}")
+        if _is_within(iso_path, root):
+            parser.error("Keep the original ISO outside the public Git repository.")
+    else:
+        elf_path = Path(args.elf).expanduser().resolve()
 
     captures_zip: Path | None = None
     if args.aot_captures:
         captures_zip = Path(args.aot_captures).expanduser().resolve()
         if not captures_zip.is_file():
-            raise ValueError(f"Private AOT capture ZIP was not found: {captures_zip}")
+            parser.error(f"Private AOT capture archive was not found: {captures_zip}")
         if _is_within(captures_zip, root):
-            raise ValueError("Keep the user's AOT capture ZIP outside the public repository.")
+            parser.error("Keep private AOT captures outside the public Git repository.")
         if not str(captures_zip).isascii():
-            raise ValueError("The private AOT capture ZIP path must use ASCII characters.")
+            parser.error("The private AOT capture archive path must use ASCII characters.")
 
-    print(f"Private ELF: {plan.elf}")
-    print(f"Validated ELF entry point: 0x{elf_info.entry_point:08X}")
-    print(f"Private workspace: {plan.work_dir}")
+    build_root = (root / "android/app/build").resolve()
+    generated_dir = build_root / "gow-generated-game"
+    generated_vu1 = build_root / "gow-generated-vu1"
+    generated_iop = build_root / "gow-generated-iop"
+    for generated_path in (generated_dir, generated_vu1, generated_iop):
+        if generated_path.exists() and generated_path.is_symlink():
+            parser.error(f"Generated staging may not be a symlink: {generated_path}")
+        _require_ignored_generated_dir(root, generated_path)
+
+    gradle_wrapper = root / ("gradlew.bat" if os.name == "nt" else "gradlew")
+    if not gradle_wrapper.is_file():
+        parser.error(f"Gradle wrapper is missing: {gradle_wrapper}")
+
+    prepare_command = (
+        sys.executable,
+        str(generator),
+        "--prepare-android-runtime",
+        "--work-dir",
+        str(work),
+    )
+
+    if args.plan_only and iso_path is not None:
+        print(f"Original ISO input: {iso_path}")
+        print(f"Private workspace: {work}")
+        print(f"Automatic extraction target: {work / 'iso-extracted'}")
+        print(f"Expected boot executable: {work / 'iso-extracted' / 'SCUS_973.99'}")
+        print("Automatic intermediate inputs: SYSTEM.CNF, ELF, IRX modules, PAK files and original-sector layout.")
+        print("The first Android APK is a strict AOT capture bootstrap unless private captures already exist.")
+        print("$ " + shlex.join(prepare_command))
+        print("Plan validated. No ISO contents were read and no private game data was generated.")
+        return 0
+
+    prepared_runtime = False
+    if iso_path is not None:
+        print(f"Original ISO input: {iso_path}")
+        print(f"Private workspace: {work}")
+        print("The ISO is the only game file supplied to this build.")
+        _run(prepare_command, root)
+        prepared_runtime = True
+        elf_path = extract_iso_elf(iso_path, work, root)
+        print(f"Automatically extracted private ELF: {elf_path}")
+    elif elf_path is not None and args.plan_only:
+        plan = create_build_plan(root, elf_path, work)
+        print("Private ELF: " + str(plan.elf))
+        print("Plan validated. No private files were read and no build was started.")
+        return 0
+
+    assert elf_path is not None
+    plan = create_build_plan(root, elf_path, work)
+    _require_ignored_generated_dir(root, plan.generated_dir)
+
+    elf_info = validate_ps2_elf(plan.elf)
+    print(f"Validated PS2 ELF entry point: 0x{elf_info.entry_point:08X}")
+    print(f"Private build workspace: {plan.work_dir}")
     print(f"Git-ignored EE C++ staging: {plan.generated_dir}")
-    print("Mode: " + ("capture bootstrap (strict stop on missing VU1/IOP AOT)" if args.capture_bootstrap
-                      else "full static AOT (EE + VU1 + IOP)"))
-    print("No ELF, generated C++, IRX, microcode, ISO, save or other game-derived data is uploaded.")
-    print("$ " + shlex.join(plan.prepare_runtime_command))
+    capture_bootstrap = captures_zip is None
+    print("Build mode: " + (
+        "automatic first-boot AOT capture bootstrap"
+        if capture_bootstrap else "native AOT iteration from private captured VU1/IOP data"
+    ))
+    print("No ISO, ELF, IRX, PAK, microcode, generated C++ or save data is uploaded.")
     print("$ " + shlex.join(plan.recompiler_command))
     if captures_zip is not None:
         native_aot_command = (
@@ -362,11 +538,8 @@ def main() -> int:
     if not args.generate_only:
         print("$ " + shlex.join(plan.gradle_command))
 
-    if args.plan_only:
-        print("Plan validated. No private files were read and no build was started.")
-        return 0
-
-    _run(plan.prepare_runtime_command, root)
+    if not prepared_runtime:
+        _run(plan.prepare_runtime_command, root)
     _run(plan.recompiler_command, root)
     generated = _verify_generated_outputs(
         plan.generated_dir,
@@ -391,21 +564,20 @@ def main() -> int:
         native_aot_complete = summary.get("full_native_aot") is True
         if not native_aot_complete:
             print(
-                "Partial native AOT capture: the APK will include every validated block/module available "
-                "and remain in strict capture mode for the missing subsystems."
+                "Private VU1/IOP captures are partial: all currently available native blocks/modules "
+                "will be linked; the runtime remains in strict capture mode for missing native code."
             )
     else:
         for generated_path in (generated_vu1, generated_iop):
             if generated_path.exists():
-                import shutil
                 shutil.rmtree(generated_path)
         print(
-            "Capture-bootstrap build: VU1/IOP generated AOT is intentionally absent. "
-            "The runtime will capture loaded microcode/modules and stop on the first missing native block."
+            "First-build mode: VU1/IOP generated AOT is intentionally absent. "
+            "The Android runtime will retain private captures and stop at the first missing native block/module."
         )
 
     if args.generate_only:
-        print("Native C++ generated and staged. Android APK build was intentionally skipped.")
+        print("Private native C++ generated and staged. Android APK build was intentionally skipped.")
         return 0
 
     gradle_environment = os.environ.copy()
@@ -426,23 +598,11 @@ def main() -> int:
     print(f"SHA-256: {digest}")
     if not native_aot_complete:
         print("This is a strict AOT capture/iteration APK, not a completed gameplay build.")
-        print("Run the guest, export the private VU1/IOP capture ZIP from the app, then rebuild with --aot-captures.")
+        print("Captures remain in the app's private files directory; they are not a user-facing export.")
     else:
-        print("This APK contains private EE, VU1 and IOP code generated locally from the user's own captures.")
-        print("Test it only with the matching original disc image and keep the game data private.")
+        print("All private AOT captures supplied to this build were compiled; later game stages may request more code.")
     return 0
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except subprocess.CalledProcessError as error:
-        print(
-            f"Build step failed with exit code {error.returncode}. "
-            "Review the command output above.",
-            file=sys.stderr,
-        )
-        raise SystemExit(error.returncode)
-    except (OSError, RuntimeError, ValueError) as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1)
+    raise SystemExit(main())
