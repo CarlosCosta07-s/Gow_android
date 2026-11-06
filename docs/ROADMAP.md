@@ -75,7 +75,9 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - [ ] Rodar `iopn_gen.py` sobre os módulos IRX necessários e compilar as unidades geradas para ARM64.
 - [ ] Garantir que os IRX necessários ao jogo não caiam em caminho interpretado no produto final.
 - [ ] Adaptar comandos VIF/GIF/DMA e sincronização do GS.
-- [ ] Adaptar controles físicos e overlay de toque; a configuração de controles do port deverá ficar dentro das opções do próprio jogo, não em uma tela independente do FORGE.
+- [x] Implementar a ponte de eventos Android para estado virtual DualShock 2 (porta 0/slot 0), deadzone/sensibilidade/inversão e API compartilhada para entrada física/touch.
+- [ ] Implementar overlay visual de toque e ligar a configuração dos controles às opções do próprio jogo; não criar tela independente no FORGE.
+- [ ] Validar mapeamento, gatilhos analógicos, desconexão e reconexão com controles reais em aparelho Android.
 - [ ] Validar movimento, câmera, combate, HUD, partículas e efeitos.
 
 **Aceitação:** menu, novo jogo e primeiro combate reproduzidos em Android ARM64 por código recompilado/AOT, sem interpretadores no caminho normal do jogo.
