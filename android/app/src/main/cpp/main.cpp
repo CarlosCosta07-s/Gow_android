@@ -957,14 +957,18 @@ Java_org_gowandroid_app_GowGameActivity_nativeSetActivityReference(
 
 extern "C" JNIEXPORT void JNICALL
 Java_org_gowandroid_app_GowGameActivity_nativeClearActivityReference(
-    JNIEnv *env, jclass) noexcept {
-    if (env == nullptr) {
+    JNIEnv *env, jclass, jobject activity) noexcept {
+    if (env == nullptr || activity == nullptr) {
         return;
     }
 
     jobject previousReference = nullptr;
     {
         std::lock_guard<std::mutex> lock(gActivityReferenceMutex);
+        if (gActivityReference == nullptr ||
+            env->IsSameObject(gActivityReference, activity) != JNI_TRUE) {
+            return;
+        }
         previousReference = gActivityReference;
         gActivityReference = nullptr;
         gActivityVm = nullptr;
