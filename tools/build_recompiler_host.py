@@ -427,145 +427,145 @@ def main() -> int:
     iop_host_header = recompiler_source / "ps2xRuntime/src/lib/ps2_iop_host.h"
     replace_exactly_once(
         iop_host_header,
-        "        uint64_t size = 0u;\\n",
-        "        uint64_t size = 0u;\\n"
-        "        uint64_t androidDiscHandle = 0u;\\n",
+        "        uint64_t size = 0u;\n",
+        "        uint64_t size = 0u;\n"
+        "        uint64_t androidDiscHandle = 0u;\n",
         "add an Android ISO handle to the IOP host-file record",
     )
 
     iop_host_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_iop_host.cpp"
     replace_exactly_once(
         iop_host_cpp,
-        '#include "ps2_iop_host.h"\\n',
-        '#include "ps2_iop_host.h"\\n'
-        '#if defined(__ANDROID__)\\n'
-        'extern "C" uint64_t gowAndroidDiscOpenFile(const char *path, uint64_t *fileSize) noexcept;\\n'
-        'extern "C" bool gowAndroidDiscReadFile(uint64_t handle, uint64_t offset, void *destination, size_t requested, size_t *bytesRead) noexcept;\\n'
-        'extern "C" void gowAndroidDiscCloseFile(uint64_t handle) noexcept;\\n'
-        '#endif\\n',
+        '#include "ps2_iop_host.h"\n',
+        '#include "ps2_iop_host.h"\n'
+        '#if defined(__ANDROID__)\n'
+        'extern "C" uint64_t gowAndroidDiscOpenFile(const char *path, uint64_t *fileSize) noexcept;\n'
+        'extern "C" bool gowAndroidDiscReadFile(uint64_t handle, uint64_t offset, void *destination, size_t requested, size_t *bytesRead) noexcept;\n'
+        'extern "C" void gowAndroidDiscCloseFile(uint64_t handle) noexcept;\n'
+        '#endif\n',
         "declare the Android SAF ISO handle bridge in the IOP adapter",
     )
     replace_exactly_once(
         iop_host_cpp,
-        "        if (file.stream)\\n"
-        "        {\\n"
-        "            std::fclose(file.stream);\\n"
+        "        if (file.stream)\n"
+        "        {\n"
+        "            std::fclose(file.stream);\n"
         "        }",
-        "        if (file.stream)\\n"
-        "        {\\n"
-        "            std::fclose(file.stream);\\n"
-        "        }\\n"
-        "#if defined(__ANDROID__)\\n"
-        "        if (file.androidDiscHandle != 0u)\\n"
-        "            gowAndroidDiscCloseFile(file.androidDiscHandle);\\n"
+        "        if (file.stream)\n"
+        "        {\n"
+        "            std::fclose(file.stream);\n"
+        "        }\n"
+        "#if defined(__ANDROID__)\n"
+        "        if (file.androidDiscHandle != 0u)\n"
+        "            gowAndroidDiscCloseFile(file.androidDiscHandle);\n"
         "#endif",
         "close native ISO handles when the IOP host adapter is destroyed",
     )
     replace_exactly_once(
         iop_host_cpp,
-        "uint64_t PS2IopHostAdapter::openHostFile(std::string_view path)\\n{\\n"
-        "    if (path.empty())\\n"
-        "    {\\n"
-        "        return 0u;\\n"
-        "    }\\n\\n"
+        "uint64_t PS2IopHostAdapter::openHostFile(std::string_view path)\n{\n"
+        "    if (path.empty())\n"
+        "    {\n"
+        "        return 0u;\n"
+        "    }\n\n"
         "    const std::filesystem::path hostPath{std::string(path)};",
-        "uint64_t PS2IopHostAdapter::openHostFile(std::string_view path)\\n{\\n"
-        "    if (path.empty())\\n"
-        "    {\\n"
-        "        return 0u;\\n"
-        "    }\\n"
-        "#if defined(__ANDROID__)\\n"
-        "    constexpr std::string_view discPrefix{\\"gowdisc:/\\"};\\n"
-        "    if (path.size() >= discPrefix.size() && path.substr(0u, discPrefix.size()) == discPrefix)\\n"
-        "    {\\n"
-        "        const std::string relativePath(path.substr(discPrefix.size()));\\n"
-        "        uint64_t fileSize = 0u;\\n"
-        "        const uint64_t discHandle = gowAndroidDiscOpenFile(relativePath.c_str(), &fileSize);\\n"
-        "        if (discHandle == 0u)\\n"
-        "            return 0u;\\n"
-        "        std::lock_guard<std::mutex> lock(m_hostFileMutex);\\n"
-        "        uint64_t handle = m_nextHostFileHandle++;\\n"
-        "        if (handle == 0u)\\n"
-        "            handle = m_nextHostFileHandle++;\\n"
-        "        m_hostFiles.emplace(handle, HostFile{nullptr, fileSize, discHandle});\\n"
-        "        return handle;\\n"
-        "    }\\n"
-        "#endif\\n\\n"
+        "uint64_t PS2IopHostAdapter::openHostFile(std::string_view path)\n{\n"
+        "    if (path.empty())\n"
+        "    {\n"
+        "        return 0u;\n"
+        "    }\n"
+        "#if defined(__ANDROID__)\n"
+        "    constexpr std::string_view discPrefix{\"gowdisc:/\"};\n"
+        "    if (path.size() >= discPrefix.size() && path.substr(0u, discPrefix.size()) == discPrefix)\n"
+        "    {\n"
+        "        const std::string relativePath(path.substr(discPrefix.size()));\n"
+        "        uint64_t fileSize = 0u;\n"
+        "        const uint64_t discHandle = gowAndroidDiscOpenFile(relativePath.c_str(), &fileSize);\n"
+        "        if (discHandle == 0u)\n"
+        "            return 0u;\n"
+        "        std::lock_guard<std::mutex> lock(m_hostFileMutex);\n"
+        "        uint64_t handle = m_nextHostFileHandle++;\n"
+        "        if (handle == 0u)\n"
+        "            handle = m_nextHostFileHandle++;\n"
+        "        m_hostFiles.emplace(handle, HostFile{nullptr, fileSize, discHandle});\n"
+        "        return handle;\n"
+        "    }\n"
+        "#endif\n\n"
         "    const std::filesystem::path hostPath{std::string(path)};",
         "open CD-root files through the native Android ISO reader",
     )
     replace_exactly_once(
         iop_host_cpp,
-        "    if (it == m_hostFiles.end() || !it->second.stream)\\n"
-        "    {\\n"
-        "        return false;\\n"
-        "    }\\n"
+        "    if (it == m_hostFiles.end() || !it->second.stream)\n"
+        "    {\n"
+        "        return false;\n"
+        "    }\n"
         "    size = it->second.size;",
-        "    if (it == m_hostFiles.end() ||\\n"
-        "        (!it->second.stream && it->second.androidDiscHandle == 0u))\\n"
-        "    {\\n"
-        "        return false;\\n"
-        "    }\\n"
+        "    if (it == m_hostFiles.end() ||\n"
+        "        (!it->second.stream && it->second.androidDiscHandle == 0u))\n"
+        "    {\n"
+        "        return false;\n"
+        "    }\n"
         "    size = it->second.size;",
         "report sizes for Android ISO-backed IOP handles",
     )
     replace_exactly_once(
         iop_host_cpp,
-        "    if (it == m_hostFiles.end() || !it->second.stream)\\n"
-        "    {\\n"
-        "        return false;\\n"
-        "    }\\n\\n"
+        "    if (it == m_hostFiles.end() || !it->second.stream)\n"
+        "    {\n"
+        "        return false;\n"
+        "    }\n\n"
         "#if defined(_WIN32)",
-        "    if (it == m_hostFiles.end())\\n"
-        "    {\\n"
-        "        return false;\\n"
-        "    }\\n"
-        "#if defined(__ANDROID__)\\n"
-        "    if (it->second.androidDiscHandle != 0u)\\n"
-        "        return gowAndroidDiscReadFile(it->second.androidDiscHandle, offset, destination, size, &bytesRead);\\n"
-        "#endif\\n"
-        "    if (!it->second.stream)\\n"
-        "        return false;\\n\\n"
+        "    if (it == m_hostFiles.end())\n"
+        "    {\n"
+        "        return false;\n"
+        "    }\n"
+        "#if defined(__ANDROID__)\n"
+        "    if (it->second.androidDiscHandle != 0u)\n"
+        "        return gowAndroidDiscReadFile(it->second.androidDiscHandle, offset, destination, size, &bytesRead);\n"
+        "#endif\n"
+        "    if (!it->second.stream)\n"
+        "        return false;\n\n"
         "#if defined(_WIN32)",
         "read IOP file requests directly from Android ISO extents",
     )
     replace_exactly_once(
         iop_host_cpp,
-        "    std::FILE *stream = nullptr;\\n"
-        "    {\\n"
-        "        std::lock_guard<std::mutex> lock(m_hostFileMutex);\\n"
-        "        const auto it = m_hostFiles.find(handle);\\n"
-        "        if (it == m_hostFiles.end())\\n"
-        "        {\\n"
-        "            return;\\n"
-        "        }\\n"
-        "        stream = it->second.stream;\\n"
-        "        m_hostFiles.erase(it);\\n"
-        "    }\\n"
-        "    if (stream)\\n"
-        "    {\\n"
-        "        std::fclose(stream);\\n"
+        "    std::FILE *stream = nullptr;\n"
+        "    {\n"
+        "        std::lock_guard<std::mutex> lock(m_hostFileMutex);\n"
+        "        const auto it = m_hostFiles.find(handle);\n"
+        "        if (it == m_hostFiles.end())\n"
+        "        {\n"
+        "            return;\n"
+        "        }\n"
+        "        stream = it->second.stream;\n"
+        "        m_hostFiles.erase(it);\n"
+        "    }\n"
+        "    if (stream)\n"
+        "    {\n"
+        "        std::fclose(stream);\n"
         "    }",
-        "    std::FILE *stream = nullptr;\\n"
-        "    uint64_t discHandle = 0u;\\n"
-        "    {\\n"
-        "        std::lock_guard<std::mutex> lock(m_hostFileMutex);\\n"
-        "        const auto it = m_hostFiles.find(handle);\\n"
-        "        if (it == m_hostFiles.end())\\n"
-        "        {\\n"
-        "            return;\\n"
-        "        }\\n"
-        "        stream = it->second.stream;\\n"
-        "        discHandle = it->second.androidDiscHandle;\\n"
-        "        m_hostFiles.erase(it);\\n"
-        "    }\\n"
-        "    if (stream)\\n"
-        "    {\\n"
-        "        std::fclose(stream);\\n"
-        "    }\\n"
-        "#if defined(__ANDROID__)\\n"
-        "    if (discHandle != 0u)\\n"
-        "        gowAndroidDiscCloseFile(discHandle);\\n"
+        "    std::FILE *stream = nullptr;\n"
+        "    uint64_t discHandle = 0u;\n"
+        "    {\n"
+        "        std::lock_guard<std::mutex> lock(m_hostFileMutex);\n"
+        "        const auto it = m_hostFiles.find(handle);\n"
+        "        if (it == m_hostFiles.end())\n"
+        "        {\n"
+        "            return;\n"
+        "        }\n"
+        "        stream = it->second.stream;\n"
+        "        discHandle = it->second.androidDiscHandle;\n"
+        "        m_hostFiles.erase(it);\n"
+        "    }\n"
+        "    if (stream)\n"
+        "    {\n"
+        "        std::fclose(stream);\n"
+        "    }\n"
+        "#if defined(__ANDROID__)\n"
+        "    if (discHandle != 0u)\n"
+        "        gowAndroidDiscCloseFile(discHandle);\n"
         "#endif",
         "release IOP file handles through the matching host or Android disc backend",
     )
@@ -574,114 +574,114 @@ def main() -> int:
     vfs_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_vfs.cpp"
     replace_exactly_once(
         vfs_cpp,
-        '#include "runtime/ps2_rom_device.h"\\n',
-        '#include "runtime/ps2_rom_device.h"\\n'
-        '#if defined(__ANDROID__)\\n'
-        'extern "C" uint64_t gowAndroidDiscOpenFile(const char *path, uint64_t *fileSize) noexcept;\\n'
-        'extern "C" bool gowAndroidDiscReadFile(uint64_t handle, uint64_t offset, void *destination, size_t requested, size_t *bytesRead) noexcept;\\n'
-        'extern "C" void gowAndroidDiscCloseFile(uint64_t handle) noexcept;\\n'
-        '#endif\\n',
+        '#include "runtime/ps2_rom_device.h"\n',
+        '#include "runtime/ps2_rom_device.h"\n'
+        '#if defined(__ANDROID__)\n'
+        'extern "C" uint64_t gowAndroidDiscOpenFile(const char *path, uint64_t *fileSize) noexcept;\n'
+        'extern "C" bool gowAndroidDiscReadFile(uint64_t handle, uint64_t offset, void *destination, size_t requested, size_t *bytesRead) noexcept;\n'
+        'extern "C" void gowAndroidDiscCloseFile(uint64_t handle) noexcept;\n'
+        '#endif\n',
         "declare the Android ISO provider for the PS2 VFS",
     )
     replace_exactly_once(
         vfs_cpp,
-        "namespace\\n{\\n    class HostOpenFile final : public IPS2OpenFile",
-        "namespace\\n{\\n"
-        "#if defined(__ANDROID__)\\n"
-        "    class AndroidDiscOpenFile final : public IPS2OpenFile\\n"
-        "    {\\n"
-        "    public:\\n"
-        "        AndroidDiscOpenFile(uint64_t handle, uint64_t size) : m_handle(handle), m_size(size) {}\\n"
-        "        ~AndroidDiscOpenFile() override { if (m_handle != 0u) gowAndroidDiscCloseFile(m_handle); }\\n"
-        "        int64_t read(void *destination, size_t size) override\\n"
-        "        {\\n"
-        "            if ((!destination && size != 0u) || m_handle == 0u) return -1;\\n"
-        "            size_t bytesRead = 0u;\\n"
-        "            if (!gowAndroidDiscReadFile(m_handle, m_position, destination, size, &bytesRead)) return -1;\\n"
-        "            m_position += bytesRead;\\n"
-        "            return static_cast<int64_t>(bytesRead);\\n"
-        "        }\\n"
-        "        int64_t write(const void *, size_t) override { return -1; }\\n"
-        "        int64_t seek(int64_t offset, int whence) override\\n"
-        "        {\\n"
-        "            int64_t base = 0;\\n"
-        "            if (whence == SEEK_CUR) base = static_cast<int64_t>(m_position);\\n"
-        "            else if (whence == SEEK_END) base = static_cast<int64_t>(m_size);\\n"
-        "            else if (whence != SEEK_SET) return -1;\\n"
-        "            if ((offset > 0 && base > std::numeric_limits<int64_t>::max() - offset) ||\\n"
-        "                (offset < 0 && base < std::numeric_limits<int64_t>::min() - offset)) return -1;\\n"
-        "            const int64_t target = base + offset;\\n"
-        "            if (target < 0 || static_cast<uint64_t>(target) > m_size) return -1;\\n"
-        "            m_position = static_cast<uint64_t>(target);\\n"
-        "            return target;\\n"
-        "        }\\n"
-        "    private:\\n"
-        "        uint64_t m_handle = 0u;\\n"
-        "        uint64_t m_size = 0u;\\n"
-        "        uint64_t m_position = 0u;\\n"
-        "    };\\n"
-        "#endif\\n\\n"
+        "namespace\n{\n    class HostOpenFile final : public IPS2OpenFile",
+        "namespace\n{\n"
+        "#if defined(__ANDROID__)\n"
+        "    class AndroidDiscOpenFile final : public IPS2OpenFile\n"
+        "    {\n"
+        "    public:\n"
+        "        AndroidDiscOpenFile(uint64_t handle, uint64_t size) : m_handle(handle), m_size(size) {}\n"
+        "        ~AndroidDiscOpenFile() override { if (m_handle != 0u) gowAndroidDiscCloseFile(m_handle); }\n"
+        "        int64_t read(void *destination, size_t size) override\n"
+        "        {\n"
+        "            if ((!destination && size != 0u) || m_handle == 0u) return -1;\n"
+        "            size_t bytesRead = 0u;\n"
+        "            if (!gowAndroidDiscReadFile(m_handle, m_position, destination, size, &bytesRead)) return -1;\n"
+        "            m_position += bytesRead;\n"
+        "            return static_cast<int64_t>(bytesRead);\n"
+        "        }\n"
+        "        int64_t write(const void *, size_t) override { return -1; }\n"
+        "        int64_t seek(int64_t offset, int whence) override\n"
+        "        {\n"
+        "            int64_t base = 0;\n"
+        "            if (whence == SEEK_CUR) base = static_cast<int64_t>(m_position);\n"
+        "            else if (whence == SEEK_END) base = static_cast<int64_t>(m_size);\n"
+        "            else if (whence != SEEK_SET) return -1;\n"
+        "            if ((offset > 0 && base > std::numeric_limits<int64_t>::max() - offset) ||\n"
+        "                (offset < 0 && base < std::numeric_limits<int64_t>::min() - offset)) return -1;\n"
+        "            const int64_t target = base + offset;\n"
+        "            if (target < 0 || static_cast<uint64_t>(target) > m_size) return -1;\n"
+        "            m_position = static_cast<uint64_t>(target);\n"
+        "            return target;\n"
+        "        }\n"
+        "    private:\n"
+        "        uint64_t m_handle = 0u;\n"
+        "        uint64_t m_size = 0u;\n"
+        "        uint64_t m_position = 0u;\n"
+        "    };\n"
+        "#endif\n\n"
         "    class HostOpenFile final : public IPS2OpenFile",
         "add the Android ISO-backed PS2 VFS file implementation",
     )
     vfs_open_old = (
-        "        std::filesystem::path hostPath;\\n"
-        "        if (!resolveHostPath(path, mounts, hostPath))\\n"
-        "            return -1;\\n\\n"
-        "        std::error_code existsError;\\n"
-        "        const bool exists = std::filesystem::exists(hostPath, existsError);\\n"
-        "        if (existsError || (exists && (flags & (PS2_FIO_O_CREAT | PS2_FIO_O_EXCL)) == (PS2_FIO_O_CREAT | PS2_FIO_O_EXCL)))\\n"
-        "        {\\n"
-        "            return -1;\\n"
-        "        }\\n\\n"
-        "        FILE *stream = std::fopen(hostPath.string().c_str(), hostMode(flags));\\n"
-        "        const uint32_t access = flags & PS2_FIO_O_RDWR;\\n"
-        "        if (!stream && !exists && (flags & PS2_FIO_O_CREAT) != 0u &&\\n"
-        "            access == PS2_FIO_O_RDWR &&\\n"
-        "            (flags & (PS2_FIO_O_TRUNC | PS2_FIO_O_APPEND)) == 0u)\\n"
-        "        {\\n"
-        "            stream = std::fopen(hostPath.string().c_str(), \\"w+b\\");\\n"
-        "        }\\n"
-        "        if (!stream)\\n"
-        "            return -1;\\n"
+        "        std::filesystem::path hostPath;\n"
+        "        if (!resolveHostPath(path, mounts, hostPath))\n"
+        "            return -1;\n\n"
+        "        std::error_code existsError;\n"
+        "        const bool exists = std::filesystem::exists(hostPath, existsError);\n"
+        "        if (existsError || (exists && (flags & (PS2_FIO_O_CREAT | PS2_FIO_O_EXCL)) == (PS2_FIO_O_CREAT | PS2_FIO_O_EXCL)))\n"
+        "        {\n"
+        "            return -1;\n"
+        "        }\n\n"
+        "        FILE *stream = std::fopen(hostPath.string().c_str(), hostMode(flags));\n"
+        "        const uint32_t access = flags & PS2_FIO_O_RDWR;\n"
+        "        if (!stream && !exists && (flags & PS2_FIO_O_CREAT) != 0u &&\n"
+        "            access == PS2_FIO_O_RDWR &&\n"
+        "            (flags & (PS2_FIO_O_TRUNC | PS2_FIO_O_APPEND)) == 0u)\n"
+        "        {\n"
+        "            stream = std::fopen(hostPath.string().c_str(), \"w+b\");\n"
+        "        }\n"
+        "        if (!stream)\n"
+        "            return -1;\n"
         "        file = std::make_unique<HostOpenFile>(stream);"
     )
     vfs_open_new = (
-        "        std::filesystem::path hostPath;\\n"
-        "        if (!resolveHostPath(path, mounts, hostPath))\\n"
-        "            return -1;\\n"
-        "#if defined(__ANDROID__)\\n"
-        "        const std::string hostPathString = hostPath.generic_string();\\n"
-        "        constexpr std::string_view discPrefix{\\"gowdisc:/\\"};\\n"
-        "        if (hostPathString.size() >= discPrefix.size() && hostPathString.compare(0u, discPrefix.size(), discPrefix) == 0)\\n"
-        "        {\\n"
-        "            const uint32_t access = flags & PS2_FIO_O_RDWR;\\n"
-        "            if (access != PS2_FIO_O_RDONLY || (flags & (PS2_FIO_O_CREAT | PS2_FIO_O_TRUNC | PS2_FIO_O_APPEND)) != 0u) return -1;\\n"
-        "            uint64_t fileSize = 0u;\\n"
-        "            const uint64_t discHandle = gowAndroidDiscOpenFile(hostPathString.substr(discPrefix.size()).c_str(), &fileSize);\\n"
-        "            if (discHandle == 0u) return -1;\\n"
-        "            file = std::make_unique<AndroidDiscOpenFile>(discHandle, fileSize);\\n"
-        "        }\\n"
-        "        else\\n"
-        "#endif\\n"
-        "        {\\n"
-        "            std::error_code existsError;\\n"
-        "            const bool exists = std::filesystem::exists(hostPath, existsError);\\n"
-        "            if (existsError || (exists && (flags & (PS2_FIO_O_CREAT | PS2_FIO_O_EXCL)) == (PS2_FIO_O_CREAT | PS2_FIO_O_EXCL)))\\n"
-        "            {\\n"
-        "                return -1;\\n"
-        "            }\\n\\n"
-        "            FILE *stream = std::fopen(hostPath.string().c_str(), hostMode(flags));\\n"
-        "            const uint32_t access = flags & PS2_FIO_O_RDWR;\\n"
-        "            if (!stream && !exists && (flags & PS2_FIO_O_CREAT) != 0u &&\\n"
-        "                access == PS2_FIO_O_RDWR &&\\n"
-        "                (flags & (PS2_FIO_O_TRUNC | PS2_FIO_O_APPEND)) == 0u)\\n"
-        "            {\\n"
-        "                stream = std::fopen(hostPath.string().c_str(), \\"w+b\\");\\n"
-        "            }\\n"
-        "            if (!stream)\\n"
-        "                return -1;\\n"
-        "            file = std::make_unique<HostOpenFile>(stream);\\n"
+        "        std::filesystem::path hostPath;\n"
+        "        if (!resolveHostPath(path, mounts, hostPath))\n"
+        "            return -1;\n"
+        "#if defined(__ANDROID__)\n"
+        "        const std::string hostPathString = hostPath.generic_string();\n"
+        "        constexpr std::string_view discPrefix{\"gowdisc:/\"};\n"
+        "        if (hostPathString.size() >= discPrefix.size() && hostPathString.compare(0u, discPrefix.size(), discPrefix) == 0)\n"
+        "        {\n"
+        "            const uint32_t access = flags & PS2_FIO_O_RDWR;\n"
+        "            if (access != PS2_FIO_O_RDONLY || (flags & (PS2_FIO_O_CREAT | PS2_FIO_O_TRUNC | PS2_FIO_O_APPEND)) != 0u) return -1;\n"
+        "            uint64_t fileSize = 0u;\n"
+        "            const uint64_t discHandle = gowAndroidDiscOpenFile(hostPathString.substr(discPrefix.size()).c_str(), &fileSize);\n"
+        "            if (discHandle == 0u) return -1;\n"
+        "            file = std::make_unique<AndroidDiscOpenFile>(discHandle, fileSize);\n"
+        "        }\n"
+        "        else\n"
+        "#endif\n"
+        "        {\n"
+        "            std::error_code existsError;\n"
+        "            const bool exists = std::filesystem::exists(hostPath, existsError);\n"
+        "            if (existsError || (exists && (flags & (PS2_FIO_O_CREAT | PS2_FIO_O_EXCL)) == (PS2_FIO_O_CREAT | PS2_FIO_O_EXCL)))\n"
+        "            {\n"
+        "                return -1;\n"
+        "            }\n\n"
+        "            FILE *stream = std::fopen(hostPath.string().c_str(), hostMode(flags));\n"
+        "            const uint32_t access = flags & PS2_FIO_O_RDWR;\n"
+        "            if (!stream && !exists && (flags & PS2_FIO_O_CREAT) != 0u &&\n"
+        "                access == PS2_FIO_O_RDWR &&\n"
+        "                (flags & (PS2_FIO_O_TRUNC | PS2_FIO_O_APPEND)) == 0u)\n"
+        "            {\n"
+        "                stream = std::fopen(hostPath.string().c_str(), \"w+b\");\n"
+        "            }\n"
+        "            if (!stream)\n"
+        "                return -1;\n"
+        "            file = std::make_unique<HostOpenFile>(stream);\n"
         "        }"
     )
     replace_exactly_once(
@@ -691,49 +691,49 @@ def main() -> int:
         "route Android cdrom0: VFS opens to the random-access ISO provider",
     )
     stat_anchor = (
-        "    if (!resolveHostPath(path, mounts, hostPath))\\n"
-        "        return false;\\n"
-        "    std::error_code error;\\n"
+        "    if (!resolveHostPath(path, mounts, hostPath))\n"
+        "        return false;\n"
+        "    std::error_code error;\n"
     )
     stat_replace = (
-        "    if (!resolveHostPath(path, mounts, hostPath))\\n"
-        "        return false;\\n"
-        "#if defined(__ANDROID__)\\n"
-        "    const std::string hostPathString = hostPath.generic_string();\\n"
-        "    constexpr std::string_view discPrefix{\\"gowdisc:/\\"};\\n"
-        "    if (hostPathString.size() >= discPrefix.size() && hostPathString.compare(0u, discPrefix.size(), discPrefix) == 0)\\n"
-        "    {\\n"
-        "        uint64_t fileSize = 0u;\\n"
-        "        const uint64_t discHandle = gowAndroidDiscOpenFile(hostPathString.substr(discPrefix.size()).c_str(), &fileSize);\\n"
-        "        if (discHandle == 0u) return false;\\n"
-        "        gowAndroidDiscCloseFile(discHandle);\\n"
-        "        result.size = fileSize;\\n"
-        "        result.readOnly = true;\\n"
-        "        return true;\\n"
-        "    }\\n"
-        "#endif\\n"
-        "    std::error_code error;\\n"
+        "    if (!resolveHostPath(path, mounts, hostPath))\n"
+        "        return false;\n"
+        "#if defined(__ANDROID__)\n"
+        "    const std::string hostPathString = hostPath.generic_string();\n"
+        "    constexpr std::string_view discPrefix{\"gowdisc:/\"};\n"
+        "    if (hostPathString.size() >= discPrefix.size() && hostPathString.compare(0u, discPrefix.size(), discPrefix) == 0)\n"
+        "    {\n"
+        "        uint64_t fileSize = 0u;\n"
+        "        const uint64_t discHandle = gowAndroidDiscOpenFile(hostPathString.substr(discPrefix.size()).c_str(), &fileSize);\n"
+        "        if (discHandle == 0u) return false;\n"
+        "        gowAndroidDiscCloseFile(discHandle);\n"
+        "        result.size = fileSize;\n"
+        "        result.readOnly = true;\n"
+        "        return true;\n"
+        "    }\n"
+        "#endif\n"
+        "    std::error_code error;\n"
     )
     replace_exactly_once(vfs_cpp, stat_anchor, stat_replace,
                          "support file stat for Android ISO-backed cdrom0 paths")
 
     replace_exactly_once(
         runtime_cpp,
-        '#include "ps2_runtime.h"\\n',
-        '#include "ps2_runtime.h"\\n'
-        '#if defined(__ANDROID__)\\n'
-        'extern "C" bool gowAndroidDiscIsReady() noexcept;\\n'
-        '#endif\\n',
+        '#include "ps2_runtime.h"\n',
+        '#include "ps2_runtime.h"\n'
+        '#if defined(__ANDROID__)\n'
+        'extern "C" bool gowAndroidDiscIsReady() noexcept;\n'
+        '#endif\n',
         "declare Android ISO mount readiness for runtime path setup",
     )
     replace_exactly_once(
         runtime_cpp,
-        "        paths.cdRoot = paths.elfDirectory;\\n",
-        "#if defined(__ANDROID__)\\n"
-        "        paths.cdRoot = gowAndroidDiscIsReady() ? std::filesystem::path(\\"gowdisc:/\\") : paths.elfDirectory;\\n"
-        "#else\\n"
-        "        paths.cdRoot = paths.elfDirectory;\\n"
-        "#endif\\n",
+        "        paths.cdRoot = paths.elfDirectory;\n",
+        "#if defined(__ANDROID__)\n"
+        "        paths.cdRoot = gowAndroidDiscIsReady() ? std::filesystem::path(\"gowdisc:/\") : paths.elfDirectory;\n"
+        "#else\n"
+        "        paths.cdRoot = paths.elfDirectory;\n"
+        "#endif\n",
         "mount the SAF-backed ISO as the PS2 runtime CD root when available",
     )
 
