@@ -103,6 +103,7 @@ def main() -> int:
         "NewLocalRef(gActivityReference)",
         "Java_org_gowandroid_app_GowGameActivity_nativeSetActivityReference",
         "Java_org_gowandroid_app_GowGameActivity_nativeClearActivityReference",
+        "IsSameObject(gActivityReference, activity)",
     ):
         require(required in native_main, f"JNI runtime-status bridge is missing: {required}")
     require(
