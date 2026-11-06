@@ -36,7 +36,7 @@ bool isSafeNameComponent(const std::string &component) {
         return false;
     }
     for (const unsigned char ch : component) {
-        if (ch == 0u || ch < 0x20u || ch == ':' || ch == '\\') return false;
+        if (ch == 0u || ch < 0x20u || ch == ':' || ch == '/' || ch == '\\') return false;
     }
     return true;
 }
@@ -272,8 +272,9 @@ IsoInstallResult installIsoManifest(
     IsoInstallResult result;
     result.totalFiles = manifest.size();
 
-    if (!isSafeNameComponent(finalDirectoryName)) {
-        result.error = "The installation directory name is unsafe.";
+    if (!isSafeNameComponent(finalDirectoryName) ||
+        finalDirectoryName.size() > 240u) {
+        result.error = "The installation directory name is unsafe or too long.";
         return result;
     }
     if (privateRoot.empty()) {
