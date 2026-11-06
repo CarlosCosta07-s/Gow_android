@@ -808,6 +808,7 @@ public final class MainActivity extends AppCompatActivity {
         if (installingDisc) return;
 
         installingDisc = true;
+        refreshExportElfButtonState();
         cancelDiscInstallRequested = false;
         showDiscInstallProgressDialog(
                 "Verificando instalação existente",
@@ -1003,6 +1004,7 @@ public final class MainActivity extends AppCompatActivity {
         }
 
         installingDisc = true;
+        refreshExportElfButtonState();
         cancelDiscInstallRequested = false;
         showDiscInstallProgressDialog();
         if (installDiscButton != null) {
