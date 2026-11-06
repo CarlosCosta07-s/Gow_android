@@ -293,13 +293,16 @@ def parse_system_cnf_boot_path(system_cnf: str) -> str:
 
 def locate_ntsc_u_elf(extracted_disc: Path) -> Path:
     """Resolve the supported ELF only from the ISO-extracted private disc tree."""
-    root = extracted_disc.expanduser().resolve()
-    if not root.is_dir() or root.is_symlink():
+    source_root = extracted_disc.expanduser()
+    if source_root.is_symlink():
+        raise ValueError("Private ISO extraction directory may not be a symbolic link.")
+    root = source_root.resolve()
+    if not root.is_dir():
         raise ValueError(f"Private ISO extraction directory is missing or unsafe: {root}")
 
     system_cnf_candidates = [
         item for item in root.iterdir()
-        if item.is_file() and item.name.casefold() == "system.cnf"
+        if item.is_file() and not item.is_symlink() and item.name.casefold() == "system.cnf"
     ]
     if len(system_cnf_candidates) != 1:
         raise ValueError("The extracted ISO must contain exactly one root SYSTEM.CNF.")
@@ -376,7 +379,7 @@ def extract_iso_elf(
     )
     print("Extracting the original ISO privately; ELF, IRX and disc layout are internal build inputs.")
     print("$ " + shlex.join(command), flush=True)
-    subprocess.run(command, cwd=str(extractor.parents[2]), check=True)
+    subprocess.run(command, cwd=str(extractor.parents[1]), check=True)
 
     for required in (".disc_layout", ".disc_meta"):
         if not (destination / required).is_file():
