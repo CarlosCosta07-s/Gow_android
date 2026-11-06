@@ -370,6 +370,7 @@ A extração usa buffer de 1 MiB e atualiza o callback de progresso/cancelamento
 - A execução ocorre na thread nativa dedicada criada pelo runtime Waffle; não chama `PS2Runtime::run()` nem abre janela/áudio Raylib. O encerramento segue `requestStop()` + `join()`.
 - O primeiro teste é silencioso: o subsistema SPU2 continua sem consumidor de áudio Android, e a fila interna é limitada. Isso permite diagnosticar o boot sem afirmar que AAudio/efeitos/música funcionam.
 - O backend GS agora registra uma vez o primeiro lote rejeitado pelo rasterizador: Logcat `GowAndroid` no Android e `stderr` nos testes host. Assim uma primeira cena com fog, antialiasing ou estado ainda não suportado não é descartada sem explicação.
+- **[VERIFICADO NA CI #362]** A integração inicial do worker e do diagnóstico GS compilou e publicou o APK Debug ARM64. As CIs #381–#386 validam a expansão posterior de captura/geração AOT; não confundir a aprovação #362 com a aprovação da versão mais recente.
 - **[NÃO TESTADO]** Ainda não há ELF/C++ AOT privado real ligado, microprogramas VU1 e IRX AOT reais, nem sessão de jogo em aparelho após essa alteração. A tabela AOT pública permanece vazia; o worker não deve iniciar no APK shell sem a build local do usuário.
 - A CI #361 falhou porque o backend passou a incluir `android/log.h` também no teste host. Commit `6cc7c3ef32cea5c823d1dc933bc9fbd38c22fefe` tornou o include e a saída condicionais (`__ANDROID__` → Logcat; host → `stderr`). CI #362 está validando essa correção, junto com o caminho de primeiro boot.
 
