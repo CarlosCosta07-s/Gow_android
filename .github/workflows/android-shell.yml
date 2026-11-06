@@ -146,6 +146,13 @@ jobs:
             -o "$RUNNER_TEMP/cdroot-vfs-test"
           "$RUNNER_TEMP/cdroot-vfs-test"
 
+          c++ -std=c++20 -Wall -Wextra -Werror \
+            android/app/src/test/cpp/private_boot_path_test.cpp \
+            android/app/src/main/cpp/private_boot_path.cpp \
+            -Iandroid/app/src/main/cpp \
+            -o "$RUNNER_TEMP/private-boot-path-test"
+          "$RUNNER_TEMP/private-boot-path-test"
+
       - name: Test PS2 VFS through the Android private cdRoot provider
         shell: bash
         run: |
