@@ -28,6 +28,12 @@ Na raiz do repositório, execute:
 
 **python tools/build_recompiler_host.py --elf "D:/Jogos/GOW/SCUS_973.99"**
 
+Para compilar e validar somente a ferramenta host, sem fornecer ou acessar qualquer arquivo do jogo:
+
+**python tools/build_recompiler_host.py --build-only --work-dir "D:/gowport"**
+
+O modo build-only é usado pelo workflow recompiler-tool-check.yml. Ele valida o patch-base, as dependências e o alvo ps2_recomp, mas não prova que a configuração do ELF gera C++ correto.
+
 Para escolher a pasta privada de trabalho:
 
 **python tools/build_recompiler_host.py --elf "D:/Jogos/GOW/SCUS_973.99" --work-dir "D:/gowport"**
@@ -44,6 +50,8 @@ Por segurança, o script:
 6. gera os arquivos .cpp na pasta privada generated.
 
 O script limpa alterações locais dentro das duas cópias Git privadas antes de reaplicar a revisão fixada. Não coloque arquivos próprios dentro de sources/PS2Recomp ou sources/KIexster.
+
+A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. O resultado do workflow ainda precisa ser consultado após sua execução; a existência do workflow não equivale a build aprovada.
 
 ## Dependências do host
 
