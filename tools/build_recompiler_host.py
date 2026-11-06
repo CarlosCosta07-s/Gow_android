@@ -780,24 +780,22 @@ def main() -> int:
         "        file = std::make_unique<HostOpenFile>(stream);"
     )
     vfs_open_new = (
-        "        std::filesystem::path hostPath;\n"
-        "        if (!resolveHostPath(path, mounts, hostPath))\n"
-        "            return -1;\n"
         "#if defined(__ANDROID__)\n"
-        "        const std::string hostPathString = hostPath.generic_string();\n"
-        "        constexpr std::string_view cdRootPrefix{\"gowcdroot:/\"};\n"
-        "        if (hostPathString.size() >= cdRootPrefix.size() && hostPathString.compare(0u, cdRootPrefix.size(), cdRootPrefix) == 0)\n"
+        "        if (parsed.device == ps2x::iop::Ps2PathDevice::Cdrom)\n"
         "        {\n"
         "            const uint32_t access = flags & PS2_FIO_O_RDWR;\n"
         "            if (access != PS2_FIO_O_RDONLY || (flags & (PS2_FIO_O_CREAT | PS2_FIO_O_TRUNC | PS2_FIO_O_APPEND)) != 0u) return -1;\n"
         "            uint64_t fileSize = 0u;\n"
-        "            const uint64_t cdRootHandle = gowAndroidCdRootOpenFile(hostPathString.substr(cdRootPrefix.size()).c_str(), &fileSize);\n"
+        "            const uint64_t cdRootHandle = gowAndroidCdRootOpenFile(parsed.path.c_str(), &fileSize);\n"
         "            if (cdRootHandle == 0u) return -1;\n"
         "            file = std::make_unique<AndroidCdRootOpenFile>(cdRootHandle, fileSize);\n"
         "        }\n"
         "        else\n"
         "#endif\n"
         "        {\n"
+        "            std::filesystem::path hostPath;\n"
+        "            if (!resolveHostPath(path, mounts, hostPath))\n"
+        "                return -1;\n\n"
         "            std::error_code existsError;\n"
         "            const bool exists = std::filesystem::exists(hostPath, existsError);\n"
         "            if (existsError || (exists && (flags & (PS2_FIO_O_CREAT | PS2_FIO_O_EXCL)) == (PS2_FIO_O_CREAT | PS2_FIO_O_EXCL)))\n"
@@ -829,22 +827,20 @@ def main() -> int:
         "    std::error_code error;\n"
     )
     stat_replace = (
-        "    if (!resolveHostPath(path, mounts, hostPath))\n"
-        "        return false;\n"
         "#if defined(__ANDROID__)\n"
-        "    const std::string hostPathString = hostPath.generic_string();\n"
-        "    constexpr std::string_view cdRootPrefix{\"gowcdroot:/\"};\n"
-        "    if (hostPathString.size() >= cdRootPrefix.size() && hostPathString.compare(0u, cdRootPrefix.size(), cdRootPrefix) == 0)\n"
+        "    if (parsed.device == ps2x::iop::Ps2PathDevice::Cdrom)\n"
         "    {\n"
         "        bool isDirectory = false;\n"
         "        uint64_t fileSize = 0u;\n"
-        "        if (!gowAndroidCdRootStat(hostPathString.substr(cdRootPrefix.size()).c_str(), &isDirectory, &fileSize)) return false;\n"
+        "        if (!gowAndroidCdRootStat(parsed.path.c_str(), &isDirectory, &fileSize)) return false;\n"
         "        result.directory = isDirectory;\n"
         "        result.size = fileSize;\n"
         "        result.readOnly = true;\n"
         "        return true;\n"
         "    }\n"
         "#endif\n"
+        "    if (!resolveHostPath(path, mounts, hostPath))\n"
+        "        return false;\n"
         "    std::error_code error;\n"
     )
     replace_exactly_once(vfs_cpp, stat_anchor, stat_replace,
@@ -855,7 +851,7 @@ def main() -> int:
         '#include "ps2_runtime.h"\n',
         '#include "ps2_runtime.h"\n'
         '#if defined(__ANDROID__)\n'
-        'extern "C" bool gowAndroidCdRootIsReady() noexcept;\n'
+        'extern "C" bool gowAndroidCdRootCopyPath(char *destination, size_t capacity) noexcept;\n'
         '#endif\n',
         "declare Android cdRoot mount readiness for runtime path setup",
     )
@@ -863,7 +859,11 @@ def main() -> int:
         runtime_cpp,
         "        paths.cdRoot = paths.elfDirectory;\n",
         "#if defined(__ANDROID__)\n"
-        "        paths.cdRoot = gowAndroidCdRootIsReady() ? std::filesystem::path(\"gowcdroot:/\") : paths.elfDirectory;\n"
+        "        char androidCdRootPath[4096]{};\n"
+        "        if (gowAndroidCdRootCopyPath(androidCdRootPath, sizeof(androidCdRootPath)))\n"
+        "            paths.cdRoot = std::filesystem::u8path(androidCdRootPath);\n"
+        "        else\n"
+        "            paths.cdRoot = paths.elfDirectory;\n"
         "#else\n"
         "        paths.cdRoot = paths.elfDirectory;\n"
         "#endif\n",
