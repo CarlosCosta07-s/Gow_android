@@ -68,6 +68,8 @@ public final class MainActivity extends AppCompatActivity {
             int descriptor, String privateRoot, String[] sourcePaths,
             String[] destinationPaths, InstallProgressCallback progressCallback);
 
+    private static native boolean nativeSetCdRootDirectory(String privateCdRoot);
+
     static {
         System.loadLibrary("android-game");
     }
@@ -583,11 +585,16 @@ public final class MainActivity extends AppCompatActivity {
         final File finalInstallation = new File(installationRoot, installationName);
 
         if (finalInstallation.exists()) {
+            boolean cdRootReady = nativeSetCdRootDirectory(
+                    new File(finalInstallation, "disc").getAbsolutePath());
             new AlertDialog.Builder(this)
                     .setTitle("Arquivos de boot já importados")
                     .setMessage(
                             "A pasta de preparação já existe no armazenamento privado. "
-                                    + "Ela contém somente os arquivos de boot importados nesta etapa; "
+                                    + (cdRootReady
+                                        ? "O provider cdRoot foi aberto para leitura."
+                                        : "O provider cdRoot não conseguiu abrir a pasta.")
+                                    + " Ela contém somente os arquivos de boot importados nesta etapa; "
                                     + "não representa uma instalação completa nem permite iniciar o jogo.")
                     .setPositiveButton("Entendi", null)
                     .show();
@@ -668,6 +675,9 @@ public final class MainActivity extends AppCompatActivity {
                         sourcePaths, destinationPaths, callback);
                 if (error != null && !error.isEmpty()) {
                     failure = error;
+                } else if (!nativeSetCdRootDirectory(
+                        new File(finalInstallation, "disc").getAbsolutePath())) {
+                    failure = "Os arquivos foram publicados, mas o provider cdRoot não conseguiu abrir a pasta privada.";
                 }
             } catch (IOException | SecurityException | ErrnoException exception) {
                 failure = "Falha na importação: " + safeMessage(exception);
