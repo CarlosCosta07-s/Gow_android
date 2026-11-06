@@ -8,6 +8,7 @@
 #include <limits>
 #include <string>
 #include <utility>
+#include <unordered_map>
 #include <vector>
 
 #include <sys/stat.h>
@@ -219,80 +220,193 @@ std::string Iso9660Reader::normalizeIdentifier(std::string_view value) {
     return result;
 }
 
-bool Iso9660Reader::findInDirectory(const Directory &directory,
-                                   std::string_view name,
-                                   uint32_t &extent, uint32_t &size,
-                                   uint8_t &flags, std::string *error) const {
-    if (directory.byteOffset > imageSize_ ||
+bool Iso9660Reader::readDirectoryEntries(
+    const Directory &directory, std::vector<IsoDirectoryEntry> &entries,
+    std::string *error) const {
+    entries.clear();
+    if (descriptor_ < 0) {
+        setError(error, "No ISO image is open.");
+        return false;
+    }
+    if (directory.size == 0u || directory.byteOffset > imageSize_ ||
         directory.size > imageSize_ - directory.byteOffset ||
         directory.size > kMaxDirectorySize) {
         setError(error, "The ISO9660 directory size or extent is invalid.");
         return false;
     }
 
-    const std::string wanted = normalizeIdentifier(name);
+    constexpr size_t kMaxDirectoryEntries = 65536u;
     uint64_t cursor = 0u;
-    std::array<uint8_t, kIsoSectorSize> sector{};
+    std::array<uint8_t, kIsoSectorSize> recordBuffer{};
+    std::vector<IsoDirectoryEntry> parsed;
+    std::unordered_map<std::string, size_t> indicesByName;
 
     while (cursor < directory.size) {
         const uint64_t sectorRemaining =
             kIsoSectorSize - (cursor % kIsoSectorSize);
         const uint64_t availableInDirectory = directory.size - cursor;
-        const uint8_t recordLength = [&]() {
-            uint8_t value = 0u;
-            if (!readAt(directory.byteOffset + cursor, &value, 1u)) {
-                return static_cast<uint8_t>(0xFFu);
-            }
-            return value;
-        }();
+        uint8_t recordLength = 0u;
+        if (!readAt(directory.byteOffset + cursor, &recordLength, 1u)) {
+            setError(error, "Could not read an ISO9660 directory record length.");
+            return false;
+        }
 
         if (recordLength == 0u) {
             cursor += std::min(sectorRemaining, availableInDirectory);
             continue;
         }
-        if (recordLength == 0xFFu ||
-            recordLength < kDirectoryRecordMinimum ||
+        if (recordLength < kDirectoryRecordMinimum ||
             recordLength > sectorRemaining ||
             recordLength > availableInDirectory) {
             setError(error, "An ISO9660 directory record crosses a sector or directory boundary.");
             return false;
         }
-
-        if (!readAt(directory.byteOffset + cursor, sector.data(), recordLength)) {
+        if (!readAt(directory.byteOffset + cursor, recordBuffer.data(), recordLength)) {
             setError(error, "Could not read an ISO9660 directory record.");
             return false;
         }
 
-        uint32_t entryExtent = 0u;
-        uint32_t entrySize = 0u;
-        uint8_t entryFlags = 0u;
-        if (!decodeDirectoryRecord(sector.data(), recordLength,
-                                   entryExtent, entrySize, entryFlags, error)) {
+        uint32_t extent = 0u;
+        uint32_t size = 0u;
+        uint8_t flags = 0u;
+        if (!decodeDirectoryRecord(recordBuffer.data(), recordLength,
+                                   extent, size, flags, error)) {
             return false;
         }
 
-        const uint8_t identifierLength = sector[32u];
+        const uint8_t identifierLength = recordBuffer[32u];
         const bool special = identifierLength == 1u &&
-                             (sector[33u] == 0u || sector[33u] == 1u);
+                             (recordBuffer[33u] == 0u || recordBuffer[33u] == 1u);
         if (!special) {
+            if (!validExtent(extent, size, imageSize_)) {
+                setError(error, "An ISO9660 entry points outside the image.");
+                return false;
+            }
+
             const std::string_view identifier(
-                reinterpret_cast<const char *>(sector.data() + 33u),
+                reinterpret_cast<const char *>(recordBuffer.data() + 33u),
                 identifierLength);
-            if (normalizeIdentifier(identifier) == wanted) {
-                if (!validExtent(entryExtent, entrySize, imageSize_)) {
-                    setError(error, "An ISO9660 entry points outside the image.");
+            const std::string name = normalizeIdentifier(identifier);
+            if (name.empty()) {
+                setError(error, "An ISO9660 entry has an empty normalized name.");
+                return false;
+            }
+
+            const bool isDirectory = (flags & kDirectoryFlag) != 0u;
+            const bool multiExtent = (flags & kMultiExtentFlag) != 0u;
+            if (isDirectory && (size == 0u || size > kMaxDirectorySize)) {
+                setError(error, "An ISO9660 subdirectory has an unsupported size.");
+                return false;
+            }
+
+            const auto existing = indicesByName.find(name);
+            if (existing != indicesByName.end()) {
+                const size_t previousIndex = existing->second;
+                if (previousIndex + 1u != parsed.size() ||
+                    !parsed[previousIndex].multiExtent ||
+                    parsed[previousIndex].isDirectory || isDirectory) {
+                    setError(error, "The ISO9660 directory contains ambiguous duplicate names.");
                     return false;
                 }
-                extent = entryExtent;
-                size = entrySize;
-                flags = entryFlags;
-                return true;
+
+                // Multi-extent file records are consecutive. Preserve the first
+                // extent for diagnostics, but mark the logical file unreadable.
+                parsed[previousIndex].multiExtent = true;
+                parsed[previousIndex].file.size += static_cast<uint64_t>(size);
+            } else {
+                if (parsed.size() >= kMaxDirectoryEntries) {
+                    setError(error, "The ISO9660 directory exceeds the entry-count safety limit.");
+                    return false;
+                }
+
+                IsoDirectoryEntry entry;
+                entry.name = name;
+                entry.file.byteOffset = static_cast<uint64_t>(extent) * kIsoSectorSize;
+                entry.file.size = size;
+                entry.isDirectory = isDirectory;
+                entry.multiExtent = multiExtent;
+                indicesByName.emplace(entry.name, parsed.size());
+                parsed.push_back(std::move(entry));
             }
         }
 
         cursor += recordLength;
     }
-    return false;
+
+    entries.swap(parsed);
+    return true;
+}
+
+bool Iso9660Reader::resolveDirectory(std::string_view path, Directory &directory,
+                                     std::string *error) const {
+    if (descriptor_ < 0) {
+        setError(error, "No ISO image is open.");
+        return false;
+    }
+
+    while (!path.empty() && (path.front() == '/' || path.front() == '\\')) {
+        path.remove_prefix(1u);
+    }
+
+    directory = root_;
+    if (path.empty()) return true;
+
+    size_t cursor = 0u;
+    unsigned int depth = 0u;
+    while (cursor < path.size()) {
+        while (cursor < path.size() &&
+               (path[cursor] == '/' || path[cursor] == '\\')) {
+            ++cursor;
+        }
+        if (cursor >= path.size()) break;
+
+        const size_t end = path.find_first_of("/\\", cursor);
+        const size_t componentEnd = end == std::string_view::npos ? path.size() : end;
+        const std::string_view component = path.substr(cursor, componentEnd - cursor);
+        cursor = componentEnd;
+
+        if (component.empty() || component == "." || component == "..") {
+            setError(error, "The ISO path contains an empty or traversal component.");
+            return false;
+        }
+        if (component.size() > 255u || ++depth > 32u) {
+            setError(error, "The ISO path exceeds a supported component or depth limit.");
+            return false;
+        }
+
+        std::vector<IsoDirectoryEntry> entries;
+        if (!readDirectoryEntries(directory, entries, error)) return false;
+
+        const std::string wanted = normalizeIdentifier(component);
+        const auto found = std::find_if(entries.begin(), entries.end(),
+            [&wanted](const IsoDirectoryEntry &entry) { return entry.name == wanted; });
+        if (found == entries.end()) {
+            setError(error, "The requested ISO directory was not found.");
+            return false;
+        }
+        if (!found->isDirectory || found->multiExtent) {
+            setError(error, "An ISO path component is not a supported directory.");
+            return false;
+        }
+
+        directory.byteOffset = found->file.byteOffset;
+        directory.size = found->file.size;
+    }
+
+    return true;
+}
+
+bool Iso9660Reader::listDirectory(std::string_view path,
+                                  std::vector<IsoDirectoryEntry> &entries,
+                                  std::string *error) const {
+    entries.clear();
+    Directory directory{};
+    if (!resolveDirectory(path, directory, error)) return false;
+
+    std::vector<IsoDirectoryEntry> parsed;
+    if (!readDirectoryEntries(directory, parsed, error)) return false;
+    entries.swap(parsed);
+    return true;
 }
 
 bool Iso9660Reader::lookupFile(std::string_view path, IsoFile &file,
@@ -335,37 +449,38 @@ bool Iso9660Reader::lookupFile(std::string_view path, IsoFile &file,
             return false;
         }
 
-        const bool last = path.find_first_not_of("/\\", cursor) == std::string_view::npos;
-        uint32_t extent = 0u;
-        uint32_t size = 0u;
-        uint8_t flags = 0u;
-        std::string localError;
-        if (!findInDirectory(current, component, extent, size, flags, &localError)) {
-            if (error) *error = localError.empty() ? "The requested file was not found in the ISO image."
-                                                    : localError;
+        const bool last =
+            path.find_first_not_of("/\\", cursor) == std::string_view::npos;
+        std::vector<IsoDirectoryEntry> entries;
+        if (!readDirectoryEntries(current, entries, error)) return false;
+
+        const std::string wanted = normalizeIdentifier(component);
+        const auto found = std::find_if(entries.begin(), entries.end(),
+            [&wanted](const IsoDirectoryEntry &entry) { return entry.name == wanted; });
+        if (found == entries.end()) {
+            setError(error, "The requested file was not found in the ISO image.");
             return false;
         }
-
-        if ((flags & kMultiExtentFlag) != 0u) {
+        if (found->multiExtent) {
             setError(error, "Multi-extent ISO9660 files are not supported yet.");
             return false;
         }
+
         if (last) {
-            if ((flags & kDirectoryFlag) != 0u) {
+            if (found->isDirectory) {
                 setError(error, "The requested ISO path identifies a directory, not a file.");
                 return false;
             }
-            file.byteOffset = static_cast<uint64_t>(extent) * kIsoSectorSize;
-            file.size = size;
+            file = found->file;
             return true;
         }
-        if ((flags & kDirectoryFlag) == 0u) {
+        if (!found->isDirectory) {
             setError(error, "An ISO path component is not a directory.");
             return false;
         }
-        current.byteOffset = static_cast<uint64_t>(extent) * kIsoSectorSize;
-        current.size = size;
-        cursor = componentEnd;
+
+        current.byteOffset = found->file.byteOffset;
+        current.size = found->file.size;
     }
 
     setError(error, "The ISO path does not identify a file.");
