@@ -4,7 +4,9 @@
 **Branch de desenvolvimento:** `main`  
 **Objetivo:** port nativo de God of War (PS2, 2005) para Android ARM64, usando recompilação estática e runtime de serviços PS2 nativo; não é um emulador.
 
-**Atualização de diagnóstico local (06/11/2026):** foi adicionado o log privado `files/gow-runtime.log`, configurado pelo ciclo de boot Android, com gravação limitada a 2 MiB, proteção contra symlink e botão **Exportar log** no overlay Debug. O teste C++ de limite, truncamento controlado e symlink passou localmente com `-Wall -Wextra -Werror`; a CI Android foi atualizada para executar o mesmo teste e precisa confirmar a compilação integrada. Esta melhoria facilita coletar os últimos estados/erros EE, IOP e VU1 no próprio telefone. **Não significa boot real nem cena gráfica validada.**
+**Fluxo de entrada vigente (06/11/2026):** o único arquivo de jogo fornecido pelo usuário é a ISO original. O orquestrador `tools/build_android_game.py --iso` prepara as ferramentas fixadas, extrai automaticamente `SYSTEM.CNF`, `SCUS_973.99`, IRX, pacotes e metadados de setores para um workspace privado, gera o C++ AOT e compila o APK ARM64. O FORGE não oferece botões de exportação de ELF, ZIP de capturas ou logs. Quando há um aparelho Debug autorizado por ADB, o host tenta sincronizar diretamente as capturas VU1/IOP do diretório privado do app; sem capturas, gera o primeiro bootstrap estrito. **Esta nova integração ISO-only/ADB ainda aguarda aprovação da CI e validação com ISO real em aparelho; não representa boot ou gameplay comprovados.**
+
+**Diagnóstico privado:** o runtime grava `files/gow-runtime.log` com limite de 2 MiB e proteção contra symlink. O arquivo não possui botão de exportação no FORGE e permanece no armazenamento privado. O teste C++ de limite e proteção contra symlink foi criado e sua compilação integrada ainda depende da CI.
 
 ## [DECISÃO ARQUITETURAL] Instalação BT3
 
