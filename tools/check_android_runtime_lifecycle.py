@@ -103,7 +103,7 @@ def main() -> int:
         require(required in native_main, f"JNI runtime-status bridge is missing: {required}")
 
     require(
-        native_main.count("reportRuntimeStatus(app,") >= 2
+        native_main.count("reportRuntimeStatus(") >= 5
         and "Preparando o núcleo PS2" in native_main
         and "Falha ao inicializar o núcleo PS2" in native_main,
         "Native startup does not report progress and initialization failures.",
