@@ -36,6 +36,72 @@ bool isSafeComponent(std::string_view component) {
     return true;
 }
 
+std::string normalizeIsoIdentifier(std::string_view value) {
+    const size_t version = value.find(';');
+    if (version != std::string_view::npos) {
+        value = value.substr(0u, version);
+    }
+    while (!value.empty() && value.back() == '.') {
+        value.remove_suffix(1u);
+    }
+
+    std::string normalized;
+    normalized.reserve(value.size());
+    for (const unsigned char ch : value) {
+        normalized.push_back(static_cast<char>(std::toupper(ch)));
+    }
+    return normalized;
+}
+
+// Resolves a guest ISO9660 component to one concrete local directory entry.
+// A duplicate normalized name is rejected instead of selecting an arbitrary file.
+bool resolveIsoComponent(int directoryFd, std::string_view requested,
+                         std::string &actualName) {
+    const std::string wanted = normalizeIsoIdentifier(requested);
+    if (wanted.empty()) return false;
+
+    const int iterationFd = ::openat(
+        directoryFd, ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (iterationFd < 0) return false;
+
+    DIR *directory = ::fdopendir(iterationFd);
+    if (directory == nullptr) {
+        ::close(iterationFd);
+        return false;
+    }
+
+    bool found = false;
+    bool ambiguous = false;
+    bool success = true;
+    while (true) {
+        errno = 0;
+        dirent *entry = ::readdir(directory);
+        if (entry == nullptr) {
+            if (errno != 0) success = false;
+            break;
+        }
+        if (std::strcmp(entry->d_name, ".") == 0 ||
+            std::strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        const std::string_view candidate(entry->d_name);
+        if (!isSafeComponent(candidate) ||
+            normalizeIsoIdentifier(candidate) != wanted) {
+            continue;
+        }
+        if (found && actualName != candidate) {
+            ambiguous = true;
+            break;
+        }
+        actualName.assign(candidate);
+        found = true;
+    }
+
+    ::closedir(directory);
+    return success && found && !ambiguous;
+}
+
 } // namespace
 
 CdRootVfs::~CdRootVfs() {
@@ -139,8 +205,13 @@ int CdRootVfs::openDirectory(const std::vector<std::string> &parts) const {
     }
 
     for (const auto &component : parts) {
+        std::string actualName;
+        if (!resolveIsoComponent(current, component, actualName)) {
+            ::close(current);
+            return -1;
+        }
         const int next = ::openat(
-            current, component.c_str(),
+            current, actualName.c_str(),
             O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
         ::close(current);
         if (next < 0) {
@@ -270,8 +341,15 @@ bool CdRootVfs::openFile(
         return false;
     }
 
+    std::string actualName;
+    if (!resolveIsoComponent(parentFd, parts.back(), actualName)) {
+        ::close(parentFd);
+        setError(error, "The cdRoot file name is missing or ambiguous.");
+        return false;
+    }
+
     const int descriptor = ::openat(
-        parentFd, parts.back().c_str(),
+        parentFd, actualName.c_str(),
         O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
     ::close(parentFd);
     if (descriptor < 0) {
