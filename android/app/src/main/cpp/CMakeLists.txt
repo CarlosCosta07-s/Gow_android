@@ -53,6 +53,7 @@ add_custom_target(gow_android_gs_shaders DEPENDS "${GOW_GS_SHADER_HEADER}")
 
 add_library(android-game SHARED
     main.cpp
+    android_runtime_log.cpp
     android_pad_bridge.cpp
     iso9660_reader.cpp
     iso9660_installer.cpp
