@@ -6,6 +6,8 @@ project(gow_android_native LANGUAGES C CXX)
 # renderer. Keep it disabled by default until the Android GS backend exists.
 option(GOW_ANDROID_ENABLE_VULKAN_SMOKE
     "Enable the isolated Vulkan clear/present diagnostic (not the PS2 GS renderer)" OFF)
+option(GOW_ANDROID_ENABLE_GS_VULKAN
+    "Enable the experimental, untextured Android GS primitive pipeline" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -170,6 +172,9 @@ target_compile_definitions(android-game PRIVATE
 
 if(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
     target_compile_definitions(android-game PRIVATE GOW_ANDROID_ENABLE_VULKAN_SMOKE=1)
+endif()
+if(GOW_ANDROID_ENABLE_GS_VULKAN)
+    target_compile_definitions(android-game PRIVATE GOW_ANDROID_ENABLE_GS_VULKAN=1)
 endif()
 
 target_compile_options(android-game PRIVATE
