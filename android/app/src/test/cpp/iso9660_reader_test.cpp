@@ -146,6 +146,7 @@ bool buildDualLayerFixture(int fd) {
 
 bool testDualLayerDiscLayout() {
     using gow::disc::Iso9660Reader;
+    using gow::disc::IsoFile;
     FILE *file = std::tmpfile();
     if (!file) {
         std::cerr << "FAIL: could not create dual-layer ISO fixture\n";
