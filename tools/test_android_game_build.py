@@ -59,6 +59,16 @@ class AndroidGameBuildPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ASCII characters"):
             create_build_plan(self.root, self.elf, non_ascii, windows=False)
 
+    def test_windows_plan_uses_cmd_for_gradle_batch_wrapper(self) -> None:
+        (self.root / "gradlew.bat").write_text("@echo off\\r\\n", encoding="utf-8")
+        plan = create_build_plan(
+            self.root, self.elf, self.work,
+            python_executable="python-test", windows=True,
+        )
+        self.assertEqual(plan.gradle_command[:2], ("cmd", "/c"))
+        self.assertTrue(plan.gradle_command[2].endswith("gradlew.bat"))
+        self.assertEqual(plan.gradle_command[-1], "assembleDebug")
+
     def test_rejects_missing_elf(self) -> None:
         with self.assertRaisesRegex(ValueError, "was not found"):
             create_build_plan(
