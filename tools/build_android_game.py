@@ -113,9 +113,9 @@ def create_build_plan(
         str(generated),
     )
     gradle_command = (
-        ("cmd", "/c", str(wrapper), "--no-daemon", "assembleDebug")
+        ("cmd", "/c", str(wrapper), "--no-daemon", "--max-workers=1", "assembleDebug")
         if use_windows
-        else (str(wrapper), "--no-daemon", "assembleDebug")
+        else (str(wrapper), "--no-daemon", "--max-workers=1", "assembleDebug")
     )
     return BuildPlan(
         elf=elf,

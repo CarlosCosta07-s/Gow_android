@@ -110,6 +110,7 @@ PS2Runtime::RecompiledFunction g_ps2RecompiledFunctionTable[1u] = {};
         )
         self.assertIn("--export-game-cpp-dir", plan.recompiler_command)
         self.assertIn(str(plan.generated_dir), plan.recompiler_command)
+        self.assertIn("--max-workers=1", plan.gradle_command)
         self.assertEqual(plan.gradle_command[-1], "assembleDebug")
         self.assertTrue(str(plan.apk_path).endswith("outputs/apk/debug/app-debug.apk"))
 
