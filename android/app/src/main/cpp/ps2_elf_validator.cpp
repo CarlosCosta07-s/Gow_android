@@ -1,7 +1,7 @@
 #include "ps2_elf_validator.h"
 
+#include <algorithm>
 #include <array>
-#include <limits>
 
 namespace gow::disc {
 namespace {
