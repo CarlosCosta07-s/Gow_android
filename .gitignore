@@ -7,6 +7,9 @@ local.properties
 *.apk
 *.aab
 
+# Private PS2Recomp output used only by the local Android AOT build
+/android/app/build/gow-generated-game/
+
 # Native build artifacts
 out/
 cmake-build-*/
