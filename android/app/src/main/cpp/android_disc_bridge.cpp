@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <exception>
 #include <mutex>
 #include <string>
@@ -18,8 +19,10 @@
 
 namespace {
 std::mutex g_discMutex;
+std::mutex g_cdRootPathMutex;
 gow::disc::Iso9660Reader g_discReader;
 gow::disc::CdRootVfs g_cdRootVfs;
+std::string g_cdRootPath;
 std::unordered_map<uint64_t, gow::disc::IsoFile> g_openFiles;
 uint64_t g_nextHandle = 1u;
 
@@ -132,6 +135,15 @@ extern "C" bool gowAndroidCdRootIsReady() noexcept {
     return g_cdRootVfs.isOpen();
 }
 
+extern "C" bool gowAndroidCdRootCopyPath(
+    char *destination, size_t capacity) noexcept {
+    if (destination == nullptr || capacity == 0u) return false;
+    std::lock_guard<std::mutex> lock(g_cdRootPathMutex);
+    if (g_cdRootPath.empty() || g_cdRootPath.size() >= capacity) return false;
+    std::memcpy(destination, g_cdRootPath.c_str(), g_cdRootPath.size() + 1u);
+    return true;
+}
+
 extern "C" uint64_t gowAndroidCdRootOpenFile(
     const char *path, uint64_t *fileSize) noexcept {
     if (fileSize != nullptr) *fileSize = 0u;
@@ -179,6 +191,8 @@ extern "C" void gowAndroidCdRootCloseFile(uint64_t handle) noexcept {
 
 extern "C" void gowAndroidCdRootClose() noexcept {
     g_cdRootVfs.close();
+    std::lock_guard<std::mutex> lock(g_cdRootPathMutex);
+    g_cdRootPath.clear();
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -194,7 +208,16 @@ Java_org_gowandroid_app_MainActivity_nativeSetCdRootDirectory(
     if (!copyJavaString(env, privateCdRoot, path) || path.empty()) {
         return JNI_FALSE;
     }
-    return g_cdRootVfs.openRoot(path, nullptr) ? JNI_TRUE : JNI_FALSE;
+    if (!g_cdRootVfs.openRoot(path, nullptr)) {
+        std::lock_guard<std::mutex> lock(g_cdRootPathMutex);
+        g_cdRootPath.clear();
+        return JNI_FALSE;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_cdRootPathMutex);
+        g_cdRootPath = std::move(path);
+    }
+    return JNI_TRUE;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
