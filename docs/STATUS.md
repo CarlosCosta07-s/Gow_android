@@ -19,6 +19,13 @@
 
 **Referência futura de otimização:** [Black for Android](https://github.com/RanggaCasper/Black-Android), documentada em [ANDROID_LOW_END_OPTIMIZATION.md](ANDROID_LOW_END_OPTIMIZATION.md). Não estamos adotando agora suas opções nem assumindo equivalência entre Xbox e PS2.
 
+## [VERIFICADO] Enumeração de diretórios ISO9660
+
+- `Iso9660Reader::listDirectory()` lista os filhos imediatos de um caminho de diretório, preservando a ordem dos registros da imagem e retornando nome normalizado, tipo, offset, tamanho e marcador de multi-extent.
+- Limites: 64 MiB por diretório e 65.536 entradas; caminhos com traversal e subdiretórios inválidos são rejeitados.
+- A fixture sintética cobre listagem da raiz e de `DATA/`, metadados do arquivo `TEST.BIN`, rejeição de traversal e rejeição de caminho de arquivo como diretório.
+- A etapa host dos testes passou no Android workflow run `42163257138`. A compilação completa do APK desse run ainda estava em andamento no último polling; não declarar o APK concluído com base apenas no teste host.
+
 ## [VERIFICADO] Shell FORGE
 
 - O aplicativo FORGE foi aberto em pelo menos um aparelho Android real, conforme relato do mantenedor.
