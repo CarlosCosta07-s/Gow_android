@@ -30,25 +30,26 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Steam-inspired library launcher with an original Greek/ancient-war visual theme.
+ * FORGE is the minimalist game-library interface for the Gow_android project.
  *
- * The interface contains no character artwork from the original game. It selects
- * a user-owned disc image and validates its ISO9660 primary volume descriptor;
- * it does not yet identify SYSTEM.CNF or boot the game.
+ * It uses original UI elements only: no character portraits, screenshots or
+ * extracted artwork from God of War. Disc selection and ISO9660 validation are
+ * implemented, but SYSTEM.CNF identification and game boot are not yet available.
  */
 public final class MainActivity extends AppCompatActivity {
     private static final String PREF_DISC_URI = "selected_disc_uri";
     private static final int ISO_SECTOR_SIZE = 2048;
     private static final long PRIMARY_VOLUME_DESCRIPTOR_OFFSET = 16L * ISO_SECTOR_SIZE;
 
-    private static final int COLOR_BACKGROUND = 0xFF090708;
-    private static final int COLOR_PANEL = 0xFF171011;
-    private static final int COLOR_RED = 0xFF9D2925;
-    private static final int COLOR_RED_BRIGHT = 0xFFD34A36;
-    private static final int COLOR_BRONZE = 0xFFC09A67;
-    private static final int COLOR_TEXT = 0xFFE9DECB;
-    private static final int COLOR_MUTED = 0xFF9D9185;
-    private static final int COLOR_LINE = 0xFF60462F;
+    private static final int COLOR_BACKGROUND = 0xFF0D0F12;
+    private static final int COLOR_SIDEBAR = 0xFF101317;
+    private static final int COLOR_SURFACE = 0xFF171B20;
+    private static final int COLOR_SURFACE_RAISED = 0xFF1D2229;
+    private static final int COLOR_RED = 0xFFC5222D;
+    private static final int COLOR_RED_BRIGHT = 0xFFE3424A;
+    private static final int COLOR_TEXT = 0xFFF2F1EF;
+    private static final int COLOR_MUTED = 0xFF969DA7;
+    private static final int COLOR_LINE = 0xFF2B323B;
 
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
 
@@ -76,9 +77,7 @@ public final class MainActivity extends AppCompatActivity {
         Window window = getWindow();
         window.setStatusBarColor(COLOR_BACKGROUND);
         window.setNavigationBarColor(COLOR_BACKGROUND);
-        window.addFlags(
-                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         window.getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_FULLSCREEN
                         | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
@@ -90,11 +89,7 @@ public final class MainActivity extends AppCompatActivity {
 
     private void buildLauncherUi() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackground(gradient(
-                new int[]{0xFF090708, 0xFF160C0D, 0xFF0A0808},
-                GradientDrawable.Orientation.TL_BR,
-                0,
-                0));
+        root.setBackgroundColor(COLOR_BACKGROUND);
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.HORIZONTAL);
@@ -103,23 +98,18 @@ public final class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
         shell.addView(createSidebar(), new LinearLayout.LayoutParams(
-                dp(166),
-                ViewGroup.LayoutParams.MATCH_PARENT));
+                dp(150), ViewGroup.LayoutParams.MATCH_PARENT));
 
-        View sidebarEdge = new View(this);
-        sidebarEdge.setBackground(new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{0xFF8E3028, 0xFF5B3828, 0xFF211514}));
-        shell.addView(sidebarEdge, new LinearLayout.LayoutParams(dp(2),
-                ViewGroup.LayoutParams.MATCH_PARENT));
+        View divider = new View(this);
+        divider.setBackgroundColor(COLOR_LINE);
+        shell.addView(divider, new LinearLayout.LayoutParams(
+                dp(1), ViewGroup.LayoutParams.MATCH_PARENT));
 
         LinearLayout main = new LinearLayout(this);
         main.setOrientation(LinearLayout.VERTICAL);
-        main.setBackgroundColor(0x66090607);
+        main.setBackgroundColor(COLOR_BACKGROUND);
         shell.addView(main, new LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                1f));
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -130,72 +120,61 @@ public final class MainActivity extends AppCompatActivity {
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20), dp(15), dp(20), dp(14));
+        content.setPadding(dp(22), dp(17), dp(22), dp(14));
         scroll.addView(content, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        content.addView(createPageHeading(), matchWrap());
-        content.addView(createDivider(), topMargin(10));
-        content.addView(createHeroCard(), topMargin(12));
+        content.addView(createPageHeader(), matchWrap());
+        content.addView(createHeroCard(), topMargin(17));
 
-        TextView actionsLabel = sectionLabel("AÇÕES RÁPIDAS");
-        content.addView(actionsLabel, topMargin(13));
+        TextView actionsLabel = sectionLabel("AÇÕES");
+        content.addView(actionsLabel, topMargin(17));
 
-        LinearLayout primaryActions = new LinearLayout(this);
-        primaryActions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
 
-        Button playButton = menuButton("▶   JOGAR", true);
+        Button playButton = actionButton("▶   JOGAR", true);
         playButton.setOnClickListener(view -> onPlayPressed());
-        primaryActions.addView(playButton, new LinearLayout.LayoutParams(
-                0, dp(48), 0.78f));
+        actionRow.addView(playButton, new LinearLayout.LayoutParams(
+                0, dp(47), 0.72f));
 
-        View actionGap = new View(this);
-        primaryActions.addView(actionGap, new LinearLayout.LayoutParams(dp(8), 1));
+        View gap = new View(this);
+        actionRow.addView(gap, new LinearLayout.LayoutParams(dp(9), 1));
 
-        selectDiscButton = menuButton("＋   SELECIONAR IMAGEM DO DISCO", false);
+        selectDiscButton = actionButton("＋   SELECIONAR IMAGEM DO DISCO", false);
         selectDiscButton.setOnClickListener(
                 view -> openDocumentLauncher.launch(new String[]{"*/*"}));
-        primaryActions.addView(selectDiscButton, new LinearLayout.LayoutParams(
-                0, dp(48), 1.42f));
-        content.addView(primaryActions, topMargin(7));
+        actionRow.addView(selectDiscButton, new LinearLayout.LayoutParams(
+                0, dp(47), 1.28f));
+        content.addView(actionRow, topMargin(8));
 
-        Button vulkanButton = menuButton("◇   TESTAR APRESENTAÇÃO VULKAN", false);
+        Button vulkanButton = actionButton("◇   TESTAR APRESENTAÇÃO VULKAN", false);
         vulkanButton.setOnClickListener(
                 view -> startActivity(new Intent(this, GowGameActivity.class)));
-        content.addView(vulkanButton, topMargin(7));
+        content.addView(vulkanButton, topMargin(8));
 
-        content.addView(sectionLabel("DETALHES DA BIBLIOTECA"), topMargin(13));
+        content.addView(sectionLabel("STATUS"), topMargin(17));
 
         LinearLayout statusRow = new LinearLayout(this);
         statusRow.setOrientation(LinearLayout.HORIZONTAL);
         statusRow.addView(createDiscStatusCard(), new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.45f));
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f));
 
         View statusGap = new View(this);
-        statusRow.addView(statusGap, new LinearLayout.LayoutParams(dp(8), 1));
+        statusRow.addView(statusGap, new LinearLayout.LayoutParams(dp(9), 1));
 
         statusRow.addView(createRuntimeStatusCard(), new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        content.addView(statusRow, topMargin(7));
+        content.addView(statusRow, topMargin(8));
 
         TextView footer = text(
-                "ANDROID ARM64   •   VULKAN   •   PORT NATIVO EM DESENVOLVIMENTO",
-                8,
-                0xFF81756B,
+                "GOW_ANDROID  •  ANDROID ARM64  •  VULKAN",
+                8, COLOR_MUTED,
                 Typeface.create("sans-serif-medium", Typeface.NORMAL));
         footer.setGravity(Gravity.CENTER);
-        footer.setLetterSpacing(0.06f);
-        content.addView(footer, topMargin(12));
-
-        View topAccent = new View(this);
-        topAccent.setBackground(new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{COLOR_RED, COLOR_BRONZE, 0x0060402F}));
-        root.addView(topAccent, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(2),
-                Gravity.TOP));
+        footer.setLetterSpacing(0.07f);
+        content.addView(footer, topMargin(15));
 
         setContentView(root);
     }
@@ -203,350 +182,282 @@ public final class MainActivity extends AppCompatActivity {
     private View createSidebar() {
         LinearLayout sidebar = new LinearLayout(this);
         sidebar.setOrientation(LinearLayout.VERTICAL);
-        sidebar.setPadding(dp(13), dp(17), dp(12), dp(14));
-        sidebar.setBackground(gradient(
-                new int[]{0xFF171011, 0xFF0D0A0B},
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                0,
-                0));
+        sidebar.setPadding(dp(14), dp(18), dp(12), dp(15));
+        sidebar.setBackgroundColor(COLOR_SIDEBAR);
 
         LinearLayout brand = new LinearLayout(this);
         brand.setOrientation(LinearLayout.HORIZONTAL);
         brand.setGravity(Gravity.CENTER_VERTICAL);
 
-        ImageView emblem = new ImageView(this);
-        emblem.setImageResource(R.drawable.ic_launcher_emblem);
-        emblem.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        emblem.setContentDescription("Emblema grego original do projeto");
-        brand.addView(emblem, new LinearLayout.LayoutParams(dp(43), dp(43)));
+        FrameLayout logoPlate = new FrameLayout(this);
+        logoPlate.setBackgroundColor(COLOR_RED);
+        ImageView omega = new ImageView(this);
+        omega.setImageResource(R.drawable.ic_launcher_emblem);
+        omega.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        omega.setContentDescription("Ômega branco sobre fundo vermelho");
+        FrameLayout.LayoutParams omegaParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT);
+        omegaParams.setMargins(dp(5), dp(5), dp(5), dp(5));
+        logoPlate.addView(omega, omegaParams);
+        brand.addView(logoPlate, new LinearLayout.LayoutParams(dp(38), dp(38)));
 
         LinearLayout brandText = new LinearLayout(this);
         brandText.setOrientation(LinearLayout.VERTICAL);
-        brandText.setPadding(dp(8), 0, 0, 0);
+        brandText.setPadding(dp(9), 0, 0, 0);
 
         TextView brandTitle = text(
-                "GOW_ANDROID",
-                11,
-                COLOR_TEXT,
-                Typeface.create("serif", Typeface.BOLD));
-        brandTitle.setLetterSpacing(0.02f);
+                "FORGE", 15, COLOR_TEXT,
+                Typeface.create("sans-serif", Typeface.BOLD));
+        brandTitle.setLetterSpacing(0.12f);
         brandText.addView(brandTitle, matchWrap());
 
         TextView brandSubtitle = text(
-                "ANDROID NATIVE PORT",
-                7,
-                COLOR_BRONZE,
+                "GAME LIBRARY", 7, COLOR_MUTED,
                 Typeface.create("sans-serif-medium", Typeface.NORMAL));
         brandSubtitle.setLetterSpacing(0.10f);
         LinearLayout.LayoutParams subtitleParams = matchWrap();
-        subtitleParams.topMargin = dp(3);
+        subtitleParams.topMargin = dp(2);
         brandText.addView(brandSubtitle, subtitleParams);
-
         brand.addView(brandText, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         sidebar.addView(brand, matchWrap());
-        sidebar.addView(createDivider(), topMargin(15));
 
-        TextView collectionLabel = text(
-                "SUA COLEÇÃO",
-                8,
-                COLOR_MUTED,
+        sidebar.addView(createDivider(), topMargin(20));
+
+        TextView libraryLabel = text(
+                "LIBRARY", 8, COLOR_MUTED,
                 Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        collectionLabel.setLetterSpacing(0.14f);
-        sidebar.addView(collectionLabel, topMargin(19));
+        libraryLabel.setLetterSpacing(0.14f);
+        sidebar.addView(libraryLabel, topMargin(21));
 
-        TextView libraryItem = text(
-                "▣   BIBLIOTECA",
-                11,
-                COLOR_TEXT,
+        TextView selectedItem = text(
+                "▣   BIBLIOTECA", 10, COLOR_TEXT,
                 Typeface.create("sans-serif-medium", Typeface.BOLD));
-        libraryItem.setGravity(Gravity.CENTER_VERTICAL);
-        libraryItem.setPadding(dp(9), 0, dp(4), 0);
-        libraryItem.setBackground(gradient(
-                new int[]{0xFF64201D, 0xFF321315},
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                dp(1),
-                0xFF9D3B31));
-        sidebar.addView(libraryItem, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(42)));
+        selectedItem.setGravity(Gravity.CENTER_VERTICAL);
+        selectedItem.setPadding(dp(10), 0, dp(5), 0);
+        selectedItem.setBackground(rounded(COLOR_SURFACE_RAISED, COLOR_RED, dp(3)));
+        LinearLayout.LayoutParams selectedParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(39));
+        selectedParams.topMargin = dp(9);
+        sidebar.addView(selectedItem, selectedParams);
 
         Button settingsButton = sidebarButton("⚙   CONFIGURAÇÕES");
         settingsButton.setOnClickListener(view -> showSettingsDialog());
-        sidebar.addView(settingsButton, topMargin(7));
+        sidebar.addView(settingsButton, topMargin(6));
 
         Button aboutButton = sidebarButton("ⓘ   SOBRE");
         aboutButton.setOnClickListener(view -> showAboutDialog());
-        sidebar.addView(aboutButton, topMargin(7));
+        sidebar.addView(aboutButton, topMargin(6));
 
         View spacer = new View(this);
         sidebar.addView(spacer, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        sidebar.addView(createDivider(), topMargin(8));
+        sidebar.addView(createDivider(), topMargin(10));
 
-        TextView buildLabel = text(
-                "VERSÃO DE DESENVOLVIMENTO",
-                7,
-                COLOR_MUTED,
+        TextView versionLabel = text(
+                "VERSÃO", 7, COLOR_MUTED,
                 Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        buildLabel.setLetterSpacing(0.08f);
-        sidebar.addView(buildLabel, topMargin(10));
+        versionLabel.setLetterSpacing(0.13f);
+        sidebar.addView(versionLabel, topMargin(11));
 
-        TextView buildValue = text(
-                "0.1.0-dev  •  ARM64",
-                8,
-                COLOR_BRONZE,
+        TextView version = text(
+                "0.1.0-dev", 9, COLOR_TEXT,
                 Typeface.create("monospace", Typeface.NORMAL));
-        sidebar.addView(buildValue, topMargin(4));
+        sidebar.addView(version, topMargin(4));
 
         Button exitButton = sidebarButton("⇥   SAIR");
         exitButton.setOnClickListener(view -> finish());
-        sidebar.addView(exitButton, topMargin(11));
+        sidebar.addView(exitButton, topMargin(9));
 
         return sidebar;
     }
 
-    private View createPageHeading() {
-        LinearLayout heading = new LinearLayout(this);
-        heading.setOrientation(LinearLayout.HORIZONTAL);
-        heading.setGravity(Gravity.CENTER_VERTICAL);
+    private View createPageHeader() {
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
 
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
 
         TextView eyebrow = text(
-                "GOW_ANDROID  /  COLEÇÃO",
-                8,
-                COLOR_BRONZE,
+                "FORGE  /  GOW_ANDROID", 8, COLOR_MUTED,
                 Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        eyebrow.setLetterSpacing(0.12f);
+        eyebrow.setLetterSpacing(0.13f);
         labels.addView(eyebrow, matchWrap());
 
         TextView title = text(
-                "BIBLIOTECA",
-                18,
-                COLOR_TEXT,
-                Typeface.create("serif", Typeface.BOLD));
-        title.setLetterSpacing(0.04f);
+                "Biblioteca", 21, COLOR_TEXT,
+                Typeface.create("sans-serif", Typeface.BOLD));
         LinearLayout.LayoutParams titleParams = matchWrap();
         titleParams.topMargin = dp(3);
         labels.addView(title, titleParams);
-        heading.addView(labels, new LinearLayout.LayoutParams(
+
+        header.addView(labels, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView version = text(
-                "v0.1.0 DEV",
-                8,
-                COLOR_BRONZE,
+        TextView platform = text(
+                "ANDROID  /  ARM64", 8, COLOR_MUTED,
                 Typeface.create("monospace", Typeface.NORMAL));
-        version.setGravity(Gravity.CENTER);
-        version.setPadding(dp(9), dp(6), dp(9), dp(6));
-        version.setBackground(gradient(
-                new int[]{0xFF241718, 0xFF171011},
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                dp(1),
-                COLOR_LINE));
-        heading.addView(version, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, dp(28)));
+        platform.setGravity(Gravity.CENTER);
+        platform.setPadding(dp(10), dp(7), dp(10), dp(7));
+        platform.setBackground(rounded(COLOR_SURFACE, COLOR_LINE, dp(3)));
+        header.addView(platform, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(29)));
 
-        return heading;
+        return header;
     }
 
     private View createHeroCard() {
-        FrameLayout hero = new FrameLayout(this);
-        hero.setBackground(gradient(
-                new int[]{0xFF421718, 0xFF211011, 0xFF100C0C},
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                dp(1),
-                0xFF8A5739));
+        FrameLayout card = new FrameLayout(this);
+        card.setBackground(rounded(COLOR_SURFACE, COLOR_LINE, dp(5)));
 
-        ImageView sigil = new ImageView(this);
-        sigil.setImageResource(R.drawable.ic_launcher_emblem);
-        sigil.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        sigil.setAlpha(0.22f);
-        FrameLayout.LayoutParams sigilParams = new FrameLayout.LayoutParams(
-                dp(156),
-                dp(156),
-                Gravity.END | Gravity.CENTER_VERTICAL);
-        sigilParams.rightMargin = dp(8);
-        hero.addView(sigil, sigilParams);
+        View accent = new View(this);
+        accent.setBackgroundColor(COLOR_RED);
+        FrameLayout.LayoutParams accentParams = new FrameLayout.LayoutParams(
+                dp(3), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START);
+        card.addView(accent, accentParams);
 
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setGravity(Gravity.CENTER_VERTICAL);
-        copy.setPadding(dp(18), dp(12), dp(12), dp(12));
+        ImageView watermark = new ImageView(this);
+        watermark.setImageResource(R.drawable.ic_launcher_emblem);
+        watermark.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        watermark.setAlpha(0.10f);
+        FrameLayout.LayoutParams watermarkParams = new FrameLayout.LayoutParams(
+                dp(142), dp(142), Gravity.END | Gravity.CENTER_VERTICAL);
+        watermarkParams.rightMargin = dp(12);
+        card.addView(watermark, watermarkParams);
 
-        TextView era = text(
-                "PLAYSTATION 2   •   2005",
-                8,
-                COLOR_BRONZE,
+        LinearLayout details = new LinearLayout(this);
+        details.setOrientation(LinearLayout.VERTICAL);
+        details.setGravity(Gravity.CENTER_VERTICAL);
+        details.setPadding(dp(19), dp(15), dp(10), dp(15));
+
+        TextView eyebrow = text(
+                "PLAYSTATION 2  •  2005", 8, COLOR_MUTED,
                 Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        era.setLetterSpacing(0.13f);
-        copy.addView(era, matchWrap());
+        eyebrow.setLetterSpacing(0.12f);
+        details.addView(eyebrow, matchWrap());
 
-        TextView title = text(
-                "GOD OF WAR",
-                29,
-                COLOR_TEXT,
-                Typeface.create("serif", Typeface.BOLD));
-        title.setLetterSpacing(0.03f);
+        TextView gameTitle = text(
+                "God of War", 28, COLOR_TEXT,
+                Typeface.create("sans-serif", Typeface.BOLD));
         LinearLayout.LayoutParams titleParams = matchWrap();
-        titleParams.topMargin = dp(4);
-        copy.addView(title, titleParams);
+        titleParams.topMargin = dp(5);
+        details.addView(gameTitle, titleParams);
 
-        TextView subtitle = text(
-                "ANDROID NATIVE PORT",
-                9,
-                COLOR_BRONZE,
-                Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        subtitle.setLetterSpacing(0.20f);
-        LinearLayout.LayoutParams subtitleParams = matchWrap();
-        subtitleParams.topMargin = dp(1);
-        copy.addView(subtitle, subtitleParams);
+        TextView gameDescription = text(
+                "Port nativo em desenvolvimento para Android",
+                10, COLOR_MUTED,
+                Typeface.create("sans-serif", Typeface.NORMAL));
+        LinearLayout.LayoutParams descriptionParams = matchWrap();
+        descriptionParams.topMargin = dp(4);
+        details.addView(gameDescription, descriptionParams);
 
-        View redRule = new View(this);
-        redRule.setBackgroundColor(COLOR_RED);
-        LinearLayout.LayoutParams ruleParams = new LinearLayout.LayoutParams(
-                dp(104), dp(2));
-        ruleParams.topMargin = dp(10);
-        copy.addView(redRule, ruleParams);
+        TextView badge = text(
+                "EM DESENVOLVIMENTO", 7, 0xFFFFA5A8,
+                Typeface.create("sans-serif-medium", Typeface.BOLD));
+        badge.setLetterSpacing(0.09f);
+        badge.setPadding(dp(8), dp(5), dp(8), dp(5));
+        badge.setBackground(rounded(0x332E1418, 0x665B252C, dp(2)));
+        LinearLayout.LayoutParams badgeParams = matchWrap();
+        badgeParams.topMargin = dp(10);
+        details.addView(badge, badgeParams);
 
-        TextView tagline = text(
-                "A VINGANÇA DE UM DEUS COMEÇA AQUI.",
-                9,
-                COLOR_TEXT,
-                Typeface.create("serif", Typeface.BOLD));
-        tagline.setLetterSpacing(0.08f);
-        LinearLayout.LayoutParams taglineParams = matchWrap();
-        taglineParams.topMargin = dp(8);
-        copy.addView(tagline, taglineParams);
-
-        FrameLayout.LayoutParams copyParams = new FrameLayout.LayoutParams(
+        FrameLayout.LayoutParams detailsParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT);
-        copyParams.rightMargin = dp(105);
-        hero.addView(copy, copyParams);
+        detailsParams.rightMargin = dp(100);
+        card.addView(details, detailsParams);
 
-        return hero;
+        card.setMinimumHeight(dp(151));
+        return card;
     }
 
     private View createDiscStatusCard() {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(12), dp(10), dp(12), dp(10));
-        card.setBackground(gradient(
-                new int[]{0xE51A1313, 0xE50F0C0C},
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                dp(1),
-                0xFF654A34));
-
-        TextView label = text(
-                "IMAGEM DO DISCO",
-                8,
-                COLOR_BRONZE,
-                Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        label.setLetterSpacing(0.12f);
+        LinearLayout card = statusCard();
+        TextView label = sectionLabel("IMAGEM DO DISCO");
         card.addView(label, matchWrap());
 
         discName = text(
-                "Nenhuma imagem selecionada",
-                11,
-                COLOR_TEXT,
+                "Nenhuma imagem selecionada", 11, COLOR_TEXT,
                 Typeface.create("sans-serif-medium", Typeface.NORMAL));
         LinearLayout.LayoutParams nameParams = matchWrap();
-        nameParams.topMargin = dp(4);
+        nameParams.topMargin = dp(7);
         card.addView(discName, nameParams);
 
         discStatus = text(
-                "Adicione sua cópia do jogo para verificar o formato.",
-                9,
-                COLOR_MUTED,
+                "Selecione sua cópia do jogo para verificar o formato.",
+                9, COLOR_MUTED,
                 Typeface.create("sans-serif", Typeface.NORMAL));
         discStatus.setLineSpacing(dp(2), 1f);
         LinearLayout.LayoutParams statusParams = matchWrap();
-        statusParams.topMargin = dp(3);
+        statusParams.topMargin = dp(4);
         card.addView(discStatus, statusParams);
-
         return card;
     }
 
     private View createRuntimeStatusCard() {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(12), dp(10), dp(10), dp(10));
-        card.setBackground(gradient(
-                new int[]{0xE51A1313, 0xE50F0C0C},
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                dp(1),
-                0xFF654A34));
-
-        TextView label = text(
-                "ESTADO DO PORT",
-                8,
-                COLOR_BRONZE,
-                Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        label.setLetterSpacing(0.12f);
-        card.addView(label, matchWrap());
+        LinearLayout card = statusCard();
+        card.addView(sectionLabel("ESTADO DO PORT"), matchWrap());
 
         TextView value = text(
-                "EM DESENVOLVIMENTO",
-                10,
-                COLOR_TEXT,
+                "Em desenvolvimento", 11, COLOR_TEXT,
                 Typeface.create("sans-serif-medium", Typeface.BOLD));
         LinearLayout.LayoutParams valueParams = matchWrap();
-        valueParams.topMargin = dp(5);
+        valueParams.topMargin = dp(7);
         card.addView(value, valueParams);
 
         TextView detail = text(
-                "Launcher e teste Vulkan disponíveis. Runtime do jogo pendente.",
-                9,
-                COLOR_MUTED,
+                "Interface e teste Vulkan disponíveis. Runtime do jogo pendente.",
+                9, COLOR_MUTED,
                 Typeface.create("sans-serif", Typeface.NORMAL));
         detail.setLineSpacing(dp(2), 1f);
         LinearLayout.LayoutParams detailParams = matchWrap();
-        detailParams.topMargin = dp(3);
+        detailParams.topMargin = dp(4);
         card.addView(detail, detailParams);
+        return card;
+    }
 
+    private LinearLayout statusCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(13), dp(12), dp(13), dp(12));
+        card.setBackground(rounded(COLOR_SURFACE, COLOR_LINE, dp(4)));
         return card;
     }
 
     private View createDivider() {
         View divider = new View(this);
-        divider.setBackground(new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{COLOR_RED, COLOR_BRONZE, 0x2260402F}));
-        divider.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(2)));
+        divider.setBackgroundColor(COLOR_LINE);
         return divider;
     }
 
     private TextView sectionLabel(String value) {
         TextView label = text(
-                value,
-                8,
-                COLOR_MUTED,
+                value, 8, COLOR_MUTED,
                 Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        label.setLetterSpacing(0.14f);
+        label.setLetterSpacing(0.13f);
         return label;
     }
 
-    private Button menuButton(String label, boolean primary) {
+    private Button actionButton(String label, boolean primary) {
         Button button = new Button(this);
         button.setText(label);
         button.setAllCaps(false);
         button.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         button.setTextSize(10);
-        button.setLetterSpacing(0.025f);
+        button.setLetterSpacing(0.02f);
         button.setTypeface(Typeface.create(
-                "serif", primary ? Typeface.BOLD : Typeface.NORMAL));
+                "sans-serif-medium", primary ? Typeface.BOLD : Typeface.NORMAL));
         button.setTextColor(primary ? Color.WHITE : COLOR_TEXT);
         button.setPadding(dp(12), 0, dp(8), 0);
         button.setMinHeight(dp(44));
         button.setStateListAnimator(null);
-        button.setFocusable(true);
-        button.setBackground(menuButtonBackground(primary, false));
+        button.setBackground(actionBackground(primary, false));
         button.setOnFocusChangeListener((view, focused) ->
-                button.setBackground(menuButtonBackground(primary, focused)));
+                button.setBackground(actionBackground(primary, focused)));
         return button;
     }
 
@@ -556,41 +467,31 @@ public final class MainActivity extends AppCompatActivity {
         button.setAllCaps(false);
         button.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         button.setTextSize(9);
-        button.setLetterSpacing(0.02f);
+        button.setLetterSpacing(0.01f);
         button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         button.setTextColor(COLOR_MUTED);
         button.setPadding(dp(8), 0, dp(2), 0);
-        button.setMinHeight(dp(39));
+        button.setMinHeight(dp(38));
         button.setStateListAnimator(null);
-        button.setBackground(gradient(
-                new int[]{0xFF1B1414, 0xFF120E0E},
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                dp(1),
-                0xFF392B25));
+        button.setBackground(rounded(COLOR_SIDEBAR, Color.TRANSPARENT, dp(3)));
         return button;
     }
 
-    private GradientDrawable menuButtonBackground(boolean primary, boolean focused) {
-        int[] colors = primary || focused
-                ? new int[]{0xFF9B2B25, 0xFF511719}
-                : new int[]{0xFF302123, 0xFF181112};
-        int stroke = primary || focused ? COLOR_RED_BRIGHT : 0xFF6B4C37;
-        return gradient(
-                colors,
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                dp(focused ? 2 : 1),
-                stroke);
+    private GradientDrawable actionBackground(boolean primary, boolean focused) {
+        if (primary) {
+            return rounded(focused ? COLOR_RED_BRIGHT : COLOR_RED,
+                    focused ? 0xFFFF777D : COLOR_RED, dp(4));
+        }
+        return rounded(focused ? COLOR_SURFACE_RAISED : COLOR_SURFACE,
+                focused ? COLOR_MUTED : COLOR_LINE, dp(4));
     }
 
-    private GradientDrawable gradient(
-            int[] colors,
-            GradientDrawable.Orientation orientation,
-            int strokeWidth,
-            int strokeColor) {
-        GradientDrawable drawable = new GradientDrawable(orientation, colors);
-        drawable.setCornerRadius(dp(4));
-        if (strokeWidth > 0) {
-            drawable.setStroke(strokeWidth, strokeColor);
+    private GradientDrawable rounded(int fill, int stroke, int radius) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(fill);
+        drawable.setCornerRadius(radius);
+        if (stroke != Color.TRANSPARENT) {
+            drawable.setStroke(dp(1), stroke);
         }
         return drawable;
     }
@@ -640,6 +541,7 @@ public final class MainActivity extends AppCompatActivity {
                 .setMessage(
                         "PLATAFORMA\nAndroid / ARM64\n\n"
                                 + "GRÁFICOS\nVulkan (teste de apresentação)\n\n"
+                                + "INTERFACE\nFORGE\n\n"
                                 + "VERSÃO\n0.1.0-dev\n\n"
                                 + "As opções de resolução, controles e áudio serão adicionadas "
                                 + "quando os respectivos subsistemas estiverem integrados.")
@@ -649,11 +551,11 @@ public final class MainActivity extends AppCompatActivity {
 
     private void showAboutDialog() {
         new AlertDialog.Builder(this)
-                .setTitle("Sobre o projeto")
+                .setTitle("Sobre o FORGE")
                 .setMessage(
-                        "Gow_android é um projeto independente que busca construir um port "
-                                + "nativo de God of War (2005) para Android.\n\n"
-                                + "O launcher, a seleção de disco e o teste Vulkan são etapas "
+                        "FORGE é a interface de biblioteca do projeto Gow_android, que busca "
+                                + "construir um port nativo de God of War (2005) para Android.\n\n"
+                                + "A interface, a seleção de disco e o teste Vulkan são etapas "
                                 + "iniciais. O jogo ainda não é executável nesta versão.\n\n"
                                 + "Referências técnicas e créditos: CodeAbhi826, KIexster, "
                                 + "Waffle565, ran-j / PS2Recomp e PCSX2. Consulte "
@@ -698,10 +600,11 @@ public final class MainActivity extends AppCompatActivity {
     private void validateAndDisplay(Uri uri) {
         if (selectDiscButton != null) {
             selectDiscButton.setEnabled(false);
+            selectDiscButton.setAlpha(0.55f);
         }
         discName.setText("Verificando imagem...");
         discStatus.setText("Lendo o descritor primário ISO9660.");
-        discStatus.setTextColor(COLOR_BRONZE);
+        discStatus.setTextColor(COLOR_MUTED);
         selectedDiscValid = false;
 
         ioExecutor.execute(() -> {
@@ -728,9 +631,10 @@ public final class MainActivity extends AppCompatActivity {
                 discName.setText(finalName);
                 discStatus.setText(finalResult);
                 discStatus.setTextColor(
-                        isValid ? Color.rgb(139, 190, 140) : Color.rgb(222, 113, 96));
+                        isValid ? 0xFF8BC28F : 0xFFE27676);
                 if (selectDiscButton != null) {
                     selectDiscButton.setEnabled(true);
+                    selectDiscButton.setAlpha(1f);
                 }
             });
         });
