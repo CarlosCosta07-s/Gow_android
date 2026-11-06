@@ -10,6 +10,7 @@ import argparse
 from dataclasses import dataclass
 import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -516,11 +517,11 @@ def main() -> int:
         "skip Raylib SPU2 stream teardown when Android never initialized desktop audio",
     )
     audio_device_block = re.compile(
-        r"(?m)^(?P<indent>[ \\t]*)if \\(IsAudioDeviceReady\\(\\)\\)\\r?\\n"
-        r"(?P=indent)\\{\\r?\\n"
-        r"(?P=indent)    CloseAudioDevice\\(\\);\\r?\\n"
-        r"(?P=indent)    m_audioBackend\\.setAudioReady\\(false\\);\\r?\\n"
-        r"(?P=indent)\\}"
+        r"(?m)^(?P<indent>[ \t]*)if \(IsAudioDeviceReady\(\)\)\r?\n"
+        r"(?P=indent)\{\r?\n"
+        r"(?P=indent)    CloseAudioDevice\(\);\r?\n"
+        r"(?P=indent)    m_audioBackend\.setAudioReady\(false\);\r?\n"
+        r"(?P=indent)\}"
     )
     runtime_text = runtime_cpp.read_text(encoding="utf-8")
     audio_matches = list(audio_device_block.finditer(runtime_text))
@@ -530,7 +531,7 @@ def main() -> int:
             f"found {len(audio_matches)}."
         )
     audio_match = audio_matches[0]
-    line_ending = "\\r\\n" if "\\r\\n" in runtime_text else "\\n"
+    line_ending = "\r\n" if "\r\n" in runtime_text else "\n"
     guarded_audio_block = (
         "#if !defined(PS2X_ANDROID_LIFECYCLE_MANAGED)" + line_ending
         + audio_match.group(0) + line_ending
