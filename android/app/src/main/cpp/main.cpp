@@ -1808,7 +1808,7 @@ extern "C" void android_main(android_app* app) {
                         framePixels, frameWidth, frameHeight)) {
                     if (!gGsSceneCaptureAttempted) {
                         gGsSceneCaptureAttempted = true;
-                        const ANativeActivity *activity = app->activity;
+                        const GameActivity *activity = app->activity;
                         const char *captureDirectory = activity != nullptr
                             ? (activity->externalDataPath != nullptr
                                 ? activity->externalDataPath
