@@ -76,7 +76,7 @@ def compare_rgb(
     reference: bytes,
     actual: bytes,
     tolerance: int,
-) -> dict[str, float | int]:
+) -> dict[str, float | int | None]:
     if len(reference) != len(actual) or len(reference) % 3 != 0:
         raise ValueError("Image buffers must have equal RGB byte lengths.")
     if not 0 <= tolerance <= 255:
