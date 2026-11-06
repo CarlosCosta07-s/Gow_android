@@ -42,6 +42,10 @@ A interface FORGE e o seletor SAF/ISO9660 estão implementados. O parser de `SYS
 
 ## Camadas futuras do port
 
+### Leitor de disco Android
+
+`iso9660_reader.cpp` abre um descritor SAF duplicado, valida o PVD ISO9660 e resolve arquivos por diretórios/extents com leitura aleatória usando `pread`. O componente está no alvo Android e tem teste host com imagem sintética. Ele ainda não está ligado ao `PS2IopHostAdapter`: a base Waffle atualmente converte `cdrom0:` em caminho do host e abre `FILE*`. O provider Android deverá conectar handles ISO às operações open/size/read/close do IOP, sem extrair a imagem inteira. Veja [DISC_VFS_ANDROID.md](DISC_VFS_ANDROID.md).
+
 ### Entrada física e estado virtual de DualShock 2
 
 O shell consome `android_input_buffer` pelos helpers de GameActivity (`android_app_swap_input_buffers`, `android_app_clear_key_events` e `android_app_clear_motion_events`), não por `android_app::onInputEvent`. `GameActivityKeyEvent` e `GameActivityMotionEvent` são convertidos pela `android_pad_bridge.cpp` para o pacote analógico ativo-baixo consumido por `PSPadBackend`. O perfil inicial implementa porta 0/slot 0, deadzone/sensibilidade/inversão por configuração e uma API para o overlay touch alimentar o mesmo estado. Ao perder foco ou pausar, o estado é limpo para evitar botões presos. A CI compila esta integração; ainda falta validação com gamepads físicos reais.
