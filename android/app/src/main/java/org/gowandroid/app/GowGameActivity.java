@@ -6,8 +6,10 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.androidgamesdk.GameActivity;
 
@@ -32,6 +34,7 @@ public final class GowGameActivity extends GameActivity {
             String privateCdRoot, String relativePath);
     private static native void nativeSetActivityReference(GowGameActivity activity);
     private static native void nativeClearActivityReference(GowGameActivity activity);
+    private static native boolean nativeRequestGsSceneCapture();
 
     private TextView nativeStatusView;
     private String pendingNativeStatus;
@@ -129,6 +132,33 @@ public final class GowGameActivity extends GameActivity {
                     createStatusBackground(pendingNativeStatusError));
             nativeStatusView.setVisibility(View.VISIBLE);
             pendingNativeStatus = null;
+        }
+
+        if (BuildConfig.DEBUG) {
+            Button captureButton = new Button(this);
+            captureButton.setText("Capturar cena");
+            captureButton.setAllCaps(false);
+            captureButton.setContentDescription(
+                    "Salvar o frame GS atual para comparação visual");
+            captureButton.setOnClickListener(view -> {
+                if (nativeRequestGsSceneCapture()) {
+                    Toast.makeText(
+                            this,
+                            "Captura solicitada; será salva no próximo frame GS.",
+                            Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(
+                            this,
+                            "Limite de capturas de depuração atingido.",
+                            Toast.LENGTH_SHORT).show();
+                }
+            });
+            FrameLayout.LayoutParams captureLayout = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM | Gravity.END);
+            captureLayout.setMargins(0, 0, dp(16), dp(20));
+            content.addView(captureButton, captureLayout);
         }
     }
 
