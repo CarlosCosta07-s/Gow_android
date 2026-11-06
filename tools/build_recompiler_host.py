@@ -474,17 +474,16 @@ def main() -> int:
     vu_cmake = recompiler_source / "ps2xRuntime/CMakeLists.txt"
     replace_exactly_once(
         vu_cmake,
-        "    FetchContent_MakeAvailable(raylib)\n\n    if(PS2X_ENABLE_DEBUG_UI",
-        "    FetchContent_MakeAvailable(raylib)\n\n"
-        "    # FORGE owns the Android lifecycle through AndroidX GameActivity.\n"
-        "    # Raylib 5.5 also defines android_main() for its NativeActivity runner;\n"
-        "    # rename that unused entry point so the embedded library cannot collide\n"
-        "    # with the app's GameActivity glue. Other Raylib APIs remain available\n"
-        "    # temporarily for the upstream runtime until its host adapters are replaced.\n"
-        "    if(PS2X_IS_ANDROID AND TARGET raylib)\n"
-        "        target_compile_definitions(raylib PRIVATE android_main=ps2x_raylib_android_main)\n"
-        "    endif()\n\n"
-        "    if(PS2X_ENABLE_DEBUG_UI",
+        "add_library(ps2_runtime STATIC\\n",
+        "# FORGE owns Android lifecycle through AndroidX GameActivity. Raylib 5.5\\n"
+        "# also defines android_main() for its NativeActivity runner. Rename that\\n"
+        "# unused entry point when embedding Raylib so it cannot collide with the\\n"
+        "# app's GameActivity glue. Other Raylib APIs remain temporarily available\\n"
+        "# until the upstream host adapters are replaced.\\n"
+        "if(PS2X_IS_ANDROID AND TARGET raylib)\\n"
+        "    target_compile_definitions(raylib PRIVATE android_main=ps2x_raylib_android_main)\\n"
+        "endif()\\n\\n"
+        "add_library(ps2_runtime STATIC\\n",
         "isolate Raylib NativeActivity entry point from FORGE GameActivity",
     )
     diagnostic_sources = [
