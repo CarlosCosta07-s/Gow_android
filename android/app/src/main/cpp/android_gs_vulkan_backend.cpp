@@ -8,6 +8,7 @@
 #include <exception>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace gow::android {
 
@@ -51,7 +52,14 @@ void AndroidGSVulkanBackend::Submit(const GSPrimitiveBatch &batch) {
     if (!impl_->initialized) return;
 
     std::string error;
-    if (!rasterizeGsBatchToVram(impl_->textureStore, batch, error)) {
+    std::vector<uint32_t> decodedTexture;
+    const std::vector<uint32_t> *texturePixels = nullptr;
+    if (batch.state.prim.tme) {
+        impl_->textureStore.DecodeTextureRgba(batch.state, decodedTexture);
+        texturePixels = &decodedTexture;
+    }
+    if (!rasterizeGsBatchToVram(
+            impl_->textureStore, batch, texturePixels, error)) {
         return;
     }
 
