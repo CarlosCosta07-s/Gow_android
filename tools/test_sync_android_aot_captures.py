@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import tarfile
 import unittest
 import zipfile
+from unittest.mock import patch
 from pathlib import Path
 
 from sync_android_aot_captures import (
     NoDeviceCaptures,
     capture_tar_to_zip,
+    find_adb_executable,
 )
 
 
@@ -116,6 +119,15 @@ class AndroidAotAdbCaptureSyncTests(unittest.TestCase):
         ])
         with self.assertRaisesRegex(ValueError, "Duplicate private AOT capture"):
             capture_tar_to_zip(self.tar_path, self.zip_path)
+
+    def test_adb_is_found_under_android_sdk_without_path_setup(self) -> None:
+        sdk_platform_tools = self.root / "sdk" / "platform-tools"
+        sdk_platform_tools.mkdir(parents=True)
+        adb = sdk_platform_tools / "adb"
+        adb.write_text("#!/bin/sh\\n", encoding="ascii")
+        with patch("sync_android_aot_captures.shutil.which", return_value=None):
+            with patch.dict(os.environ, {"ANDROID_SDK_ROOT": str(self.root / "sdk")}):
+                self.assertEqual(find_adb_executable(), str(adb))
 
 
 if __name__ == "__main__":
