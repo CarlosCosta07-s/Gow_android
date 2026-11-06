@@ -458,7 +458,7 @@ int main() {
                       << static_cast<unsigned>(t4hlPixel[0]) << ','
                       << static_cast<unsigned>(t4hlPixel[1]) << ','
                       << static_cast<unsigned>(t4hlPixel[2]) << ','
-                      << static_cast<unsigned>(t4hlPixel[3]) << '\\n';
+                      << static_cast<unsigned>(t4hlPixel[3]) << '\n';
         }
         require(t4hlPixel[0] == 0u && t4hlPixel[1] == 255u &&
                 t4hlPixel[2] == 255u && t4hlPixel[3] == 255u,
