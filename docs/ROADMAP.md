@@ -73,10 +73,12 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Executar a verificação de instalações existentes fora da thread principal, informar bytes/arquivos verificados e permitir cancelamento; qualquer cancelamento ou verificação parcial permanece inválido. Teste de cancelamento e build ARM64 aprovados na CI `42240082689`.
 - [x] Separar o núcleo PS2 do ciclo host de janela/áudio: `initializeCoreHeadless()` inicializa memória e liga EE/IOP/VU sem Raylib; Android `android_main` chama a etapa via C ABI. O perfil Android usa `GSNullBackend`, bloqueia `initialize()` desktop e mantém `run()`/guest execution desativados. Validador do código Waffle preparado, testes host/VFS e APK ARM64 aprovados na CI `42243707680`.
 - [ ] Implementar e ligar o backend de apresentação GS/Vulkan e o backend de áudio Android ao ciclo de vida da GameActivity.
+- [x] Encaminhar `cdRoot`/BOOT2 do FORGE à GameActivity, sincronizar a configuração JNI com `android_main()` e chamar a porta ELF/AOT protegida após a inicialização headless; CI `42250619735` aprovou checker, testes host/VFS e APK ARM64. A tabela AOT pública continua vazia e a execução guest permanece bloqueada.
 - [x] Implementar painel de diagnóstico da inicialização nativa na `GowGameActivity`, com callback JNI, atualização na thread principal e retenção de mensagens precoces; a checagem automatizada passou na CI `42246181055`.
-- [ ] Confirmar compilação ARM64 do JNI com a API real de GameActivity (a primeira tentativa revelou ausência de `activity->clazz`; a correção usa referência JNI registrada pela Activity; CI `42246883029` em andamento na última consulta).
+- [x] Confirmar compilação JNI ARM64 com a API real de GameActivity: referência global registrada pela Activity, referência local por callback e liberação por identidade (CI `42246883029` e builds seguintes).
 - [ ] Validar visualmente as mensagens de progresso/sucesso/falha em aparelho Android e conferir o Logcat correspondente.
 - [ ] Configurar `PS2Runtime::loadELF()` para o ELF local e o `PS2IopHostAdapter`/`PS2Vfs` para usar o `cdRoot` local da instalação.
+- [x] Criar a ponte `gowRuntimeLoadElfAndCheckAot()`: recusar tabela AOT vazia, resolver BOOT2 dentro do `cdRoot` privado, carregar o ELF quando houver AOT e conferir a função de entrada sem chamar `run()`; testes de caminho privado e CI `42250619735` aprovados. Execução com ELF/AOT real ainda não testada.
 - [x] Manter `IoPaths.cdRoot` como o caminho físico da instalação privada; encaminhar `cdrom0:` no PS2 VFS antes de normalizar caminhos virtuais. A CI `42225710064` compilou o patch e verificou a configuração estática de `IoPaths` pelo JNI; o uso em boot/CDVD real ainda está pendente.
 - [x] Implementar descoberta da segunda camada do DVD e enumeração recursiva de diretórios/extents nas duas camadas; fixtures ISO sintéticas cobrem extents em ambas as camadas.
 - [x] Implementar o gerador `.disc_layout`/`.disc_meta` com LSNs originais, medição de espaço e publicação do par com `.disc_layout` por último; testes sintéticos isolados aprovados no run `42218565639`.
@@ -92,7 +94,7 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Implementar verificação da instalação existente e fluxo de reinstalação explicitamente confirmado; fechar o `cdRoot` e remover apenas a pasta privada da revisão selecionada usando `openat`/`O_NOFOLLOW`. Testes sintéticos de symlinks, traversal e preservação de diretórios irmãos aprovados na CI `42235192717`.
 - [ ] Exercitar no aparelho a instalação, cancelamento, falta de espaço, reparo e verificação SHA-256 com progresso/cancelamento, além das validações `IoPaths`/DiscSource/CDVD com a ISO do usuário; medir o tempo e o I/O de leitura.
 - [ ] Exercitar o CDVD já incorporado ao `IopEmulator` na sessão real e registrar chamadas originadas pelo jogo; os probes atuais ainda são sintéticos/isolados.
-- [ ] Ligar código recompilado, overrides de God of War e serviços mínimos de boot.
+- [ ] Gerar/ligar código recompilado, overrides de God of War e serviços mínimos de boot; a ponte Android de carga protegida existe, mas a tabela AOT pública está vazia.
 - [ ] Resolver CD/DVD, IRX, SIF, DMA e cadeia inicial de execução.
 - [ ] Registrar diagnóstico por etapa, PC/RA e último subsistema confirmado.
 - [ ] Apresentar a primeira imagem real do jogo.
