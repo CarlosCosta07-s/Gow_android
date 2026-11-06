@@ -79,3 +79,8 @@ A porta de carga recusa tabela AOT vazia, normaliza e confina o BOOT2 ao diretó
 ### Sincronização e troca de sessão da GameActivity
 
 Na CI `42252442268`, passaram o checker de lifecycle, os testes nativos/ISO/CDVD/VFS e a compilação ARM64 após estas proteções: registrar a referência JNI antes de `super.onCreate()`, zerar caminho BOOT2 ao abrir uma nova Activity, aguardar a configuração na thread `android_main()` e liberar a espera se a Activity encerrar. Isso verifica a estrutura e a compilação; não prova o handoff em um aparelho físico.
+## Orquestração local do AOT
+
+O comando `tools/build_android_game.py` prepara o build inteiro sem enviar dados do jogo: recebe somente `SCUS_973.99` fora do repositório, chama PS2Recomp, exporta C++/headers para `android/app/build/gow-generated-game/` e executa `gradlew assembleDebug`. O script recusa workspace dentro do repositório, staging não ignorado e revisão PAL com mapa NTSC-U. Consulte `docs/ANDROID_AOT_LOCAL_BUILD.md`.
+
+**Verificado na CI:** sintaxe, CLI, planejamento dos comandos, separação de caminhos privados, rejeição do perfil PAL e chamada do Gradle Wrapper Windows. **Não verificado:** execução com o ELF real, geração C++ do jogo real e compilação do APK com essa saída. As fixtures da CI não contêm dados do jogo.
