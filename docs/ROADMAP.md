@@ -8,7 +8,8 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - [x] Confirmar estado inicial e branch `main`.
 - [x] Auditar referências Android e desktop para God of War PS2.
 - [x] Registrar arquitetura, créditos e política de dados.
-- [x] Registrar Black para Android e Dragon Rage/BT3 como referências de engenharia, sem importar código.
+- [x] Auditar KIexster, Waffle565 e PS2Recomp como base de código do port nativo de PC.
+- [x] Importar seletivamente mapa/configuração, overrides de God of War e geradores AOT para staging, com origem registrada.
 
 ## Fase 1 — Shell Android reproduzível
 
@@ -29,58 +30,60 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 
 **Aceitação:** APK instala e abre em aparelho real, seleciona a imagem do usuário e informa claramente arquivos inválidos ou incompatíveis.
 
-## Fase 2 — Recompilador estático próprio (MIPS R5900 → C++/ARM64)
+## Fase 2 — Recompilação estática ARM64 com base KIexster
 
-- [ ] Documentar o formato ELF da revisão NTSC-U e o fluxo de boot.
-- [ ] Implementar parser próprio de ELF, segmentos, símbolos, relocations e entry point.
-- [ ] Implementar decoder MIPS R5900 e instruções MMI necessárias ao jogo.
-- [ ] Construir análise de funções, fluxo de controle e tabela de endereços.
-- [ ] Implementar lifter que gere C++ determinístico para ARM64.
-- [ ] Implementar tratamento próprio de delay slots, exceções e chamadas indiretas.
-- [ ] Compilar o código gerado com Android NDK para arm64-v8a.
-- [ ] Criar testes unitários com instruções, blocos e funções pequenas.
-- [ ] Manter ELF, ISO e código gerado fora do repositório público e da CI pública.
+- [x] Importar `funcmap.csv` (6.414 funções) e `recomp.template.toml` para `recompiler/config/`.
+- [ ] Fixar PS2Recomp no commit `c5a9d02573410a2085a4b4b831b0b68ba3515440` e integrar a ferramenta ao pipeline host.
+- [ ] Preparar o ambiente privado de build que recebe o ELF NTSC-U do usuário.
+- [ ] Gerar C++ usando a configuração específica de `SCUS_973.99`.
+- [ ] Compilar código gerado para `arm64-v8a`; corrigir ABI, MMI/intrinsics e particularidades de ARM64.
+- [ ] Comparar checkpoints/estados e produzir relatório de funções traduzidas, stubs e pendências.
+- [ ] Manter ISO, ELF e C++ gerado fora do repositório público e da CI pública.
 
-**Aceitação:** pipeline próprio reproduzível em ambiente privado, com relatório de funções/instruções traduzidas e testes de equivalência de estado. Não pode haver interpretador/JIT do EE no caminho de execução.
+**Aceitação:** pipeline reproduzível que gera e compila código nativo ARM64 do ELF privado. O recompilador executa no ambiente de build, não no celular nem durante a partida; o runtime final não deve usar interpretação/JIT do EE.
 
-## Fase 3 — Renderizador GS/Vulkan próprio
+## Fase 3 — GS no Android: reaproveitar frontend e substituir backend
 
-- [ ] Definir a API interna entre o frontend GIF/GS e o backend Vulkan.
-- [ ] Implementar VRAM, formatos PSM, CLUT/paletas e swizzle.
-- [ ] Implementar transferências locais e host↔GS, registradores e estados do GS.
-- [ ] Implementar render targets, depth, alpha test, destination-alpha e modos de blending.
-- [ ] Criar shaders próprios para as operações do GS usadas por God of War.
-- [ ] Tratar feedback loops e efeitos com passes intermediários/ping-pong quando necessário.
-- [ ] Implementar sincronização de filas, buffers e ciclo de vida da surface Android.
+- [ ] Auditar o frontend GS/GIF e os utilitários portáveis do runtime Waffle/KIexter.
+- [ ] Reaproveitar apenas a camada de comandos, formatos PSM, CLUT, swizzle e estado que não dependa de OpenGL/host desktop.
+- [ ] Isolar completamente o backend OpenGL/WGL/Raylib do runner Android.
+- [ ] Implementar backend GS/Vulkan Android: render targets, depth, alpha test, destination-alpha, blending e sincronização.
+- [ ] Adaptar shaders e operações para GPUs móveis; usar passes intermediários quando necessário.
 - [ ] Validar comandos reais do jogo, começando pelo logo/menu e primeira cena.
 
 **Aceitação:** primeira imagem real do jogo apresentada em Android e comparada com referência visual. Um clear/present isolado não conta como conclusão.
 
-## Fase 4 — Boot e primeira imagem do jogo
+## Fase 4 — Integrar runtime e boot ao FORGE
 
-- [ ] Inicializar contexto e memória EE.
-- [ ] Executar código recompilado e serviços mínimos de kernel.
-- [ ] Resolver CD/DVD, IRX, SIF e cadeia inicial DMA.
-- [ ] Registrar progresso por etapas.
+- [ ] Selecionar e importar os módulos portáveis do runtime Waffle/KIexter (EE, memória, scheduler, stubs e serviços usados pelo título).
+- [ ] Adaptar o runner nativo para AndroidX GameActivity/NDK e preservar o MainActivity FORGE.
+- [ ] Implementar passagem segura do arquivo/URI do usuário para o runtime.
+- [ ] Criar cache privado ou VFS para os arquivos do disco no layout e setores que o runtime espera.
+- [ ] Ligar código recompilado, overrides de God of War e serviços mínimos de boot.
+- [ ] Resolver CD/DVD, IRX, SIF, DMA e cadeia inicial de execução.
+- [ ] Registrar diagnóstico por etapa, PC/RA e último subsistema confirmado.
 - [ ] Apresentar a primeira imagem real do jogo.
 
-**Aceitação:** app apresenta imagem real do jogo, sem tela vazia indefinida. Timeout mostra a última etapa confirmada.
+**Aceitação:** app apresenta a imagem do jogo sem tela vazia indefinida; timeout mostra a última etapa confirmada e o erro correspondente.
 
-## Fase 5 — Unidades vetoriais e gameplay
+## Fase 5 — VU1/IOP AOT e gameplay
 
-- [ ] Implementar VU0 macro necessário ao fluxo do jogo.
-- [ ] Analisar microprogramas VU1 usados pelo jogo e gerar código nativo antecipadamente.
-- [ ] Compilar microprogramas VU1 para ARM64; nenhum interpretador no build final.
-- [ ] Implementar contratos próprios de VIF/GIF/DMA e sincronização com o GS.
-- [ ] Implementar controle físico e overlay de toque.
+- [x] Importar os geradores KIexter/Waffle de VU1 e IOP para staging.
+- [ ] Capturar/obter localmente os microprogramas VU1 e módulos IRX da cópia do usuário, sem publicá-los.
+- [ ] Rodar `vu1n_gen.py` como ferramenta host e compilar os blocos C++ gerados para ARM64.
+- [ ] Garantir cobertura dos microprogramas usados pelo jogo; o caminho final não pode depender do fallback interpretado.
+- [ ] Rodar `iopn_gen.py` sobre os módulos IRX necessários e compilar as unidades geradas para ARM64.
+- [ ] Garantir que os IRX necessários ao jogo não caiam em caminho interpretado no produto final.
+- [ ] Adaptar comandos VIF/GIF/DMA e sincronização do GS.
+- [ ] Adaptar controles físicos e overlay de toque.
 - [ ] Validar movimento, câmera, combate, HUD, partículas e efeitos.
 
-**Aceitação:** menu, novo jogo e primeiro combate reproduzidos em Android ARM64, com execução nativa do código recompilado e sem diferenças críticas de lógica.
+**Aceitação:** menu, novo jogo e primeiro combate reproduzidos em Android ARM64 por código recompilado/AOT, sem interpretadores no caminho normal do jogo.
 
 ## Fase 6 — Áudio, vídeos e saves
 
-- [ ] Implementar saída de áudio usando a API nativa Android AAudio; considerar biblioteca externa somente se houver limitação comprovada.
-- [ ] Ligar SPU2/LIBSD ao mixer.
+- [ ] Reaproveitar o motor de som SPU2/LIBSD do runtime quando for independente do host.
+- [ ] Substituir a saída desktop por adaptador AAudio Android.
 - [ ] Validar efeitos, música e sincronização.
 - [ ] Decodificar e apresentar FMVs.
 - [ ] Implementar cartão de memória virtual.
@@ -104,8 +107,9 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - Um shell APK não é uma build completa do jogo.
 - O teste Vulkan clear/present isolado foi retirado do launcher após encerrar o app no aparelho do mantenedor; não será um bloqueio do projeto.
 - A validação de gráficos acontecerá com o GS real e o jogo em execução.
-- O projeto não importará código de outros ports ou emuladores.
-- O caminho final não usará emulador, interpretador de EE nem interpretador de microprogramas VU1.
-- A execução do jogo será recompilação estática própria; os serviços PS2 serão implementados em C++ nativo específico para o título.
+- Reutilizar seletivamente KIexter/Waffle/PS2Recomp quando isso reduzir trabalho e for necessário ao jogo; documentar cada arquivo, commit e licença.
+- Não importar o runner desktop, o renderer OpenGL/WGL ou a camada de janela/áudio/entrada de PC diretamente para Android.
+- O caminho final não usará emulador, interpretador de EE, interpretador de VU1 ou fallback interpretado dos IRX necessários.
+- O jogo será recompilado estaticamente; os serviços PS2 serão nativos e adaptados para o host Android.
 - Não declarar FPS sem medições reproduzíveis.
 - Usar **[VERIFICADO]**, **[HIPÓTESE]** e **[NÃO TESTADO]** em auditorias.
