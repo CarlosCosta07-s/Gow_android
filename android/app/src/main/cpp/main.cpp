@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -18,6 +19,8 @@
 class PS2Runtime;
 extern "C" PS2Runtime *gowCreatePs2Runtime() noexcept;
 extern "C" void gowDestroyPs2Runtime(PS2Runtime *runtime) noexcept;
+extern "C" bool gowInitializePs2RuntimeCoreHeadless(
+    PS2Runtime *runtime, char *message, size_t capacity) noexcept;
 extern "C" void gowAndroidDiscCloseImage() noexcept;
 
 namespace {
@@ -848,12 +851,23 @@ extern "C" void android_main(android_app* app) {
 
     logMessage(ANDROID_LOG_INFO, "Gow_android native shell started");
 
-    // Construction/destruction only. Do not call initialize(), loadELF() or run()
-    // until Android GS/audio/VFS adapters and private game code are available.
+    // Initialize only the platform-independent EE/IOP/VU core. The Android GS
+    // backend is intentionally null and no Raylib window/audio device is touched.
+    // ELF loading and guest execution remain gated on the Android GS/audio adapters
+    // and private recompilation output.
     PS2Runtime *runtime = gowCreatePs2Runtime();
     if (runtime != nullptr) {
-        logMessage(ANDROID_LOG_INFO,
-            "PS2Runtime constructed; guest execution and desktop host initialization remain disabled");
+        std::array<char, 512> coreMessage{};
+        if (gowInitializePs2RuntimeCoreHeadless(
+                runtime, coreMessage.data(), coreMessage.size())) {
+            __android_log_print(
+                ANDROID_LOG_INFO, kTag,
+                "PS2Runtime core ready: %s", coreMessage.data());
+        } else {
+            __android_log_print(
+                ANDROID_LOG_ERROR, kTag,
+                "PS2Runtime core initialization failed: %s", coreMessage.data());
+        }
     } else {
         logMessage(ANDROID_LOG_ERROR, "PS2Runtime construction failed");
     }

@@ -223,6 +223,37 @@ void gowDestroyPs2Runtime(PS2Runtime *runtime) noexcept {
     delete runtime;
 }
 
+extern "C" __attribute__((visibility("default")))
+bool gowInitializePs2RuntimeCoreHeadless(
+    PS2Runtime *runtime, char *message, size_t capacity) noexcept {
+    if (message != nullptr && capacity != 0u) message[0] = '\0';
+    if (runtime == nullptr) {
+        writeMessage(message, capacity, "PS2Runtime pointer is null.");
+        return false;
+    }
+    try {
+        if (!runtime->initializeCoreHeadless()) {
+            writeMessage(
+                message, capacity,
+                "PS2Runtime could not initialize its Android headless EE/IOP/VU core.");
+            return false;
+        }
+        writeMessage(
+            message, capacity,
+            "OK: PS2 memory + EE/IOP/VU core initialized; GS presentation, audio and guest execution remain disabled.");
+        return true;
+    } catch (const std::exception &exception) {
+        writeMessage(
+            message, capacity,
+            std::string("Android PS2 core initialization failed: ") + exception.what());
+        return false;
+    } catch (...) {
+        writeMessage(message, capacity,
+                     "Unknown Android PS2 core initialization failure.");
+        return false;
+    }
+}
+
 extern "C" bool gowRuntimeValidateIopCdvd(
     const char *privateRoot, const char *bootRelativePath,
     char *message, size_t capacity) noexcept {

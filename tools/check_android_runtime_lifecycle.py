@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Validate the prepared Waffle Android core-only lifecycle contract."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+import sys
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise RuntimeError(message)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--runtime-dir", required=True, type=Path)
+    args = parser.parse_args()
+
+    root = args.runtime_dir.expanduser().resolve()
+    header_path = root / "ps2xRuntime/include/ps2_runtime.h"
+    runtime_path = root / "ps2xRuntime/src/lib/ps2_runtime.cpp"
+    gs_path = root / "ps2xRuntime/src/lib/gs/gs_frontend.cpp"
+
+    for path in (header_path, runtime_path, gs_path):
+        require(path.is_file(), f"Prepared runtime file is missing: {path}")
+
+    header = header_path.read_text(encoding="utf-8")
+    runtime = runtime_path.read_text(encoding="utf-8")
+    gs = gs_path.read_text(encoding="utf-8")
+
+    require(
+        "bool initializeCoreHeadless();" in header
+        and "bool m_coreInitialized = false;" in header,
+        "PS2Runtime headless core API/state was not prepared.",
+    )
+
+    start = runtime.find("bool PS2Runtime::initializeCoreHeadless()")
+    end = runtime.find("bool PS2Runtime::initialize(const char *title)", start)
+    require(start >= 0 and end > start, "Headless core initializer was not prepared.")
+    core_body = runtime[start:end]
+
+    for required in ("m_memory.initialize()", "syncCoreSubsystems()", "m_coreInitialized = true"):
+        require(required in core_body, f"Headless core initializer is missing: {required}")
+
+    for forbidden in (
+        "InitWindow(",
+        "InitAudioDevice(",
+        "captureHostContext(",
+        "startSpu2Audio(",
+        "renderFrame(",
+    ):
+        require(forbidden not in core_body, f"Headless core initializer touches host API: {forbidden}")
+
+    constructor_start = gs.find("GS::GS()")
+    constructor_end = gs.find("void GS::init(", constructor_start)
+    require(
+        constructor_start >= 0 and constructor_end > constructor_start,
+        "GS constructor was not found in the prepared source.",
+    )
+    constructor = gs[constructor_start:constructor_end]
+    require(
+        "#if defined(PS2X_ANDROID_LIFECYCLE_MANAGED)" in constructor
+        and "std::make_unique<GSNullBackend>()" in constructor
+        and "GSThreadedBackend::MakeDefault()" in constructor,
+        "Android GS null backend was not selected conditionally.",
+    )
+
+    initialize_guard = runtime[end:runtime.find("void PS2Runtime::shutdownHostGraphics()", end)]
+    require(
+        "PS2X_ANDROID_LIFECYCLE_MANAGED" in initialize_guard
+        and "desktop host path is disabled on Android" in initialize_guard,
+        "Desktop Raylib initialization is not blocked in the Android profile.",
+    )
+
+    run_start = runtime.find("void PS2Runtime::run()")
+    run_end = runtime.find("\n}", run_start)
+    require(run_start >= 0 and run_end > run_start, "PS2Runtime::run was not found.")
+    run_prefix = runtime[run_start:run_start + 900]
+    require(
+        "PS2X_ANDROID_LIFECYCLE_MANAGED" in run_prefix
+        and "guest code" in run_prefix,
+        "Guest execution is not guarded in the Android profile.",
+    )
+
+    print("Verified: Android PS2 core initialization is headless, uses a null GS backend,")
+    print("and cannot enter Raylib desktop initialization or guest execution.")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (OSError, RuntimeError) as error:
+        print(f"Android runtime lifecycle check failed: {error}", file=sys.stderr)
+        raise SystemExit(1)

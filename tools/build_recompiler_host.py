@@ -477,6 +477,23 @@ def main() -> int:
         "select NEON FPCR/FPSR state support for the threaded GS worker",
     )
 
+    runtime_header = recompiler_source / "ps2xRuntime/include/ps2_runtime.h"
+    replace_exactly_once(
+        runtime_header,
+        "    bool initialize(const char *title = \"PS2 Game\");\n",
+        "    bool initialize(const char *title = \"PS2 Game\");\n"
+        "    // Android core-only setup: no Raylib window/audio or guest execution.\n"
+        "    bool initializeCoreHeadless();\n",
+        "expose a Raylib-free Android core initialization stage",
+    )
+    replace_exactly_once(
+        runtime_header,
+        "    bool m_hostWindowOwned = false;\n",
+        "    bool m_hostWindowOwned = false;\n"
+        "    bool m_coreInitialized = false;\n",
+        "track core initialization independently from host graphics",
+    )
+
     runtime_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_runtime.cpp"
     replace_exactly_once(
         runtime_cpp,
@@ -490,14 +507,16 @@ def main() -> int:
     )
     replace_exactly_once(
         runtime_cpp,
-        "#else\n"
-        "        if (IsAudioDeviceReady())\n"
-        "        {\n"
-        "            CloseAudioDevice();\n"
-        "            m_audioBackend.setAudioReady(false);\n"
-        "        }\n"
-        "#endif\n"
-        "        if (m_debugUiInitialized && m_debugUiShutdownCallback)",
+        "#if !defined(PLATFORM_VITA)\n"
+        "        stopSpu2Audio(); // GOW-Port: antes de destruir el IOP que produce las muestras\n"
+        "#endif\n",
+        "#if !defined(PLATFORM_VITA) && !defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\n"
+        "        stopSpu2Audio(); // GOW-Port: antes de destruir el IOP que produce las muestras\n"
+        "#endif\n",
+        "skip Raylib SPU2 stream teardown when Android never initialized desktop audio",
+    )
+    replace_exactly_once(
+        runtime_cpp,
         "#else\n"
         "#if !defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\n"
         "        if (IsAudioDeviceReady())\n"
@@ -508,7 +527,38 @@ def main() -> int:
         "#endif\n"
         "#endif\n"
         "        if (m_debugUiInitialized && m_debugUiShutdownCallback)",
-        "avoid querying the uninitialized Raylib audio device in the Android-managed lifecycle",
+        "#else\n"
+        "#if !defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\n"
+        "        if (IsAudioDeviceReady())\n"
+        "        {\n"
+        "            CloseAudioDevice();\n"
+        "            m_audioBackend.setAudioReady(false);\n"
+        "        }\n"
+        "#else\n"
+        "        m_audioBackend.stopAll();\n"
+        "        m_audioBackend.setAudioReady(false);\n"
+        "#endif\n"
+        "#endif\n"
+        "        if (m_debugUiInitialized && m_debugUiShutdownCallback)",
+        "reset the core audio backend without calling Raylib during Android teardown",
+    )
+
+    # Android has no Raylib host window yet. Keep the PS2 core's default GS
+    # backend inert until the GameActivity-owned Vulkan GS adapter is attached.
+    gs_frontend = recompiler_source / "ps2xRuntime/src/lib/gs/gs_frontend.cpp"
+    replace_exactly_once(
+        gs_frontend,
+        "GS::GS()\n"
+        "    : m_backend(GSThreadedBackend::MakeDefault())\n"
+        "{",
+        "GS::GS()\n"
+        "#if defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\n"
+        "    : m_backend(std::make_unique<GSNullBackend>())\n"
+        "#else\n"
+        "    : m_backend(GSThreadedBackend::MakeDefault())\n"
+        "#endif\n"
+        "{",
+        "use a no-op GS raster backend during Android core-only initialization",
     )
 
     # Android reads DualShock 2 state from the app-owned GameActivity bridge;
@@ -895,6 +945,87 @@ def main() -> int:
             raise RuntimeError(f"Expected one PCSX2 else branch before {fallback}.")
         runtime_text = runtime_text.replace(old, new, 1)
     runtime_cpp.write_text(runtime_text, encoding="utf-8")
+    replace_exactly_once(
+        runtime_cpp,
+        "bool PS2Runtime::initialize(const char *title)\n{",
+        "bool PS2Runtime::initializeCoreHeadless()\n"
+        "{\n"
+        "#if !defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\n"
+        "    std::cerr << \"Headless core initialization is only available in the Android-managed build profile.\" << std::endl;\n"
+        "    return false;\n"
+        "#else\n"
+        "    if (m_coreInitialized)\n"
+        "        return true;\n"
+        "    try\n"
+        "    {\n"
+        "        if (!m_memory.initialize())\n"
+        "        {\n"
+        "            std::cerr << \"Failed to initialize PS2 memory for Android core.\" << std::endl;\n"
+        "            return false;\n"
+        "        }\n"
+        "        if (!syncCoreSubsystems())\n"
+        "        {\n"
+        "            m_memory.stopGsWorker();\n"
+        "            std::cerr << \"Failed to bind PS2 EE/IOP/VU core subsystems.\" << std::endl;\n"
+        "            return false;\n"
+        "        }\n"
+        "        m_coreInitialized = true;\n"
+        "        std::cerr << \"[PS2Runtime] Android headless core initialized; GS presentation, audio, ELF loading and guest execution remain separate stages.\" << std::endl;\n"
+        "        return true;\n"
+        "    }\n"
+        "    catch (const std::exception &e)\n"
+        "    {\n"
+        "        std::cerr << \"Failed to initialize Android PS2 core: \" << e.what() << std::endl;\n"
+        "    }\n"
+        "    catch (...)\n"
+        "    {\n"
+        "        std::cerr << \"Failed to initialize Android PS2 core: unknown exception\" << std::endl;\n"
+        "    }\n"
+        "    m_memory.stopGsWorker();\n"
+        "    return false;\n"
+        "#endif\n"
+        "}\n\n"
+        "bool PS2Runtime::initialize(const char *title)\n{\n"
+        "#if defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\n"
+        "    (void)title;\n"
+        "    std::cerr << \"PS2Runtime::initialize() desktop host path is disabled on Android; use initializeCoreHeadless() until Android GS/audio adapters are attached.\" << std::endl;\n"
+        "    return false;\n"
+        "#endif\n",
+        "separate Android core initialization from desktop Raylib host initialization",
+    )
+    replace_exactly_once(
+        runtime_cpp,
+        "        m_hostPresentation->restoreHostContext();\n",
+        "        m_coreInitialized = true;\n"
+        "        m_hostPresentation->restoreHostContext();\n",
+        "mark the desktop core initialized after the host context binds",
+    )
+    replace_exactly_once(
+        runtime_cpp,
+        "bool PS2Runtime::loadELF(const std::string &elfPath)\n{\n",
+        "bool PS2Runtime::loadELF(const std::string &elfPath)\n{\n"
+        "    if (!m_coreInitialized)\n"
+        "    {\n"
+        "        std::cerr << \"Cannot load the PS2 ELF before core initialization.\" << std::endl;\n"
+        "        return false;\n"
+        "    }\n",
+        "require initialized PS2 core before loading the guest ELF",
+    )
+    replace_exactly_once(
+        runtime_cpp,
+        "void PS2Runtime::run()\n{\n",
+        "void PS2Runtime::run()\n{\n"
+        "#if defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\n"
+        "    std::cerr << \"PS2Runtime::run() is blocked until Android GS/audio presentation and private AOT game code are ready.\" << std::endl;\n"
+        "    return;\n"
+        "#endif\n"
+        "    if (!m_coreInitialized)\n"
+        "    {\n"
+        "        std::cerr << \"Cannot execute guest code before PS2 core initialization.\" << std::endl;\n"
+        "        return;\n"
+        "    }\n",
+        "block Android guest execution until presentation and AOT prerequisites are met",
+    )
     replace_exactly_once(
         runtime_cpp,
         "static bool gowUsePcsx2Vu1()\n{",

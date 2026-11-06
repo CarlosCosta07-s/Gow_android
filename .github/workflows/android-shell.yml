@@ -8,6 +8,7 @@ on:
       - "android/**"
       - "port/kiexter/vu1/ps2_vu1_neon_compat.h"
       - "tools/build_recompiler_host.py"
+      - "tools/check_android_runtime_lifecycle.py"
       - "tools/ps2_vfs_cdroot_smoke.cpp"
       - "tools/run_ps2_vfs_cdroot_smoke.py"
       - "android/app/src/main/cpp/cdroot_vfs.cpp"
@@ -89,6 +90,12 @@ jobs:
             --prepare-android-runtime \
             --work-dir "$RUNNER_TEMP/gowport-android-runtime" \
             --export-runtime-dir "$GITHUB_WORKSPACE/android/app/build/gow-runtime-source"
+
+      - name: Check prepared Android PS2 runtime lifecycle contract
+        shell: bash
+        run: |
+          python tools/check_android_runtime_lifecycle.py \
+            --runtime-dir "$GITHUB_WORKSPACE/android/app/build/gow-runtime-source"
 
       - name: Test native Android input, disc readers and Waffle sector contract on host
         shell: bash
