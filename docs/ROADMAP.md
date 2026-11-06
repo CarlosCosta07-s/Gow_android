@@ -74,12 +74,13 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [ ] Manter `IoPaths.cdRoot` como o caminho físico da instalação privada; encaminhar `cdrom0:` no PS2 VFS antes de normalizar caminhos virtuais (correção enviada, aguardando CI).
 - [x] Implementar descoberta da segunda camada do DVD e enumeração recursiva de diretórios/extents nas duas camadas; fixtures ISO sintéticas cobrem extents em ambas as camadas.
 - [x] Implementar o gerador `.disc_layout`/`.disc_meta` com LSNs originais, medição de espaço e publicação do par com `.disc_layout` por último; testes sintéticos isolados aprovados no run `42218565639`.
-- [ ] Integrar o gerador ao instalador completo `installIsoDisc()`: extrair todos os arquivos ISO9660 para staging, criar os metadados antes da publicação atômica e cancelar com limpeza segura. **Código adicionado; CI pendente nesta revisão.**
-- [ ] Validar o produto do instalador com a implementação real de `ps2x::iop::DiscSource` compilada da árvore Waffle preparada; o novo teste sintético cobre `openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()`. **CI pendente nesta revisão.**
+- [x] Integrar o gerador ao instalador completo `installIsoDisc()`: extrair todos os arquivos ISO9660 para staging, criar os metadados antes da publicação atômica e cancelar com limpeza segura (CI `42225710064`).
+- [x] Validar o produto do instalador com a implementação real de `ps2x::iop::DiscSource` compilada da árvore Waffle: `openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` em ISO sintética de dupla camada (CI `42225710064`).
+- [x] Configurar e verificar o caminho estático `PS2Runtime::IoPaths` para a instalação privada, sem iniciar o runtime; a CI compila a ponte Android ARM64 (run `42225710064`).
 - [ ] Disponibilizar os módulos IRX no layout `IOP_MOD/` esperado pelo jogo, sem enviar módulos do disco para Git/CI.
-- [ ] Testar `DiscSource::openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` com ISO sintética de dupla camada.
+- [x] Testar `DiscSource::openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` com ISO sintética de dupla camada e validar a checagem JNI pós-instalação (CI `42225710064`).
 - [ ] Remover o uso residual do provider ISO transitório `gowdisc:/` do caminho normal de gameplay após validar a instalação local completa; não manter um FD da ISO aberto durante a partida.
-- [ ] Testar instalação, cancelamento, falta de espaço, reparo, integridade e inicialização com ISO do usuário em aparelho Android.
+- [ ] Testar instalação, cancelamento, falta de espaço, reparo, integridade e validação `IoPaths`/DiscSource com ISO do usuário em aparelho Android.
 - [ ] Ligar código recompilado, overrides de God of War e serviços mínimos de boot.
 - [ ] Resolver CD/DVD, IRX, SIF, DMA e cadeia inicial de execução.
 - [ ] Registrar diagnóstico por etapa, PC/RA e último subsistema confirmado.

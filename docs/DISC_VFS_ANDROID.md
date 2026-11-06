@@ -98,12 +98,12 @@ A auditoria do contrato de referência e o formato dos metadados estão em [DISC
 
 ## 6. Próximas etapas
 
-1. Concluir a CI do instalador completo e corrigir falhas de compilação/contrato encontradas.
-2. Validar a instalação completa em aparelho com a ISO do usuário, sem compartilhar a imagem ou os dados extraídos.
-3. Definir um manifesto de integridade persistente e recuperação/reinstalação por serial/revisão.
-4. Disponibilizar os IRX no layout esperado e instrumentar os caminhos de arquivo e CDVD usados durante o boot.
-5. Conectar `DiscSource::openExtracted()` ao IOP/runtime real; o teste sintético de contrato não substitui essa integração.
-6. Integrar o lifecycle do runtime à GameActivity, gerar/compilar o C++ privado do ELF e avançar na cadeia de boot.
+1. Validar em aparelho a instalação e as checagens `IoPaths`/DiscSource com a ISO do usuário, sem compartilhar a imagem ou os dados extraídos.
+2. Adicionar verificação de integridade persistente e recuperação/reinstalação por serial/revisão.
+3. Disponibilizar os IRX no layout esperado e instrumentar os caminhos de arquivo e CDVD usados durante o boot.
+4. Exercitar o dispatcher CDVD do IOP e a chamada real `sceCdRead` com fixtures sintéticas antes de ligar o jogo.
+5. Adaptar a inicialização do PS2Runtime para GameActivity, separando GS, áudio e serviços que hoje dependem de Raylib.
+6. Gerar/compilar o C++ privado do ELF e ligar `loadELF()` ao runner Android.
 7. Integrar GS/Vulkan e apresentar a primeira imagem real.
 
 ## 6. Privacidade e integridade
