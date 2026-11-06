@@ -1,4 +1,5 @@
 #include "android_pad_bridge.h"
+#include "dualshock2_packet.h"
 
 #include <algorithm>
 #include <atomic>
@@ -56,21 +57,6 @@ float readAxis(const GameActivityMotionEvent *event, int32_t axis) noexcept {
         -1.0f, 1.0f);
 }
 
-float applyAxisConfig(float value, bool invert) noexcept {
-    const float dz = std::clamp(g_deadzone.load(std::memory_order_relaxed), 0.0f, 0.8f);
-    const float gain = std::clamp(g_sensitivity.load(std::memory_order_relaxed), 0.1f, 2.0f);
-    value = std::clamp(value, -1.0f, 1.0f);
-    const float magnitude = std::fabs(value);
-    if (magnitude <= dz) value = 0.0f;
-    else value = std::copysign((magnitude - dz) / (1.0f - dz), value);
-    value = std::clamp(value * gain, -1.0f, 1.0f);
-    return invert ? -value : value;
-}
-
-uint8_t axisToByte(float value, bool invert) noexcept {
-    const int converted = static_cast<int>(std::lround(128.0f + applyAxisConfig(value, invert) * 127.0f));
-    return static_cast<uint8_t>(std::clamp(converted, 1, 255));
-}
 } // namespace
 
 extern "C" void gowAndroidPadEnableGamepadAxes() noexcept {
@@ -184,23 +170,27 @@ extern "C" void gowAndroidPadConfigure(float dz, float gain, bool ilx, bool ily,
 }
 
 extern "C" bool gowAndroidPadReadState(int port, int slot, uint8_t *data, size_t size) noexcept {
-    if (!data || size < 32u || port != 0 || slot != 0) return false;
-    std::memset(data, 0, size);
-    const uint16_t pressed = static_cast<uint16_t>(
-        g_physicalButtons.load(std::memory_order_relaxed) |
-        g_touchButtons.load(std::memory_order_relaxed));
-    const uint16_t activeLow = static_cast<uint16_t>(~pressed);
-    data[0] = 0x01u;
-    data[1] = 0x73u;
-    data[2] = static_cast<uint8_t>(activeLow & 0xFFu);
-    data[3] = static_cast<uint8_t>((activeLow >> 8u) & 0xFFu);
-    const float lx = std::clamp(g_leftX.load(std::memory_order_relaxed) + g_touchLeftX.load(std::memory_order_relaxed), -1.0f, 1.0f);
-    const float ly = std::clamp(g_leftY.load(std::memory_order_relaxed) + g_touchLeftY.load(std::memory_order_relaxed), -1.0f, 1.0f);
-    const float rx = std::clamp(g_rightX.load(std::memory_order_relaxed) + g_touchRightX.load(std::memory_order_relaxed), -1.0f, 1.0f);
-    const float ry = std::clamp(g_rightY.load(std::memory_order_relaxed) + g_touchRightY.load(std::memory_order_relaxed), -1.0f, 1.0f);
-    data[4] = axisToByte(rx, g_invertRightX.load(std::memory_order_relaxed));
-    data[5] = axisToByte(ry, g_invertRightY.load(std::memory_order_relaxed));
-    data[6] = axisToByte(lx, g_invertLeftX.load(std::memory_order_relaxed));
-    data[7] = axisToByte(ly, g_invertLeftY.load(std::memory_order_relaxed));
-    return true;
+    const gow::android_input::DualShock2State state{
+        static_cast<uint16_t>(
+            g_physicalButtons.load(std::memory_order_relaxed) |
+            g_touchButtons.load(std::memory_order_relaxed)),
+        std::clamp(g_leftX.load(std::memory_order_relaxed) +
+                       g_touchLeftX.load(std::memory_order_relaxed), -1.0f, 1.0f),
+        std::clamp(g_leftY.load(std::memory_order_relaxed) +
+                       g_touchLeftY.load(std::memory_order_relaxed), -1.0f, 1.0f),
+        std::clamp(g_rightX.load(std::memory_order_relaxed) +
+                       g_touchRightX.load(std::memory_order_relaxed), -1.0f, 1.0f),
+        std::clamp(g_rightY.load(std::memory_order_relaxed) +
+                       g_touchRightY.load(std::memory_order_relaxed), -1.0f, 1.0f)
+    };
+    const gow::android_input::DualShock2Config config{
+        g_deadzone.load(std::memory_order_relaxed),
+        g_sensitivity.load(std::memory_order_relaxed),
+        g_invertLeftX.load(std::memory_order_relaxed),
+        g_invertLeftY.load(std::memory_order_relaxed),
+        g_invertRightX.load(std::memory_order_relaxed),
+        g_invertRightY.load(std::memory_order_relaxed)
+    };
+    return gow::android_input::encodeDualShock2Packet(
+        port, slot, state, config, data, size);
 }
