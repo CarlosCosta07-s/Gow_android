@@ -26,9 +26,9 @@ GSPrimitiveBatch makeBatch(GSPrimType type, uint8_t count) {
     batch.state.prim.fge = true;
     batch.state.prim.tme = true;
     batch.state.prim.iip = true;
-    batch.vertices[0] = {16.0f, 32.0f, 0x00FFFFFFu, 255, 0, 0, 128, 1.0f, 0.25f, 0.5f, 16u, 32u, 64u};
-    batch.vertices[1] = {176.0f, 32.0f, 0x007FFFFFu, 0, 255, 0, 255, 1.0f, 0.75f, 1.0f, 80u, 32u, 128u};
-    batch.vertices[2] = {16.0f, 192.0f, 0x003FFFFFu, 0, 0, 255, 255, 1.0f, 0.25f, 0.75f, 16u, 96u, 192u};
+    batch.vertices[0] = {1.0f, 2.0f, 0x00FFFFFFu, 255, 0, 0, 128, 1.0f, 0.25f, 0.5f, 16u, 32u, 64u};
+    batch.vertices[1] = {161.0f, 162.0f, 0x007FFFFFu, 0, 255, 0, 255, 1.0f, 0.75f, 1.0f, 80u, 32u, 128u};
+    batch.vertices[2] = {1.0f, 162.0f, 0x003FFFFFu, 0, 0, 255, 255, 1.0f, 0.25f, 0.75f, 16u, 96u, 192u};
     return batch;
 }
 
