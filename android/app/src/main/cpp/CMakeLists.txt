@@ -21,6 +21,7 @@ add_library(android-game SHARED
     main.cpp
     android_pad_bridge.cpp
     iso9660_reader.cpp
+    android_disc_bridge.cpp
     vu1_neon_compat_smoke.cpp
     # Satisfies Raylib's renamed, dormant NativeActivity wrapper. GameActivity
     # remains the only Android lifecycle entry point used by FORGE.
