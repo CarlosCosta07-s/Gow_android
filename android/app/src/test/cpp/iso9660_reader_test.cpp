@@ -130,6 +130,45 @@ int main() {
         return fail("ISO descriptor size/open state mismatch");
     }
 
+    std::vector<gow::disc::IsoDirectoryEntry> rootEntries;
+    if (!reader.listDirectory("/", rootEntries, &error)) {
+        std::fclose(file);
+        return fail("root ISO directory enumeration failed: " + error);
+    }
+    if (rootEntries.size() != 2u ||
+        rootEntries[0].name != "DATA" || !rootEntries[0].isDirectory ||
+        rootEntries[1].name != "SYSTEM.CNF" || rootEntries[1].isDirectory) {
+        std::fclose(file);
+        return fail("root ISO directory entries or ordering mismatch");
+    }
+
+    std::vector<gow::disc::IsoDirectoryEntry> dataEntries;
+    if (!reader.listDirectory("data/", dataEntries, &error)) {
+        std::fclose(file);
+        return fail("nested ISO directory enumeration failed: " + error);
+    }
+    if (dataEntries.size() != 1u ||
+        dataEntries[0].name != "TEST.BIN" ||
+        dataEntries[0].isDirectory ||
+        dataEntries[0].multiExtent ||
+        dataEntries[0].file.byteOffset != 22u * kSector ||
+        dataEntries[0].file.size != 2050u) {
+        std::fclose(file);
+        return fail("nested ISO directory entry metadata mismatch");
+    }
+
+    std::vector<gow::disc::IsoDirectoryEntry> invalidEntries;
+    if (reader.listDirectory("../DATA", invalidEntries, &error) ||
+        !invalidEntries.empty()) {
+        std::fclose(file);
+        return fail("directory enumeration accepted a traversal path");
+    }
+    if (reader.listDirectory("DATA/TEST.BIN", invalidEntries, &error) ||
+        !invalidEntries.empty()) {
+        std::fclose(file);
+        return fail("directory enumeration accepted a regular file path");
+    }
+
     IsoFile found{};
     if (!reader.lookupFile("/data/test.bin", found, &error)) {
         std::fclose(file);
