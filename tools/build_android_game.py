@@ -15,11 +15,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from build_recompiler_host import validate_ps2_elf
 
 
 @dataclass(frozen=True)
@@ -30,6 +33,14 @@ class BuildPlan:
     recompiler_command: tuple[str, ...]
     gradle_command: tuple[str, ...]
     apk_path: Path
+
+
+@dataclass(frozen=True)
+class GeneratedOutputSummary:
+    translation_units: int
+    table_slots: int
+    registered_functions: int
+    entry_point: int
 
 
 def _is_within(path: Path, parent: Path) -> bool:
@@ -134,7 +145,11 @@ def _require_ignored_generated_dir(root: Path, generated_dir: Path) -> None:
         )
 
 
-def _verify_generated_outputs(generated_dir: Path) -> int:
+def _verify_generated_outputs(
+    generated_dir: Path,
+    expected_entry_point: int,
+) -> GeneratedOutputSummary:
+    """Reject stale/empty AOT output before spending time compiling the APK."""
     required = (
         "register_functions.cpp",
         "ps2_recompiled_functions.h",
@@ -151,7 +166,98 @@ def _verify_generated_outputs(generated_dir: Path) -> int:
             f"Missing: {', '.join(missing) or 'none'}; "
             f"function translation units: {len(function_cpp)}."
         )
-    return len(function_cpp) + 1
+
+    registration_source = (generated_dir / "register_functions.cpp").read_text(
+        encoding="utf-8"
+    )
+
+    def read_single(pattern: str, description: str, *, base: int = 10) -> int:
+        matches = re.findall(pattern, registration_source)
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"Generated AOT registration must contain exactly one {description}; "
+                f"found {len(matches)}."
+            )
+        return int(matches[0], base)
+
+    table_base = read_single(
+        r"g_ps2RecompiledFunctionTableBase\\s*=\\s*0x([0-9a-fA-F]+)u\\s*;",
+        "function-table base",
+        base=16,
+    )
+    table_end = read_single(
+        r"g_ps2RecompiledFunctionTableEnd\\s*=\\s*0x([0-9a-fA-F]+)u\\s*;",
+        "function-table end",
+        base=16,
+    )
+    table_slots = read_single(
+        r"g_ps2RecompiledFunctionTableSlotCount\\s*=\\s*(\\d+)u\\s*;",
+        "function-table slot count",
+    )
+
+    if table_slots == 0:
+        raise RuntimeError(
+            "Generated AOT function table is empty (zero slots). "
+            "The Android APK must not be built from an empty registration table."
+        )
+    if table_end <= table_base or (table_end - table_base) % 4 != 0:
+        raise RuntimeError(
+            "Generated AOT function-table address range is invalid or unaligned."
+        )
+    if (table_end - table_base) // 4 != table_slots:
+        raise RuntimeError(
+            "Generated AOT function-table slot count does not match its address range."
+        )
+
+    assignments = re.findall(
+        r"(?m)^\\s*g_ps2RecompiledFunctionTable\\[(\\d+)\\]\\s*=\\s*"
+        r"([A-Za-z_][A-Za-z0-9_:]*)\\s*;\\s*//\\s*0x([0-9a-fA-F]+)\\s*$",
+        registration_source,
+    )
+    if not assignments:
+        raise RuntimeError(
+            "Generated AOT table declares slots but registers no native functions."
+        )
+
+    registered_addresses: set[int] = set()
+    registered_slots: set[int] = set()
+    for slot_text, function_name, address_text in assignments:
+        del function_name  # The non-empty identifier is validated by the regex.
+        slot = int(slot_text, 10)
+        address = int(address_text, 16)
+        if address & 3:
+            raise RuntimeError(
+                f"Generated AOT function address 0x{address:08X} is not 4-byte aligned."
+            )
+        if address < table_base or address >= table_end:
+            raise RuntimeError(
+                f"Generated AOT function 0x{address:08X} is outside the declared table range."
+            )
+        expected_slot = (address - table_base) // 4
+        if slot != expected_slot or slot >= table_slots:
+            raise RuntimeError(
+                f"Generated AOT table maps 0x{address:08X} to slot {slot}, "
+                f"but slot {expected_slot} is required."
+            )
+        if address in registered_addresses or slot in registered_slots:
+            raise RuntimeError(
+                f"Generated AOT table contains a duplicate registration for 0x{address:08X}."
+            )
+        registered_addresses.add(address)
+        registered_slots.add(slot)
+
+    if expected_entry_point not in registered_addresses:
+        raise RuntimeError(
+            "Generated AOT table does not cover the ELF entry point "
+            f"0x{expected_entry_point:08X}. The runtime would refuse to start guest code."
+        )
+
+    return GeneratedOutputSummary(
+        translation_units=len(function_cpp) + 1,
+        table_slots=table_slots,
+        registered_functions=len(assignments),
+        entry_point=expected_entry_point,
+    )
 
 
 def main() -> int:
@@ -187,8 +293,10 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     plan = create_build_plan(root, Path(args.elf), Path(args.work_dir))
     _require_ignored_generated_dir(root, plan.generated_dir)
+    elf_info = validate_ps2_elf(plan.elf)
 
     print(f"Private ELF: {plan.elf}")
+    print(f"Validated ELF entry point: 0x{elf_info.entry_point:08X}")
     print(f"Private workspace: {plan.work_dir}")
     print(f"Git-ignored C++ staging: {plan.generated_dir}")
     print("No ELF, generated C++, IRX, ISO, save or other game-derived data is uploaded.")
@@ -201,8 +309,17 @@ def main() -> int:
         return 0
 
     _run(plan.recompiler_command, root)
-    source_count = _verify_generated_outputs(plan.generated_dir)
-    print(f"Verified private generated output: {source_count} C++ translation units.")
+    generated = _verify_generated_outputs(
+        plan.generated_dir,
+        expected_entry_point=elf_info.entry_point,
+    )
+    print(
+        "Verified private AOT output: "
+        f"{generated.translation_units} C++ translation units; "
+        f"{generated.registered_functions} registered functions; "
+        f"{generated.table_slots} table slots; "
+        f"ELF entry 0x{generated.entry_point:08X} is covered."
+    )
 
     if args.generate_only:
         print("Native C++ generated and staged. Android APK build was intentionally skipped.")
