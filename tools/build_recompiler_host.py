@@ -17,6 +17,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+def cmake_parallel_jobs() -> str:
+    raw = os.environ.get("GOW_BUILD_JOBS", "1").strip()
+    try:
+        jobs = int(raw)
+    except ValueError as error:
+        raise ValueError("GOW_BUILD_JOBS must be an integer between 1 and 16.") from error
+    if jobs < 1 or jobs > 16:
+        raise ValueError("GOW_BUILD_JOBS must be an integer between 1 and 16.")
+    return str(jobs)
+
 PS2RECOMP_URL = "https://github.com/ran-j/PS2Recomp.git"
 PS2RECOMP_COMMIT = "c5a9d02573410a2085a4b4b831b0b68ba3515440"
 KIEXTER_URL = "https://github.com/KIexster/god-of-war-recomp.git"
@@ -227,6 +237,11 @@ def main() -> int:
         help="copy generated game .cpp/.h files to an ignored android/app/build directory for NDK compilation",
     )
     args = parser.parse_args()
+    try:
+        build_jobs = cmake_parallel_jobs()
+    except ValueError as error:
+        parser.error(str(error))
+    print(f"CMake build parallelism: {build_jobs} job(s) (GOW_BUILD_JOBS)")
 
     repo_root = Path(__file__).resolve().parents[1]
     elf: Path | None = None
@@ -1502,7 +1517,7 @@ def main() -> int:
         # runner is intentionally not built or linked into FORGE/GameActivity.
         run([
             cmake, "--build", str(android_build_dir),
-            "--target", "ps2_runtime", "--parallel",
+            "--target", "ps2_runtime", "--parallel", build_jobs,
         ])
 
         android_compile_db = android_build_dir / "compile_commands.json"
@@ -1559,7 +1574,7 @@ def main() -> int:
     if generator:
         configure.extend(["-G", "Ninja"])
     run(configure)
-    run([cmake, "--build", str(build_dir), "--target", "ps2_recomp", "--parallel"])
+    run([cmake, "--build", str(build_dir), "--target", "ps2_recomp", "--parallel", build_jobs])
 
     # Compile the IOP core with strict AOT-only dispatch enabled. This validates the
     # refusal path on the host without requiring or generating any game modules.
@@ -1575,7 +1590,7 @@ def main() -> int:
         "-DPS2X_IOP_NATIVE_ONLY=ON",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
     ])
-    run([cmake, "--build", str(iop_build_dir), "--target", "ps2_iop", "--parallel"])
+    run([cmake, "--build", str(iop_build_dir), "--target", "ps2_iop", "--parallel", build_jobs])
     compile_database = iop_build_dir / "compile_commands.json"
     if not compile_database.is_file():
         raise RuntimeError("CMake did not emit compile_commands.json for the strict IOP target.")
@@ -1615,7 +1630,7 @@ def main() -> int:
     if generator:
         vu_configure.extend(["-G", "Ninja"])
     run(vu_configure)
-    run([cmake, "--build", str(vu_build_dir), "--target", "ps2_runtime", "--parallel"])
+    run([cmake, "--build", str(vu_build_dir), "--target", "ps2_runtime", "--parallel", build_jobs])
     vu_compile_db = vu_build_dir / "compile_commands.json"
     if not vu_compile_db.is_file():
         raise RuntimeError("CMake did not emit the strict VU1 compile database.")
