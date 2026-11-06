@@ -256,6 +256,48 @@ int main() {
                 emptyPixel[2] == 0u,
                 "CRTC frame contains unexpected color outside the rasterized primitives.");
 
+        // PMODE must compose circuit 1 over circuit 2 using source alpha x2.
+        backend.WriteVram(GS_PSM_CT32, 0u, 1u, 40u, 20u, 0x400000FFu);
+        backend.WriteVram(GS_PSM_CT32, 32u, 1u, 40u, 20u, 0xFFFF0000u);
+        GSPresentationRequest dualCircuit{};
+        dualCircuit.pmode = 3u;
+        dualCircuit.dispfb1 = presentation.dispfb1;
+        dualCircuit.display1 = presentation.display1;
+        dualCircuit.dispfb2 = (32ull) | (1ull << 9u) |
+            (static_cast<uint64_t>(GS_PSM_CT32) << 15u);
+        dualCircuit.display2 = presentation.display1;
+        const PresentationFrame blended = backend.Present(dualCircuit);
+        const auto pixelAtFrame = [](const PresentationFrame &source,
+                                     uint32_t x, uint32_t y) {
+            const size_t offset = (static_cast<size_t>(y) * 640u + x) * 4u;
+            return std::array<uint8_t, 4>{
+                source.pixels[offset + 0u], source.pixels[offset + 1u],
+                source.pixels[offset + 2u], source.pixels[offset + 3u]};
+        };
+        const auto blendedPixel = pixelAtFrame(blended, 40u, 20u);
+        require(blendedPixel[0] >= 127u && blendedPixel[0] <= 129u &&
+                blendedPixel[1] == 0u &&
+                blendedPixel[2] >= 126u && blendedPixel[2] <= 128u,
+                "PMODE did not blend circuit 1 over circuit 2 using alpha x2.");
+
+        // MMOD selects fixed ALP instead of circuit 1's own alpha.
+        dualCircuit.pmode = 3u | (1ull << 5u) | (64ull << 8u);
+        const PresentationFrame fixedBlend = backend.Present(dualCircuit);
+        const auto fixedPixel = pixelAtFrame(fixedBlend, 40u, 20u);
+        require(fixedPixel[0] >= 63u && fixedPixel[0] <= 65u &&
+                fixedPixel[2] >= 190u && fixedPixel[2] <= 192u,
+                "PMODE MMOD did not use the fixed ALP blend factor.");
+
+        // SLBG uses BGCOLOR as circuit 2's base before circuit 1 blending.
+        dualCircuit.pmode = 3u | (1ull << 7u);
+        dualCircuit.bgcolor = 0x0000FF00u;
+        const PresentationFrame backgroundBlend = backend.Present(dualCircuit);
+        const auto backgroundPixel = pixelAtFrame(backgroundBlend, 40u, 20u);
+        require(backgroundPixel[0] >= 127u && backgroundPixel[0] <= 129u &&
+                backgroundPixel[1] >= 126u && backgroundPixel[1] <= 128u &&
+                backgroundPixel[2] == 0u,
+                "PMODE SLBG did not blend circuit 1 over BGCOLOR.");
+
         std::cout << "Android GS VRAM adapter tests passed.\n";
         return 0;
     } catch (const std::exception &exception) {
