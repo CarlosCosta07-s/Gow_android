@@ -42,9 +42,19 @@ A interface FORGE e o seletor SAF/ISO9660 estão implementados. O parser de `SYS
 
 ## Camadas futuras do port
 
-### Leitor de disco Android — estratégia híbrida
+## Otimização para aparelhos modestos
 
-`iso9660_reader.cpp` abre um descritor SAF duplicado, valida o PVD ISO9660 e resolve arquivos por diretórios/extents com leitura aleatória usando `pread`. O componente tem fixture sintética e teste host. O provider C ABI (`android_disc_bridge.cpp`) já expõe open/size/read/close, a GowGameActivity aceita `EXTRA_DISC_FD`, e o preparador privado injeta roteamento `gowdisc:/` no `PS2IopHostAdapter`/`PS2Vfs`, preservando `FILE*` para outros paths. O build Android e o build host passaram com essa integração. Ainda falta MainActivity enviar o descritor real, testar uma ISO do usuário e validar os caminhos realmente acessados no boot. O loader Waffle ainda usa `std::ifstream` para ELF, então o executável original precisa de cache privado. Não extrair arquivos por suposição. Veja [DISC_VFS_ANDROID.md](DISC_VFS_ANDROID.md).
+As decisões de instalação, I/O, CPU, GS/Vulkan, memória e controle térmico estão detalhadas em [ANDROID_LOW_END_OPTIMIZATION.md](ANDROID_LOW_END_OPTIMIZATION.md). O objetivo é medir frame time, 1% low, memória, leitura e temperatura em aparelhos reais antes de declarar qualquer nível de desempenho.
+
+### Leitor de disco Android — instalação por extração seletiva (BT3)
+
+`iso9660_reader.cpp` valida o PVD ISO9660 e lê arquivos por extents/offset. Ele será usado pelo importador BT3 para copiar os arquivos do usuário para a área privada do app. O plano é validar a imagem, calcular espaço, extrair para staging, verificar os arquivos e publicar a instalação apenas quando estiver completa. O manifesto de God of War será definido pela estrutura real da revisão suportada e pelo rastreamento dos acessos; não vamos copiar cegamente os caminhos do Dragon Rage.
+
+O runtime deverá usar um `cdRoot` local apontado para a instalação privada. Arquivos/pacotes grandes serão mantidos inteiros nos formatos originais e lidos sob demanda, sem preload indiscriminado na RAM. O tamanho de cache e eventual prefetch serão definidos por profiling em aparelhos reais.
+
+A ponte híbrida `android_disc_bridge.cpp` + `gowdisc:/` no `PS2IopHostAdapter`/`PS2Vfs` já compilou na CI (Android run `42161298942`; host run `42161298950`). Ela é uma implementação transitória anterior à decisão BT3; não representa o fluxo final de execução. Será substituída no caminho normal por leitura da instalação local depois que o importador e o VFS local estiverem validados. O loader Waffle usa `std::ifstream` para o ELF, então esse executável também precisa existir em caminho privado local.
+
+Veja [Leitura de disco e instalação](DISC_VFS_ANDROID.md) e [Otimização para celulares modestos](ANDROID_LOW_END_OPTIMIZATION.md).
 
 ### Entrada física e estado virtual de DualShock 2
 
@@ -66,18 +76,20 @@ Responsabilidades:
 
 **Decisão:** usar AndroidX GameActivity. A documentação Android recomenda GameActivity para jogos novos; ela fornece uma SurfaceView e entrega eventos/lifecycle ao código C/C++.
 
-### 2. Disco e dados do usuário
+### 2. Disco e dados do usuário — instalação BT3
 
 Fluxo previsto:
 
-1. Receber URI pelo seletor Android (`MainActivity` já implementa esta etapa).
-2. Abrir o fluxo de leitura e tentar preservar a permissão concedida.
-3. Validar ISO9660, descritor primário no setor 16.
-4. Ler a entrada de diretório raiz e `SYSTEM.CNF`; o parser inicial reconhece as revisões NTSC-U/PAL conhecidas e já passou na compilação CI (run `42142814087`), mas ainda aguarda validação física.
-5. Ler diretamente do descritor ou preparar somente elementos de boot estritamente necessários no diretório privado.
-6. Nunca enviar dados do usuário para repositório, Issues, releases ou CI pública.
+1. Receber a URI pelo Storage Access Framework e obter acesso de leitura durante a importação.
+2. Validar PVD ISO9660, `SYSTEM.CNF`, serial/região, revisão e identidade do ELF.
+3. Enumerar a estrutura da imagem e montar um manifesto específico da revisão de God of War. A seleção dos arquivos será baseada na estrutura real e nos acessos necessários ao boot, não em suposições ou na lista de outro jogo.
+4. Estimar o espaço necessário e extrair para uma pasta temporária privada, com progresso, cancelamento e tratamento de erros.
+5. Preservar arquivos de dados grandes como arquivos originais; não expandir archives em milhares de arquivos menores nem carregar a instalação inteira na memória.
+6. Verificar tamanhos e hashes disponíveis; promover a pasta temporária para instalação ativa somente após sucesso.
+7. Configurar o VFS para ler do diretório privado instalado. A partida não deve depender de manter a ISO SAF aberta.
+8. Manter ISO, ELF original, IRX, dados extraídos e C++ gerado fora do repositório público, Issues, releases e CI pública.
 
-A ISO não será copiada para o APK nem armazenada no Git.
+O cache de instalação será versionado por título/revisão, versão do instalador e hash do manifesto. O leitor ISO atual já tem testes sintéticos; enumeração completa, importador BT3, extração e validação com ISO real ainda estão pendentes. Consulte [DISC_VFS_ANDROID.md](DISC_VFS_ANDROID.md).
 
 ### 3. Recompilador estático
 
