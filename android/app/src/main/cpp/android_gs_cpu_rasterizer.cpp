@@ -313,6 +313,8 @@ float edge(const RasterVertex &a, const RasterVertex &b, float x, float y) {
         (b.y - a.y) * (x - a.x);
 }
 
+uint32_t rgbaFromGsPixel(uint8_t psm, uint32_t pixel);
+
 uint32_t depthMaskForPsm(uint8_t psm) {
     switch (psm) {
     case GS_PSM_Z32: return 0xFFFFFFFFu;
