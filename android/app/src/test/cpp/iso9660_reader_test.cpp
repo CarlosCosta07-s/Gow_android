@@ -242,7 +242,7 @@ int main() {
     const std::vector<uint8_t> extractedBytes(
         (std::istreambuf_iterator<char>(extractedFile)),
         std::istreambuf_iterator<char>());
-    if (!extractedFile.eof() || extractedBytes.size() != 2050u) {
+    if (!extractedFile.is_open() || extractedFile.bad() || extractedBytes.size() != 2050u) {
         std::filesystem::remove_all(privateRoot);
         std::fclose(file);
         return fail("extracted file has an unexpected size or could not be read");
