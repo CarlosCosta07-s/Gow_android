@@ -255,3 +255,10 @@ O painel informa explicitamente que o jogo ainda não iniciou quando o núcleo h
 **Artefato:** `gow-android-arm64-shell`, ID `13524986210`, build Debug ARM64, expira em 13/11/2026. Run `42260019446` também aprovou o APK.
 
 **Limite:** esse teste valida a camada de memória/transferência, não rasterização correta de cenas. O pipeline ainda desenha lotes sólidos diretamente na surface; o passo seguinte é gravar primitivas em render targets FBP/PSM e produzir um `PresentationFrame` a partir do framebuffer selecionado.
+## Rasterizador inicial em VRAM e saída CRTC — CI 268
+
+**[IMPLEMENTADO; TESTE HOST E APK ARM64 APROVADOS]** O `AndroidGSVulkanBackend::Submit()` agora envia primitivas opacas não texturizadas ao rasterizador inicial, que escreve o framebuffer CT32/CT24/CT16 na mesma VRAM swizzled do Waffle, respeitando XYOFFSET, scissor e FBMSK. `Present()` decodifica o circuito ativo por DISPFB/DISPLAY e devolve um `PresentationFrame` com stride de 640 pixels por linha; o presenter Vulkan existente exibe esse frame.
+
+**[VERIFICADO NA CI `42261321872`]** O teste sintético desenha um triângulo vermelho e um sprite azul em VRAM CT32, lê o CRTC de 64×32 pixels e verifica as cores no frame RGBA, o stride 640 e uma região não desenhada preta. O teste de VRAM/transferências de 4 MiB também continua passando. Artefato `gow-android-arm64-shell` ID `13524359107`, expira em 13/11/2026.
+
+**Limitações:** apenas primitivos opacos sem textura em CT32/CT24/CT16; `Present()` escolhe um circuito e não compõe DISPLAY1+DISPLAY2/PMODE. Textura/CLUT, depth, alpha test/DATE, blending, fog, dithering e formatos não suportados são bloqueadores. `PS2Runtime::run()` continua bloqueado, e esta fixture não contém o jogo.
