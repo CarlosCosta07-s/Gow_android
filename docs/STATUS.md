@@ -283,7 +283,7 @@ Cobertura atual exercitada em `android_gs_vulkan_backend_test.cpp`:
 
 ## Preparação da comparação de cenas reais — captura local e ferramenta offline
 
-`android_gs_scene_capture.cpp` grava o primeiro `PresentationFrame` recebido em `gow_android_first_gs_frame.ppm`, sob o diretório de arquivos externos da aplicação (com fallback para o diretório interno). O caminho é informado no Logcat `GowAndroid`. A gravação é local, validada e publicada via arquivo temporário; nenhuma captura é enviada à CI ou ao GitHub.
+`android_gs_scene_capture.cpp` grava o primeiro `PresentationFrame` recebido em `gow_android_first_gs_frame.ppm` e permite até 32 capturas adicionais sob demanda pelo botão **Capturar cena** do APK Debug (`gow_android_scene_01.ppm` … `gow_android_scene_32.ppm`). Os arquivos ficam no diretório de arquivos externos da aplicação (fallback para o interno); o Logcat `GowAndroid` informa cada caminho. A gravação é local, validada e publicada via arquivo temporário; nenhuma captura é enviada à CI ou ao GitHub.
 
 `tools/compare_gs_scene.py` compara duas imagens PPM P6 com dimensões idênticas e produz MAE, RMSE, PSNR, erro máximo por canal e porcentagem de pixels dentro da tolerância; opcionalmente grava um mapa de diferenças. Os limiares padrão são parâmetros iniciais para inspeção, não critérios definitivos de compatibilidade.
 
