@@ -21,7 +21,7 @@ GSPrimitiveBatch makeBatch(GSPrimType type, uint8_t count) {
     batch.state.context.scissor = {3u, 600u, 5u, 430u};
     batch.state.context.xyoffset = {16u, 32u};
     batch.state.context.zbuf = {0x80u, GS_PSM_Z24, false};
-    batch.state.context.test = 1u;
+    batch.state.context.test = 1ull << 16u;
     batch.state.prim.abe = true;
     batch.state.prim.fge = true;
     batch.state.prim.tme = true;
@@ -56,6 +56,10 @@ int main() {
         require(output.vertices[1].u == 5.0f &&
                 output.vertices[1].v == 2.0f,
                 "Fixed-point UV conversion is incorrect.");
+        require(output.vertices[0].z > 0.999f &&
+                output.vertices[1].z > 0.499f &&
+                output.vertices[2].z < 0.251f,
+                "Z24 values were not normalized using the selected Z format.");
         require(output.textured && output.blend && output.depthTest &&
                 output.depthWrite && output.fogEnabled,
                 "GS draw-state flags were not preserved.");
@@ -97,10 +101,10 @@ int main() {
         flat.state.prim.iip = false;
         require(gow::android::expandGsPrimitiveBatch(flat, output, error),
                 "Flat-shaded triangle expansion failed.");
-        require(output.vertices[0].r == output.vertices[1].r &&
-                output.vertices[1].r == output.vertices[2].r &&
-                output.vertices[0].g == output.vertices[2].g,
-                "Flat-shaded color must use the provoking first vertex.");
+        require(output.vertices[0].r == 0.0f &&
+                output.vertices[1].g == 0.0f &&
+                output.vertices[2].b == 1.0f,
+                "Flat-shaded color must use the provoking last vertex.");
 
         auto invalid = makeBatch(GS_PRIM_TRIANGLE, 2u);
         require(!gow::android::expandGsPrimitiveBatch(invalid, output, error) &&
