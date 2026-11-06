@@ -20,8 +20,10 @@ O README e a documentação do projeto descrevem recompilação estática de 6.4
 | `port/kiexter/gow_overrides.cpp` | `src/gow_overrides.cpp` | `6f73d16bc59d34f780317bf09c69c3a1f863fc0e` | Importado para staging; ainda não compilado no Android. |
 | `port/kiexter/tools/vu1n_gen.py` | `tools/vu1/vu1n_gen.py` | `4ddb2c1d81b1717240d9259af8457cc860d95eea` | Importado para staging; exige dumps privados de microcódigo e runtime compatível. |
 | `port/kiexter/tools/iopn_gen.py` | `tools/iop/iopn_gen.py` | `f1e540f6bac22435855ff0b22661167fe3f953da` | Importado para staging; exige dumps privados dos módulos IRX e runtime compatível. |
+| `port/kiexter/tools/vu1n_heads.txt` | `tools/vu1/vu1n_heads.txt` | `a50466e46bb27e232be8f058e305ed118c4f88ce` | Importado; entradas adicionais do gerador VU1. |
+| `port/kiexter/gow_pad2_packet.h` | `src/gow_pad2_packet.h` | `ca1c082b6793e54baf789e3d45122ac8d748eec8` | Importado; helper para pacote de 18 bytes esperado por libpad2. |
 
-Os arquivos foram trazidos do commit acima sem alteração de conteúdo. Os cabeçalhos dos três arquivos de código indicam que eles foram originalmente copiados/adaptados de Waffle565; por isso, a origem Waffle também é registrada abaixo. Nenhum deles está conectado ao CMake/Gradle neste momento.
+Os arquivos foram trazidos do commit acima sem alteração de conteúdo. Os cabeçalhos dos geradores e do override indicam que parte do código foi originalmente copiada/adaptada de Waffle565; por isso, a origem Waffle também é registrada abaixo. Nenhum deles está conectado ao CMake/Gradle neste momento.
 
 A verificação estrutural do mapa encontrou 6.414 funções, intervalos ordenados, tamanhos consistentes e nenhuma sobreposição. O template contém exatamente os marcadores `@ELF@`, `@MAP@` e `@OUT@`. Isso não substitui a execução do recompilador nem a validação do código gerado.
 
