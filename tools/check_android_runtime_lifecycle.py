@@ -166,7 +166,10 @@ def main() -> int:
         require(required in private_path_code, f"Private BOOT2 path safety rule is missing: {required}")
 
     for required in (
-        "Java_org_gowandroid_app_GowGameActivity_nativeSetBootRelativePath",
+        "Java_org_gowandroid_app_GowGameActivity_nativeConfigurePrivateBoot",
+        "gBootPathCondition.wait(",
+        "gBootPathCondition.notify_all()",
+        "gBootPathConfigurationReceived",
         "gowRuntimeLoadElfAndCheckAot(",
         "gBootRelativePath = std::move(candidate)",
     ):
@@ -190,8 +193,8 @@ def main() -> int:
     for required in (
         "EXTRA_PRIVATE_CD_ROOT",
         "EXTRA_BOOT_RELATIVE_PATH",
-        "nativeSetPrivateDiscRoot(privateCdRoot)",
-        "nativeSetBootRelativePath(bootRelativePath)",
+        "nativeConfigurePrivateBoot(privateCdRoot, bootRelativePath)",
+        "nativeConfigurePrivateBoot(\"\", \"\")",
     ):
         require(required in activity, f"GameActivity private disc handoff is missing: {required}")
     main_activity_path = project_root / "android/app/src/main/java/org/gowandroid/app/MainActivity.java"
