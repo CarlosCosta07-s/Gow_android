@@ -281,46 +281,50 @@ def generate_native_aot(
         folder.mkdir(parents=True, exist_ok=True)
 
     python = sys.executable
-    iop_stdout = run_generator(
-        [python, "-I", str(iop_generator), str(normalized_iop), str(iop_output)],
-        cwd=root,
-    )
-    vu1_command = [
-        python, "-I", str(vu1_generator),
-        str(vu1_output), str(vu1_dir),
-    ]
-    if heads_file.is_file():
-        vu1_command.extend(["--heads", str(heads_file)])
-    vu1_command.extend(["--parts", "6", "--strict"])
-    vu1_stdout = run_generator(vu1_command, cwd=root)
-
     iop_registry = iop_output / "iopn_registry.cpp"
-    if not iop_registry.is_file():
-        raise RuntimeError("IOP AOT generator did not produce iopn_registry.cpp.")
-    iop_sources = sorted(
-        path for path in iop_output.glob("iopn_*.cpp")
-        if path.name != "iopn_registry.cpp"
-    )
-    if len(iop_sources) != len(iop_records):
-        raise RuntimeError(
-            f"IOP AOT output mismatch: {len(iop_records)} modules were validated, "
-            f"but {len(iop_sources)} module C++ files were generated."
+    iop_sources: list[Path] = []
+    if iop_records:
+        run_generator(
+            [python, "-I", str(iop_generator), str(normalized_iop), str(iop_output)],
+            cwd=root,
         )
-    registry_text = iop_registry.read_text(encoding="utf-8")
-    count_match = re.search(r"count\s*=\s*(\d+)\s*;", registry_text)
-    if count_match is None or int(count_match.group(1)) != len(iop_records):
-        raise RuntimeError("Generated IOP registry count does not match the captured module list.")
+        iop_sources = sorted(
+            path for path in iop_output.glob("iopn_*.cpp")
+            if path.name != "iopn_registry.cpp"
+        )
+        if not iop_registry.is_file() or len(iop_sources) != len(iop_records):
+            raise RuntimeError(
+                f"IOP AOT output mismatch: validated {len(iop_records)} modules, "
+                f"generated {len(iop_sources)} module sources and registry="
+                f"{iop_registry.is_file()}."
+            )
+        registry_text = iop_registry.read_text(encoding="utf-8")
+        count_match = re.search(r"count\\s*=\\s*(\\d+)\\s*;", registry_text)
+        if count_match is None or int(count_match.group(1)) != len(iop_records):
+            raise RuntimeError("Generated IOP registry count does not match the captured module list.")
+    elif iop_sources or iop_registry.exists():
+        raise RuntimeError("Unexpected IOP generated sources exist without validated module captures.")
 
-    vu1_sources = sorted(vu1_output.glob("vu1n_part*.cpp"))
-    if len(vu1_sources) != 6:
-        raise RuntimeError(
-            f"VU1 AOT generator produced {len(vu1_sources)} parts; exactly 6 are required."
-        )
-    if "STRICT AOT COVERAGE PASSED" not in vu1_stdout:
-        raise RuntimeError("VU1 generator did not confirm strict native-only block coverage.")
-    for source in vu1_sources:
-        if not source.is_file() or source.stat().st_size == 0:
-            raise RuntimeError(f"Generated VU1 translation unit is empty: {source.name}")
+    vu1_sources: list[Path] = []
+    if vu1_files:
+        vu1_command = [
+            python, "-I", str(vu1_generator),
+            str(vu1_output), str(vu1_dir),
+        ]
+        if heads_file.is_file():
+            vu1_command.extend(["--heads", str(heads_file)])
+        vu1_command.extend(["--parts", "6", "--strict"])
+        vu1_stdout = run_generator(vu1_command, cwd=root)
+        vu1_sources = sorted(vu1_output.glob("vu1n_part*.cpp"))
+        if len(vu1_sources) != 6:
+            raise RuntimeError(
+                f"VU1 AOT generator produced {len(vu1_sources)} parts; exactly 6 are required."
+            )
+        if "STRICT AOT COVERAGE PASSED" not in vu1_stdout:
+            raise RuntimeError("VU1 generator did not confirm strict native-only block coverage.")
+        for source in vu1_sources:
+            if not source.is_file() or source.stat().st_size == 0:
+                raise RuntimeError(f"Generated VU1 translation unit is empty: {source.name}")
 
     summary: dict[str, object] = {
         "format": "gow-native-aot-build-v1",
@@ -328,6 +332,7 @@ def generate_native_aot(
         "vu1_native_translation_units": len(vu1_sources),
         "iop_modules": len(iop_records),
         "iop_native_translation_units": len(iop_sources),
+        "full_native_aot": bool(vu1_sources and iop_records),
         "iop": iop_records,
         "sources": {
             "vu1": [path.name for path in vu1_sources],
@@ -338,11 +343,12 @@ def generate_native_aot(
         json.dumps(summary, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    state = "complete" if summary["full_native_aot"] else "partial; another strict capture iteration is required"
     print(
-        "Verified private native AOT: "
+        f"Private native AOT: {state}; "
         f"{len(vu1_files)} VU1 micro-memories, "
         f"{len(iop_records)} IOP modules, "
-        f"{len(vu1_sources)} VU1 parts and {len(iop_sources)} IOP modules compiled from captures."
+        f"{len(vu1_sources)} VU1 parts and {len(iop_sources)} IOP module sources."
     )
     print("All generated game-derived code remains under android/app/build (Git-ignored).")
     return summary
