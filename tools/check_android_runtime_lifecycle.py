@@ -84,6 +84,39 @@ def main() -> int:
         "Guest execution is not guarded in the Android profile.",
     )
 
+    project_root = Path(__file__).resolve().parents[1]
+    native_main_path = project_root / "android/app/src/main/cpp/main.cpp"
+    activity_path = project_root / "android/app/src/main/java/org/gowandroid/app/GowGameActivity.java"
+    require(native_main_path.is_file(), "Android native entry point is missing.")
+    require(activity_path.is_file(), "GameActivity Java source is missing.")
+    native_main = native_main_path.read_text(encoding="utf-8")
+    activity = activity_path.read_text(encoding="utf-8")
+
+    for required in (
+        "#include <jni.h>",
+        "AttachCurrentThread",
+        "GetMethodID(activityClass, \\"onNativeRuntimeStatus\\"",
+        "\\"(Ljava/lang/String;Z)V\\"",
+        "CallVoidMethod",
+        "DetachCurrentThread",
+    ):
+        require(required in native_main, f"JNI runtime-status bridge is missing: {required}")
+
+    require(
+        native_main.count("reportRuntimeStatus(app,") >= 2
+        and "Preparando o núcleo PS2" in native_main
+        and "Falha ao inicializar o núcleo PS2" in native_main,
+        "Native startup does not report progress and initialization failures.",
+    )
+    for required in (
+        "createNativeStatusOverlay()",
+        "onNativeRuntimeStatus(String message, boolean isError)",
+        "runOnUiThread(() ->",
+        "nativeStatusView.setVisibility(View.VISIBLE)",
+        "createStatusBackground(isError)",
+    ):
+        require(required in activity, f"GameActivity diagnostic overlay is missing: {required}")
+
     print("Verified: Android PS2 core initialization is headless, uses a null GS backend,")
     print("and cannot enter Raylib desktop initialization or guest execution.")
     return 0
