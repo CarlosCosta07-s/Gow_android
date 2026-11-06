@@ -1,3 +1,4 @@
+#include "cdroot_vfs.h"
 #include "iso9660_installer.h"
 #include "iso9660_reader.h"
 
@@ -15,6 +16,7 @@
 namespace {
 std::mutex g_discMutex;
 gow::disc::Iso9660Reader g_discReader;
+gow::disc::CdRootVfs g_cdRootVfs;
 std::unordered_map<uint64_t, gow::disc::IsoFile> g_openFiles;
 uint64_t g_nextHandle = 1u;
 
@@ -123,10 +125,52 @@ extern "C" void gowAndroidDiscCloseImage() noexcept {
     g_discReader.close();
 }
 
+extern "C" bool gowAndroidCdRootIsReady() noexcept {
+    return g_cdRootVfs.isOpen();
+}
+
+extern "C" uint64_t gowAndroidCdRootOpenFile(
+    const char *path, uint64_t *fileSize) noexcept {
+    if (fileSize != nullptr) *fileSize = 0u;
+    if (path == nullptr || path[0] == '\\0' || fileSize == nullptr) return 0u;
+
+    gow::disc::CdRootFile file{};
+    if (!g_cdRootVfs.openFile(path, file, nullptr)) return 0u;
+    *fileSize = file.size;
+    return file.handle;
+}
+
+extern "C" bool gowAndroidCdRootReadFile(
+    uint64_t handle, uint64_t offset, void *destination,
+    size_t requested, size_t *bytesRead) noexcept {
+    if (bytesRead == nullptr) return false;
+    *bytesRead = 0u;
+    return g_cdRootVfs.readFile(
+        handle, offset, destination, requested, *bytesRead);
+}
+
+extern "C" void gowAndroidCdRootCloseFile(uint64_t handle) noexcept {
+    g_cdRootVfs.closeFile(handle);
+}
+
+extern "C" void gowAndroidCdRootClose() noexcept {
+    g_cdRootVfs.close();
+}
+
 extern "C" JNIEXPORT jboolean JNICALL
 Java_org_gowandroid_app_GowGameActivity_nativeSetDiscFileDescriptor(
     JNIEnv *, jclass, jint descriptor) {
     return setDiscDescriptor(descriptor) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_org_gowandroid_app_MainActivity_nativeSetCdRootDirectory(
+    JNIEnv *env, jclass, jstring privateCdRoot) {
+    std::string path;
+    if (!copyJavaString(env, privateCdRoot, path) || path.empty()) {
+        return JNI_FALSE;
+    }
+    return g_cdRootVfs.openRoot(path, nullptr) ? JNI_TRUE : JNI_FALSE;
 }
 
 // Imports a small, explicit set of boot files into private app storage. It does
