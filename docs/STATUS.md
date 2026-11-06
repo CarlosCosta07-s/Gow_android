@@ -201,3 +201,11 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle/KIext
 **Adiado:** medir e otimizar FPS/1% low, cache/prefetch, resolução e comportamento térmico em aparelhos modestos. Essa etapa começa depois do primeiro gameplay funcional; a referência definida é Black for Android.
 
 **Nenhum gameplay foi testado ou declarado funcional.** Nenhum ELF, ISO, IRX, microcódigo, save ou dado proprietário foi enviado ao repositório ou à CI pública.
+
+## Diagnóstico visível de inicialização Android — 06/11/2026
+
+**[IMPLEMENTADO; BUILD COMPLETO E TESTE EM APARELHO PENDENTES]** A `GowGameActivity` agora possui um painel de status sobre a superfície nativa. O `android_main()` envia pelo JNI o estado de preparação do núcleo, o resultado da inicialização e mensagens de falha. A Activity entrega as alterações à thread principal e guarda a mensagem caso a chamada nativa chegue antes da criação do painel.
+
+O painel informa explicitamente que o jogo ainda não iniciou quando o núcleo headless está pronto: a geração/integração do C++ AOT privado, o backend GS/Vulkan Android e o áudio continuam pendentes. A mensagem de erro inclui a orientação para consultar Logcat com a etiqueta `GowAndroid`.
+
+**Limites de validação:** a checagem automatizada do contrato JNI/Java e do runtime headless passou na CI `42246181055`. Na última consulta, o workflow ainda estava na etapa `assembleDebug`; a compilação final do APK e a apresentação visual do painel em aparelho não foram confirmadas. Essa alteração não habilita `loadELF()`, `run()` nem gameplay.
