@@ -243,6 +243,14 @@ int main() {
         require(textureBottomRight[0] == 255u && textureBottomRight[1] == 255u &&
                 textureBottomRight[2] == 255u && textureBottomRight[3] == 255u,
                 "Textured GS sprite did not sample its bottom-right CT32 texel.");
+        const auto indexedTopLeft = pixelAt(44u, 12u);
+        require(indexedTopLeft[0] == 255u && indexedTopLeft[1] == 0u &&
+                indexedTopLeft[2] == 0u && indexedTopLeft[3] == 255u,
+                "T8 GS sprite did not resolve its top-left CLUT entry.");
+        const auto indexedBottomRight = pixelAt(47u, 15u);
+        require(indexedBottomRight[0] == 255u && indexedBottomRight[1] == 255u &&
+                indexedBottomRight[2] == 255u && indexedBottomRight[3] == 255u,
+                "T8 GS sprite did not resolve its bottom-right CLUT entry.");
         const auto emptyPixel = pixelAt(60u, 30u);
         require(emptyPixel[0] == 0u && emptyPixel[1] == 0u &&
                 emptyPixel[2] == 0u,
