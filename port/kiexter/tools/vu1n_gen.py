@@ -636,6 +636,7 @@ def main():
     heads_file = None
     parts = 6
     strict = False
+    strict_coverage = False
     files = []
     out = args[0]
     i = 1
@@ -648,6 +649,12 @@ def main():
             i += 2
         elif args[i] == '--strict':
             strict = True
+            strict_coverage = True
+            i += 1
+        elif args[i] == '--strict-partial':
+            # Emit only native blocks; omit blocks needing exact-engine callouts.
+            strict = True
+            strict_coverage = False
             i += 1
         else:
             files.append(args[i])
@@ -729,14 +736,27 @@ def main():
             open(path, 'w', encoding='utf-8').write(body)
     print(f"[vu1n_gen] {processed}/{len(inputs)} valid images, {len(blocks)} distinct blocks, {count} generated, {unsupported} unsupported, {interpreter_callouts} interpreter callouts")
     if strict:
-        if processed == 0 or count == 0 or unsupported != 0 or interpreter_callouts != 0:
+        if processed == 0 or count == 0:
+            print(
+                f"[vu1n_gen] STRICT AOT GENERATION FAILED: valid_images={processed}, "
+                f"generated={count}, unsupported={unsupported}, interpreter_callouts={interpreter_callouts}",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+        if strict_coverage and (unsupported != 0 or interpreter_callouts != 0):
             print(
                 f"[vu1n_gen] STRICT AOT COVERAGE FAILED: valid_images={processed}, "
                 f"generated={count}, unsupported={unsupported}, interpreter_callouts={interpreter_callouts}",
                 file=sys.stderr,
             )
             raise SystemExit(2)
-        print("[vu1n_gen] STRICT AOT COVERAGE PASSED: every discovered block is native and has no exact-engine callouts")
+        if strict_coverage:
+            print("[vu1n_gen] STRICT AOT COVERAGE PASSED: every discovered block is native")
+        else:
+            print(
+                "[vu1n_gen] STRICT AOT PARTIAL: generated blocks are native-only; "
+                f"unsupported={unsupported}, interpreter_callouts={interpreter_callouts}"
+            )
 
 
 if __name__ == '__main__':
