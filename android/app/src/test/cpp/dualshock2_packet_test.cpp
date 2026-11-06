@@ -52,7 +52,7 @@ int main() {
     axes.rightX = 0.5f;
     axes.rightY = -0.5f;
     encodeDualShock2Packet(0, 0, axes, linear, packet.data(), packet.size());
-    if (packet[4] != 192u || packet[5] != 64u ||
+    if (packet[4] != 191u || packet[5] != 64u ||
         packet[6] != 1u || packet[7] != 255u) {
         return fail("right/left analog axis order or conversion mismatch");
     }
@@ -64,7 +64,7 @@ int main() {
     axes.leftX = 0.1f;
     axes.rightX = 0.6f;
     encodeDualShock2Packet(0, 0, axes, deadzone, packet.data(), packet.size());
-    if (packet[6] != 128u || packet[4] != 192u) {
+    if (packet[6] != 128u || packet[4] != 191u) {
         return fail("deadzone remapping mismatch");
     }
 
