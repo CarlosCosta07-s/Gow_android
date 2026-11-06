@@ -291,6 +291,26 @@ def main() -> int:
         "IOP native-only compile definition",
     )
 
+    # Reuse the repository's ARM64 NEON shim for the SSE-style VU1 native block API.
+    neon_compat_source = repo_root / "port/kiexter/vu1/ps2_vu1_neon_compat.h"
+    if not neon_compat_source.is_file():
+        raise RuntimeError(f"Required ARM64 VU1 compatibility header is missing: {neon_compat_source}")
+    neon_compat_target = recompiler_source / "ps2xRuntime/include/runtime/ps2_vu1_neon_compat.h"
+    native_header = recompiler_source / "ps2xRuntime/include/runtime/ps2_vu1_native.h"
+    if not native_header.is_file():
+        raise RuntimeError(f"Waffle VU1 native header is missing: {native_header}")
+    shutil.copy2(neon_compat_source, neon_compat_target)
+    replace_exactly_once(
+        native_header,
+        "#include <immintrin.h>\\n",
+        "#if defined(__aarch64__) && defined(__ARM_NEON)\\n"
+        '#include "runtime/ps2_vu1_neon_compat.h"\\n'
+        "#else\\n"
+        "#include <immintrin.h>\\n"
+        "#endif\\n",
+        "select NEON compatibility layer on Android ARM64 and SSE on host x86-64",
+    )
+
     # Strict VU1 policy: never fall back to the cycle-exact interpreter.
     vu_core = recompiler_source / "ps2xRuntime/src/lib/vu/ps2_vu1_core.cpp"
     replace_exactly_once(
