@@ -5,12 +5,19 @@
 #include "runtime/gs/ps2_gs_common.h"
 
 #include <algorithm>
+#include <android/log.h>
+#include <atomic>
 #include <exception>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
 namespace gow::android {
+namespace {
+
+std::atomic<bool> gUnsupportedBatchLogged{false};
+
+} // namespace
 
 struct AndroidGSVulkanBackend::Impl {
     void *userData = nullptr;
@@ -60,6 +67,14 @@ void AndroidGSVulkanBackend::Submit(const GSPrimitiveBatch &batch) {
     }
     if (!rasterizeGsBatchToVram(
             impl_->textureStore, batch, texturePixels, error)) {
+        bool expected = false;
+        if (gUnsupportedBatchLogged.compare_exchange_strong(
+                expected, true, std::memory_order_acq_rel)) {
+            __android_log_print(
+                ANDROID_LOG_WARN, "GowAndroid",
+                "GS CPU rasterizer skipped a batch with unsupported state: %s",
+                error.empty() ? "no detail supplied" : error.c_str());
+        }
         return;
     }
 
