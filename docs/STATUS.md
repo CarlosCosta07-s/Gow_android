@@ -61,9 +61,9 @@ Esse snapshot é referência para identificar fronteiras. Nenhum desses arquivos
 
 ## [PREPARADO, COM TESTE SINTÉTICO] VU1 AOT estrito
 
-- port/kiexter/tools/vu1n_gen.py agora aceita --strict: falha se nenhuma imagem válida for processada, nenhum bloco for gerado ou qualquer bloco descoberto não tiver implementação nativa.
-- A CI inclui um microcódigo sintético vazio para confirmar que a opção rejeita cobertura zero. Esse teste não usa microcódigo do jogo.
-- A opção ainda não foi executada com capturas reais e o runtime VU1 ainda permite fallback interpretado; a trava no runtime e a ligação dos arquivos AOT ao target Android continuam pendentes.
+- port/kiexter/tools/vu1n_gen.py agora aceita --strict: falha se nenhuma imagem válida for processada, nenhum bloco for gerado, qualquer bloco descoberto não tiver implementação nativa ou um bloco gerado contiver callLower/callUpper (chamadas para a engine exata/interpreter).
+- A CI inclui dois microcódigos sintéticos: um vazio e outro com instrução lower não suportada que gera callLower. Ambos são rejeitados pelo gate; nenhum usa microcódigo do jogo.
+- A opção ainda não foi executada com capturas reais. O runtime VU1 ainda precisa compilar e validar o novo perfil PS2X_VU1_NATIVE_ONLY e ligar os arquivos AOT ao target Android; a trava em tempo de execução está em preparação e aguarda CI.
 
 ## [PREPARADO, NÃO TESTADO] Geração do C++ do jogo
 
