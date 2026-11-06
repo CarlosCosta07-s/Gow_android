@@ -85,3 +85,36 @@ O runtime Waffle/KIexster também declara uso de componentes de PCSX2, incluindo
 - [ ] Validar boot, primeira imagem e gameplay real no aparelho.
 
 **Dados do jogo:** ISO, ELF, IRX originais, arquivos PAK, dumps de microcódigo e C++ gerado a partir do ELF continuam privados e fora do Git/CI pública.
+
+
+## Pipeline host preparado
+
+Foi criado o script tools/build_recompiler_host.py para reproduzir a etapa de geração de C++ em ambiente privado. Ele fixa:
+
+- KIexster a226151feb6ed22937e42be485aaf28a83acd166;
+- PS2Recomp c5a9d02573410a2085a4b4b831b0b68ba3515440;
+- patch-base ps2recomp-waffle-runtime.patch proveniente do commit KIexster fixado.
+
+O script configura apenas o alvo host ps2_recomp, desativando runtime, analyzer, testes e Studio nessa etapa. ELF, configuração preenchida e C++ gerado são copiados/gravados fora do repositório. A execução ainda não foi realizada: o script está preparado, não validado por build.
+
+Detalhes, dependências e modo de uso: [PIPELINE_RECOMPILADOR.md](PIPELINE_RECOMPILADOR.md).
+
+## Critérios de seleção do runtime Waffle/KIexster
+
+A decisão arquitetural é **reaproveitar o núcleo de serviços PS2 e substituir a camada de host**, não importar o executável desktop inteiro.
+
+| Camada lógica | Reaproveitamento candidato | Adaptação obrigatória |
+|---|---|---|
+| EE / memória / scheduler | Estado, memória, threads, temporizadores, syscalls, IRQ e ligação às funções recompiladas | Sincronização com lifecycle Android, thread de jogo, relógios e diagnóstico |
+| VU0 / VU1 | Operações macro e interface de despacho VU1; geradores AOT como ferramentas host | Cobertura integral dos microprogramas usados; sem fallback interpretado no produto final; instruções ARM64/NEON e estado FP |
+| IOP / IRX | Kernel/serviços IOP, RPC e interfaces dos módulos | Gerar antecipadamente os IRX necessários; eliminar fallback interpretado no caminho final |
+| DMA / VIF / GIF | Fluxo de pacotes, transferências e frontend GS/GIF | Buffers, ownership, sincronização e backpressure compatíveis com o runtime móvel |
+| GS | Regras de comandos, formatos, VRAM/CLUT, swizzle e frontend independente de API | Backend Vulkan Android; não usar gs_gl, WGL ou o renderer Raylib do PC |
+| Disco / VFS | Semântica de arquivos e layout esperado pelo runtime | Conectar SAF a cache/VFS privado; validar caminhos, offsets e setores |
+| SPU2 / LIBSD | Engine e semântica de áudio do jogo, se separáveis do dispositivo host | Substituir saída de desktop por API Android e sincronizar buffers sem bloquear o loop |
+| Pad / saves | Mapeamento de comandos e lógica de cartão de memória | Android GameController, toque, armazenamento privado e importação/exportação Android |
+| Runner / janela | Nenhuma dependência de janela desktop deve permanecer no produto | Preservar FORGE e integrar lifecycle/surface em GameActivity |
+
+Esta é uma seleção por responsabilidade, não uma lista de arquivos já importados. A seleção arquivo a arquivo exige conferir includes, símbolos, alocações, dependências CMake e sincronização de cada módulo. A base Waffle será tratada como uma versão de referência fixada pelo patch do KIexter, evitando misturar arquivos de commits diferentes da branch runtime.
+
+A classificação inicial dos patches (correção, otimização, host desktop ou dependência x86) está em [PIPELINE_RECOMPILADOR.md](PIPELINE_RECOMPILADOR.md). Os patches opcionais não foram aplicados automaticamente: cada um precisa de revisão e teste ARM64/Vulkan próprio.
