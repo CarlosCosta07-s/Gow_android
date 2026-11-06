@@ -101,6 +101,7 @@ A licença GPL-3.0 deste repositório cobre somente o código que seus autores p
 - [Base KIexter: arquivos, origem e adaptação Android](docs/BASE_KIEXTER.md)
 - [Pipeline host do recompilador](docs/PIPELINE_RECOMPILADOR.md)
 - [Auditoria do GS e plano de backend Vulkan Android](docs/GS_VULKAN_ANDROID.md)
+- [Leitor ISO9660 e integração do VFS Android](docs/DISC_VFS_ANDROID.md)
 - [Roadmap e critérios de conclusão](docs/ROADMAP.md)
 - [Auditoria das referências](docs/REFERENCIAS.md)
 - [Créditos e avisos de terceiros](THIRD_PARTY_NOTICES.md)
