@@ -9,20 +9,18 @@ namespace {
 
 GsGpuVertex convertVertex(
     const GSVertex &vertex,
-    const GSDrawState &state,
+    const GSVertex &flatColor,
     float xOffset,
-    float yOffset,
-    bool gouraud) {
+    float yOffset) {
     GsGpuVertex result;
     result.x = vertex.x - xOffset;
     result.y = vertex.y - yOffset;
     result.z = static_cast<float>(std::clamp(
         vertex.z / 4294967295.0, 0.0, 1.0));
-    const GSVertex &color = gouraud ? vertex : stateVertexFallback(state, vertex);
-    result.r = static_cast<float>(color.r) / 255.0f;
-    result.g = static_cast<float>(color.g) / 255.0f;
-    result.b = static_cast<float>(color.b) / 255.0f;
-    result.a = static_cast<float>(color.a) / 255.0f;
+    result.r = static_cast<float>(flatColor.r) / 255.0f;
+    result.g = static_cast<float>(flatColor.g) / 255.0f;
+    result.b = static_cast<float>(flatColor.b) / 255.0f;
+    result.a = static_cast<float>(flatColor.a) / 255.0f;
     result.s = vertex.s;
     result.t = vertex.t;
     result.q = std::isfinite(vertex.q) && std::fabs(vertex.q) > 1.0e-8f
@@ -96,16 +94,18 @@ bool expandGsPrimitiveBatch(
     destination.textured = state.prim.tme;
     destination.gouraud = state.prim.iip;
     destination.blend = state.prim.abe;
-    destination.depthTest = (context.test & 1u) != 0u;
+    destination.depthTest = ((context.test >> 16u) & 1u) != 0u;
     destination.depthWrite = !context.zbuf.zmask;
     destination.fogEnabled = state.prim.fge;
 
     const float xOffset = static_cast<float>(context.xyoffset.ofx) / 16.0f;
     const float yOffset = static_cast<float>(context.xyoffset.ofy) / 16.0f;
     GsGpuVertex converted[3]{};
+    const GSVertex &flatColor = source.vertices[0];
     for (uint32_t i = 0u; i < source.vertexCount; ++i) {
+        const GSVertex &color = state.prim.iip ? source.vertices[i] : flatColor;
         converted[i] = convertVertex(
-            source.vertices[i], state, xOffset, yOffset, state.prim.iip);
+            source.vertices[i], color, xOffset, yOffset);
     }
 
     switch (state.prim.type) {
