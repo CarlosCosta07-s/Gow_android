@@ -461,6 +461,19 @@ def main() -> int:
         "target_compile_features(ps2_iop PUBLIC cxx_std_20)\n",
         "IOP native-only compile definition",
     )
+    replace_exactly_once(
+        iop_cmake,
+        "file(GLOB PS2X_IOP_NATIVE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/native/iopn_*.cpp)\n"
+        "if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/native/iopn_registry.cpp)\n"
+        "    list(APPEND PS2X_IOP_NATIVE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/native/iop_native_none.cpp)\n"
+        "endif()\n",
+        "set(PS2X_IOP_NATIVE_SOURCE_DIR \"${CMAKE_CURRENT_SOURCE_DIR}/src/native\" CACHE PATH \"Private generated IRX AOT source directory\")\n"
+        "file(GLOB PS2X_IOP_NATIVE_SOURCES CONFIGURE_DEPENDS \"${PS2X_IOP_NATIVE_SOURCE_DIR}/iopn_*.cpp\")\n"
+        "if(NOT EXISTS \"${PS2X_IOP_NATIVE_SOURCE_DIR}/iopn_registry.cpp\")\n"
+        "    list(APPEND PS2X_IOP_NATIVE_SOURCES \"${CMAKE_CURRENT_SOURCE_DIR}/src/native/iop_native_none.cpp\")\n"
+        "endif()\n",
+        "route private generated IRX AOT files into the IOP target",
+    )
 
     # Reuse the repository's ARM64 NEON shim for the SSE-style VU1 native block API.
     neon_compat_source = repo_root / "port/kiexter/vu1/ps2_vu1_neon_compat.h"
@@ -1257,8 +1270,13 @@ def main() -> int:
 #if defined(PS2X_VU1_NATIVE_ONLY)
     if (m_unit == Unit::VU1 && m_native)
         m_native->enabled = true;
+    // The strict Android dispatcher never enters runExact()/compiledProgramFor()
+    // on a cache miss. Capture each newly loaded 16 KiB micro-memory before
+    // the first native block lookup so the user can build the missing AOT.
+    if (m_unit == Unit::VU1 && vuData && codeSize == PS2_VU1_CODE_SIZE)
+        (void)compiledProgramFor(vuCode, codeSize, memory);
 #endif""",
-        "force VU1 native dispatch enabled in strict builds",
+        "force VU1 native dispatch and capture microcode before strict AOT lookup",
     )
     replace_exactly_once(
         vu_core,
