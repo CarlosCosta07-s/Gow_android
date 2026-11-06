@@ -68,15 +68,21 @@ def main() -> int:
         default=os.environ.get("GOW_PRIVATE_WORKDIR", str(default_work)),
         help="private workspace outside the Git repository (default: C:/gowport or /tmp/gowport)",
     )
+    parser.add_argument(
+        "--build-only",
+        action="store_true",
+        help="build the pinned host recompiler without requiring or reading a game ELF",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
-    if not args.elf:
-        parser.error("Provide --elf or set GOW_ELF to your own extracted SCUS_973.99 file.")
-
-    elf = Path(args.elf).expanduser().resolve()
-    if not elf.is_file():
-        parser.error(f"ELF file not found: {elf}")
+    elf: Path | None = None
+    if not args.build_only:
+        if not args.elf:
+            parser.error("Provide --elf or set GOW_ELF to your own extracted SCUS_973.99 file.")
+        elf = Path(args.elf).expanduser().resolve()
+        if not elf.is_file():
+            parser.error(f"ELF file not found: {elf}")
 
     work = Path(args.work_dir).expanduser().resolve()
     try:
@@ -94,7 +100,7 @@ def main() -> int:
 
     funcmap = repo_root / "recompiler/config/funcmap.csv"
     template_path = repo_root / "recompiler/config/recomp.template.toml"
-    if not funcmap.is_file() or not template_path.is_file():
+    if not args.build_only and (not funcmap.is_file() or not template_path.is_file()):
         parser.error("The imported function map or recompilation template is missing.")
 
     sources = work / "sources"
@@ -106,7 +112,10 @@ def main() -> int:
 
     work.mkdir(parents=True, exist_ok=True)
     print(f"Private workspace: {work}")
-    print("Target profile: God of War PS2 NTSC-U / SCUS_973.99")
+    if args.build_only:
+        print("Mode: host-tool build only; no game files are read or generated.")
+    else:
+        print("Target profile: God of War PS2 NTSC-U / SCUS_973.99")
     print("This stage runs on the host; it does not build or modify the Android APK.")
 
     checkout_pinned_repo(KIEXTER_URL, KIEXTER_COMMIT, kiexter_source)
@@ -123,32 +132,6 @@ def main() -> int:
         ["git", "apply", "--ignore-whitespace", str(patch_path)],
         cwd=recompiler_source,
     )
-
-    input_dir.mkdir(parents=True, exist_ok=True)
-    private_elf = input_dir / "SCUS_973.99"
-    private_map = input_dir / "funcmap.csv"
-    shutil.copy2(elf, private_elf)
-    shutil.copy2(funcmap, private_map)
-
-    if generated_dir.exists():
-        shutil.rmtree(generated_dir)
-    generated_dir.mkdir(parents=True)
-
-    config = template_path.read_text(encoding="utf-8")
-    replacements = {
-        "@ELF@": toml_path(private_elf),
-        "@MAP@": toml_path(private_map),
-        "@OUT@": toml_path(generated_dir) + "/",
-    }
-    for marker, value in replacements.items():
-        if config.count(marker) != 1:
-            raise RuntimeError(
-                f"Expected exactly one {marker} marker in {template_path}."
-            )
-        config = config.replace(marker, value)
-
-    config_path = work / "recomp-config.toml"
-    config_path.write_text(config, encoding="ascii")
 
     cmake = shutil.which("cmake")
     if not cmake:
@@ -190,6 +173,38 @@ def main() -> int:
     if not candidates:
         raise RuntimeError("The host build completed without producing ps2_recomp.")
     executable = candidates[0]
+    if args.build_only:
+        print("")
+        print(f"Host recompiler built successfully: {executable}")
+        print("No game ELF was accessed and no game-derived C++ was generated.")
+        return 0
+
+    assert elf is not None
+    input_dir.mkdir(parents=True, exist_ok=True)
+    private_elf = input_dir / "SCUS_973.99"
+    private_map = input_dir / "funcmap.csv"
+    shutil.copy2(elf, private_elf)
+    shutil.copy2(funcmap, private_map)
+
+    if generated_dir.exists():
+        shutil.rmtree(generated_dir)
+    generated_dir.mkdir(parents=True)
+
+    config = template_path.read_text(encoding="utf-8")
+    replacements = {
+        "@ELF@": toml_path(private_elf),
+        "@MAP@": toml_path(private_map),
+        "@OUT@": toml_path(generated_dir) + "/",
+    }
+    for marker, value in replacements.items():
+        if config.count(marker) != 1:
+            raise RuntimeError(
+                f"Expected exactly one {marker} marker in {template_path}."
+            )
+        config = config.replace(marker, value)
+
+    config_path = work / "recomp-config.toml"
+    config_path.write_text(config, encoding="ascii")
     run([str(executable), str(config_path)])
 
     generated_files = list(generated_dir.glob("*.cpp"))
