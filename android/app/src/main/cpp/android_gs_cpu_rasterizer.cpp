@@ -15,6 +15,7 @@ namespace {
 struct RasterVertex {
     float x = 0.0f;
     float y = 0.0f;
+    double z = 0.0;
     float r = 0.0f;
     float g = 0.0f;
     float b = 0.0f;
@@ -66,13 +67,17 @@ bool writeFramebufferPixel(
     const GSContext &context,
     uint32_t x,
     uint32_t y,
-    uint32_t rgba) {
+    uint32_t rgba,
+    bool writeAlpha = true) {
     const uint8_t psm = context.frame.psm;
     uint32_t frameMask = context.frame.fbmsk;
     if (psm == GS_PSM_CT16 || psm == GS_PSM_CT16S) {
         frameMask = GSInternal::frameMask16(frameMask);
+        if (!writeAlpha) frameMask |= 0x8000u;
     } else if (psm == GS_PSM_CT24) {
         frameMask &= 0x00FFFFFFu;
+    } else if (!writeAlpha) {
+        frameMask |= 0xFF000000u;
     }
 
     const uint32_t oldPixel = store.Read(
@@ -90,6 +95,7 @@ RasterVertex makeRasterVertex(
     RasterVertex vertex{};
     vertex.x = source.x - static_cast<float>(context.xyoffset.ofx) / 16.0f;
     vertex.y = source.y - static_cast<float>(context.xyoffset.ofy) / 16.0f;
+    vertex.z = source.z;
     vertex.r = channel(color.r);
     vertex.g = channel(color.g);
     vertex.b = channel(color.b);
@@ -110,6 +116,7 @@ RasterVertex interpolate(
     RasterVertex result{};
     result.x = a.x + (b.x - a.x) * t;
     result.y = a.y + (b.y - a.y) * t;
+    result.z = a.z + (b.z - a.z) * t;
     result.r = a.r + (b.r - a.r) * t;
     result.g = a.g + (b.g - a.g) * t;
     result.b = a.b + (b.b - a.b) * t;
@@ -130,6 +137,7 @@ RasterVertex interpolateTriangle(
     float wb,
     float wc) {
     RasterVertex result{};
+    result.z = a.z * wa + b.z * wb + c.z * wc;
     result.r = a.r * wa + b.r * wb + c.r * wc;
     result.g = a.g * wa + b.g * wb + c.g * wc;
     result.b = a.b * wa + b.b * wb + c.b * wc;
@@ -305,6 +313,95 @@ float edge(const RasterVertex &a, const RasterVertex &b, float x, float y) {
         (b.y - a.y) * (x - a.x);
 }
 
+uint32_t depthMaskForPsm(uint8_t psm) {
+    switch (psm) {
+    case GS_PSM_Z32: return 0xFFFFFFFFu;
+    case GS_PSM_Z24: return 0x00FFFFFFu;
+    case GS_PSM_Z16:
+    case GS_PSM_Z16S: return 0x0000FFFFu;
+    default: return 0u;
+    }
+}
+
+uint32_t depthValue(const RasterVertex &vertex, uint32_t mask) {
+    if (mask == 0u) return 0u;
+    const double value = std::clamp(
+        std::floor(vertex.z + 0.5), 0.0, static_cast<double>(mask));
+    return static_cast<uint32_t>(value) & mask;
+}
+
+bool passesDepthTest(
+    GSTextureStore &store,
+    const GSDrawState &state,
+    uint32_t x,
+    uint32_t y,
+    uint32_t incomingDepth) {
+    const uint64_t test = state.context.test;
+    if (((test >> 16u) & 1u) == 0u) return true;
+    const uint32_t mask = depthMaskForPsm(state.context.zbuf.psm);
+    if (mask == 0u) return false;
+    const uint32_t storedDepth = store.Read(
+        state.context.zbuf.psm, state.context.zbuf.zbp,
+        state.context.frame.fbw, x, y) & mask;
+    const uint32_t value = incomingDepth & mask;
+    switch (static_cast<uint32_t>((test >> 17u) & 0x3u)) {
+    case 0u: return false;                  // NEVER
+    case 1u: return true;                   // ALWAYS
+    case 2u: return value >= storedDepth;   // GEQUAL
+    case 3u: return value > storedDepth;    // GREATER
+    default: return false;
+    }
+}
+
+uint8_t blendSelector(uint8_t selector, uint8_t source, uint8_t destination) {
+    if (selector == 0u) return source;
+    if (selector == 1u) return destination;
+    return 0u;
+}
+
+uint32_t applyGsAlphaBlend(
+    uint32_t sourceRgba,
+    uint32_t destinationPixel,
+    uint8_t destinationPsm,
+    uint64_t alphaRegister,
+    bool colorClamp) {
+    const uint32_t destinationRgba = rgbaFromGsPixel(
+        destinationPsm, destinationPixel);
+    const uint8_t sourceChannels[3] = {
+        static_cast<uint8_t>(sourceRgba & 0xFFu),
+        static_cast<uint8_t>((sourceRgba >> 8u) & 0xFFu),
+        static_cast<uint8_t>((sourceRgba >> 16u) & 0xFFu)};
+    const uint8_t destinationChannels[3] = {
+        static_cast<uint8_t>(destinationRgba & 0xFFu),
+        static_cast<uint8_t>((destinationRgba >> 8u) & 0xFFu),
+        static_cast<uint8_t>((destinationRgba >> 16u) & 0xFFu)};
+    const uint8_t sourceAlpha = static_cast<uint8_t>((sourceRgba >> 24u) & 0xFFu);
+    const uint8_t destinationAlpha = static_cast<uint8_t>((destinationRgba >> 24u) & 0xFFu);
+    const uint8_t aSelector = static_cast<uint8_t>(alphaRegister & 0x3u);
+    const uint8_t bSelector = static_cast<uint8_t>((alphaRegister >> 2u) & 0x3u);
+    const uint8_t cSelector = static_cast<uint8_t>((alphaRegister >> 4u) & 0x3u);
+    const uint8_t dSelector = static_cast<uint8_t>((alphaRegister >> 6u) & 0x3u);
+    const uint8_t factor = cSelector == 0u ? sourceAlpha
+        : (cSelector == 1u ? destinationAlpha
+                           : static_cast<uint8_t>((alphaRegister >> 32u) & 0xFFu));
+    uint32_t result = sourceRgba & 0xFF000000u;
+    for (size_t channelIndex = 0u; channelIndex < 3u; ++channelIndex) {
+        const int a = blendSelector(
+            aSelector, sourceChannels[channelIndex], destinationChannels[channelIndex]);
+        const int b = blendSelector(
+            bSelector, sourceChannels[channelIndex], destinationChannels[channelIndex]);
+        const int d = blendSelector(
+            dSelector, sourceChannels[channelIndex], destinationChannels[channelIndex]);
+        const int blended = static_cast<int>(std::floor(
+            static_cast<double>((a - b) * static_cast<int>(factor)) / 128.0)) + d;
+        const uint32_t output = colorClamp
+            ? static_cast<uint32_t>(std::clamp(blended, 0, 255))
+            : static_cast<uint32_t>((blended % 256 + 256) % 256);
+        result |= output << (channelIndex * 8u);
+    }
+    return result;
+}
+
 void writePixel(
     GSTextureStore &store,
     const GSDrawState &state,
@@ -314,11 +411,50 @@ void writePixel(
     const RasterVertex &inputColor,
     const std::vector<uint32_t> *texturePixels) {
     if (!insideTarget(state.context, targetWidth, x, y)) return;
+
+    const uint32_t pixelX = static_cast<uint32_t>(x);
+    const uint32_t pixelY = static_cast<uint32_t>(y);
+    const uint32_t zMask = depthMaskForPsm(state.context.zbuf.psm);
+    const uint32_t z = depthValue(inputColor, zMask);
+    if (!passesDepthTest(store, state, pixelX, pixelY, z)) return;
+
+    const uint32_t oldFramebuffer = store.Read(
+        state.context.frame.psm, state.context.frame.fbp,
+        state.context.frame.fbw, pixelX, pixelY);
+    if (((state.context.test >> 14u) & 1u) != 0u &&
+        !GSCpuInternal::passesDestinationAlphaTest(
+            state.context.test, state.context.frame.psm, oldFramebuffer)) {
+        return;
+    }
+
     const RasterVertex color = applyTexture(inputColor, state, texturePixels);
-    writeFramebufferPixel(
-        store, state.context,
-        static_cast<uint32_t>(x), static_cast<uint32_t>(y),
-        packRgba(color));
+    const uint32_t sourceRgba = packRgba(color);
+    const uint8_t alpha = static_cast<uint8_t>((sourceRgba >> 24u) & 0xFFu);
+    const GSCpuInternal::PixelWriteMask writeMask =
+        GSCpuInternal::classifyAlphaTest(
+            state.context.test, alpha, state.context.frame.psm);
+
+    if (writeMask.writesFramebuffer()) {
+        uint32_t outputRgba = sourceRgba;
+        const bool blendEnabled = state.prim.abe &&
+            (!state.pabe || (alpha & 0x80u) != 0u);
+        if (blendEnabled) {
+            outputRgba = applyGsAlphaBlend(
+                sourceRgba, oldFramebuffer, state.context.frame.psm,
+                state.context.alpha, (state.colclamp & 1u) != 0u);
+        }
+        writeFramebufferPixel(
+            store, state.context, pixelX, pixelY, outputRgba,
+            writeMask.writeAlpha);
+    }
+
+    if (writeMask.writeDepth &&
+        ((state.context.test >> 16u) & 1u) != 0u &&
+        !state.context.zbuf.zmask && zMask != 0u) {
+        store.Write(
+            state.context.zbuf.psm, state.context.zbuf.zbp,
+            state.context.frame.fbw, pixelX, pixelY, z);
+    }
 }
 
 void rasterizePoint(
@@ -495,12 +631,13 @@ bool rasterizeGsBatchToVram(
         error = "GS rasterizer supports only non-zero FBW CT32/CT24/CT16 framebuffers.";
         return false;
     }
-    if (batch.state.prim.abe || batch.state.prim.fge ||
-        batch.state.pabe || batch.state.prim.aa1 ||
-        ((context.test >> 16u) & 1u) != 0u ||
-        (context.test & 1u) != 0u ||
-        ((context.test >> 14u) & 1u) != 0u) {
-        error = "GS rasterizer currently rejects blending, fog, antialiasing, depth, alpha and destination-alpha tests.";
+    if (batch.state.prim.fge || batch.state.prim.aa1) {
+        error = "GS rasterizer currently rejects fog and antialiasing until their interpolation and coverage rules are implemented.";
+        return false;
+    }
+    if (((context.test >> 16u) & 1u) != 0u &&
+        depthMaskForPsm(context.zbuf.psm) == 0u) {
+        error = "GS depth testing requires a supported Z32/Z24/Z16/Z16S target.";
         return false;
     }
     if (batch.state.prim.tme) {
