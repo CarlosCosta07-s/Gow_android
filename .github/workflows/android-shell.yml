@@ -11,6 +11,8 @@ on:
       - "tools/check_android_runtime_lifecycle.py"
       - "tools/ps2_vfs_cdroot_smoke.cpp"
       - "tools/run_ps2_vfs_cdroot_smoke.py"
+      - "tools/compare_gs_scene.py"
+      - "tools/test_compare_gs_scene.py"
       - "android/app/src/main/cpp/cdroot_vfs.cpp"
       - "android/app/src/main/cpp/cdroot_vfs.h"
       - ".github/workflows/android-shell.yml"
@@ -192,6 +194,11 @@ jobs:
             -Wno-error=unused-variable \
             -o "$RUNNER_TEMP/android-gs-vram-adapter-test"
           "$RUNNER_TEMP/android-gs-vram-adapter-test"
+
+      - name: Test offline GS scene comparator
+        shell: bash
+        run: |
+          python tools/test_compare_gs_scene.py
 
       - name: Test PS2 VFS through the Android private cdRoot provider
         shell: bash
