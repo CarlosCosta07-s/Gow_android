@@ -1,7 +1,9 @@
 // Host test for .disc_layout / .disc_meta generation. Uses only a synthetic
 // dual-layer ISO built in this file; no game data is involved.
 #include "iso9660_disc_layout.h"
+#include "iso9660_installer.h"
 #include "iso9660_reader.h"
+#include <ps2x/iop/disc_source.h>
 
 #include <algorithm>
 #include <array>
@@ -24,6 +26,7 @@ namespace fs = std::filesystem;
 using gow::disc::IsoDiscLayout;
 using gow::disc::IsoDiscMetadataInfo;
 using gow::disc::Iso9660Reader;
+using gow::disc::installIsoDisc;
 using gow::disc::measureIsoDiscMetadata;
 using gow::disc::writeIsoDiscMetadata;
 
@@ -266,6 +269,149 @@ int testMeasureAndWrite() {
     return 0;
 }
 
+int testInstalledDiscMatchesWaffleDiscSource() {
+    Fixture f;
+    std::string why;
+    if (!makeFixture(f, why)) return fail("fixture: " + why);
+
+    std::error_code ec;
+    const fs::path base = fs::temp_directory_path(ec);
+    if (ec) return fail("temporary directory lookup");
+    std::string pattern = (base / "gow-disc-install-XXXXXX").string();
+    if (!::mkdtemp(pattern.data())) return fail("could not create installation root");
+    const fs::path privateRoot(pattern);
+
+    const auto installed = installIsoDisc(
+        f.reader, privateRoot.string(), "synthetic-game");
+    if (!installed.success) {
+        fs::remove_all(privateRoot, ec);
+        return fail("full ISO installer failed: " + installed.error);
+    }
+
+    const fs::path discRoot = privateRoot / "synthetic-game" / "disc";
+    if (!present(discRoot / ".disc_layout") || !present(discRoot / ".disc_meta") ||
+        !present(discRoot / "LOW.BIN") ||
+        !present(discRoot / "LOWDIR" / "LOWNEST.BIN") ||
+        !present(discRoot / "HIGH.BIN")) {
+        fs::remove_all(privateRoot, ec);
+        return fail("full installation did not publish files and metadata together");
+    }
+
+    auto disc = ps2x::iop::DiscSource::openExtracted(discRoot);
+    if (!disc) {
+        fs::remove_all(privateRoot, ec);
+        return fail("Waffle DiscSource::openExtracted rejected generated metadata");
+    }
+    if (disc->layer1Start() != 16u) {
+        fs::remove_all(privateRoot, ec);
+        return fail("Waffle DiscSource returned the wrong layer-1 start");
+    }
+
+    std::array<uint8_t, kSector> pvd0{};
+    std::array<uint8_t, kSector> pvd1{};
+    if (!disc->readSectors(16u, 1u, pvd0.data()) ||
+        !disc->readSectors(32u, 1u, pvd1.data()) ||
+        std::memcmp(pvd0.data() + 1u, "CD001", 5u) != 0 ||
+        std::memcmp(pvd1.data() + 1u, "CD001", 5u) != 0) {
+        fs::remove_all(privateRoot, ec);
+        return fail("Waffle DiscSource did not reconstruct both volume descriptors");
+    }
+
+    std::array<uint8_t, 2u * kSector> lowSectors{};
+    if (!disc->readSectors(22u, 2u, lowSectors.data()) ||
+        std::memcmp(lowSectors.data(), lowPayload().data(), lowPayload().size()) != 0 ||
+        !std::all_of(lowSectors.begin() + static_cast<std::ptrdiff_t>(lowPayload().size()),
+                     lowSectors.end(), [](uint8_t value) { return value == 0u; })) {
+        fs::remove_all(privateRoot, ec);
+        return fail("Waffle DiscSource did not read the original layer-0 file extent");
+    }
+
+    const std::array<uint8_t, 3> expectedHigh{0xD1u, 0xD2u, 0xD3u};
+    std::array<uint8_t, kSector> highSector{};
+    if (!disc->readSectors(38u, 1u, highSector.data()) ||
+        !std::equal(expectedHigh.begin(), expectedHigh.end(), highSector.begin())) {
+        fs::remove_all(privateRoot, ec);
+        return fail("Waffle DiscSource did not read the original layer-1 file extent");
+    }
+
+    const auto lowFile = disc->findFile("cdrom0:\\LOW.BIN;1");
+    const auto nestedFile = disc->findFile("cdrom0:\\LOWDIR\\LOWNEST.BIN;1");
+    const auto highFile = disc->findFile("cdrom0:\\HIGH.BIN;1");
+    if (!lowFile || lowFile->lsn != 22u || lowFile->size != 2050u ||
+        !nestedFile || nestedFile->lsn != 25u ||
+        !highFile || highFile->lsn != 38u) {
+        fs::remove_all(privateRoot, ec);
+        return fail("Waffle DiscSource findFile did not preserve paths and original LSNs");
+    }
+
+    std::array<uint8_t, 2u * kSector> beyondDisc{};
+    if (disc->readSectors(63u, 2u, beyondDisc.data())) {
+        fs::remove_all(privateRoot, ec);
+        return fail("Waffle DiscSource accepted a read that crosses the disc end");
+    }
+
+    fs::remove_all(privateRoot, ec);
+    if (ec) return fail("could not clean temporary installation");
+    return 0;
+}
+
+struct CancelMetadataProgress {
+    bool cancelDuringMeasure = false;
+    bool cancelDuringWrite = false;
+};
+
+bool cancelMetadataProgress(const gow::disc::IsoInstallProgress &progress,
+                            void *opaque) {
+    auto *context = static_cast<CancelMetadataProgress *>(opaque);
+    if (context == nullptr) return true;
+    if (context->cancelDuringMeasure && progress.totalFiles == 0u &&
+        progress.totalBytes == progress.copiedBytes) {
+        return false;
+    }
+    if (context->cancelDuringWrite && progress.totalFiles > 0u &&
+        progress.completedFiles == progress.totalFiles &&
+        progress.copiedBytes == progress.totalBytes) {
+        return false;
+    }
+    return true;
+}
+
+int testFullInstallCancellationBeforePublication() {
+    for (const bool duringWrite : {false, true}) {
+        Fixture f;
+        std::string why;
+        if (!makeFixture(f, why)) return fail("fixture: " + why);
+
+        std::error_code ec;
+        const fs::path base = fs::temp_directory_path(ec);
+        if (ec) return fail("temporary directory lookup");
+        std::string pattern = (base / "gow-disc-cancel-XXXXXX").string();
+        if (!::mkdtemp(pattern.data())) return fail("could not create installation root");
+        const fs::path privateRoot(pattern);
+
+        CancelMetadataProgress context{};
+        context.cancelDuringMeasure = !duringWrite;
+        context.cancelDuringWrite = duringWrite;
+        const auto result = installIsoDisc(
+            f.reader, privateRoot.string(), "cancelled-game",
+            cancelMetadataProgress, &context);
+        if (result.success || !result.cancelled) {
+            fs::remove_all(privateRoot, ec);
+            return fail(duringWrite
+                ? "metadata write cancellation did not stop the install"
+                : "metadata analysis cancellation did not stop the install");
+        }
+        if (fs::exists(privateRoot / "cancelled-game") ||
+            fs::exists(privateRoot / ".cancelled-game.staging")) {
+            fs::remove_all(privateRoot, ec);
+            return fail("cancelled full install left a visible or staging directory");
+        }
+        fs::remove_all(privateRoot, ec);
+        if (ec) return fail("could not clean cancelled installation root");
+    }
+    return 0;
+}
+
 int testRejectsMissingFile() {
     Fixture f;
     std::string why;
@@ -385,6 +531,8 @@ int main() {
     struct Case { const char *name; int (*run)(); };
     const Case cases[] = {
         {"measure and write", testMeasureAndWrite},
+        {"full install and Waffle DiscSource contract", testInstalledDiscMatchesWaffleDiscSource},
+        {"full install cancellation before publication", testFullInstallCancellationBeforePublication},
         {"rejects missing extracted file", testRejectsMissingFile},
         {"rejects wrong extracted size", testRejectsWrongSize},
         {"rejects symlinked extracted file", testRejectsSymlink},

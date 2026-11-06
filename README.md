@@ -2,7 +2,7 @@
 
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
-> Estado atual: shell FORGE Android ARM64 e runtime Waffle/KIexter compilados. O provider privado `cdRoot` atende operações de arquivo `cdrom0:` no PS2 VFS, e uma correção em validação passa o caminho físico da instalação ao runtime. A extração Android ainda importa somente `SYSTEM.CNF` e o ELF BOOT2: ainda não gera `.disc_layout`/`.disc_meta` para as leituras de CDVD por LSN. O launcher não inicia uma sessão; não há C++ recompilado do ELF do usuário, backend GS/Vulkan Android ou versão jogável.
+> Estado atual: shell FORGE Android ARM64 e runtime Waffle/KIexter compilados. O instalador completo ISO9660 foi conectado ao FORGE para extrair os arquivos das duas camadas e gerar `.disc_layout`/`.disc_meta` antes da publicação; a CI desta integração está pendente. O teste de integração também foi preparado para usar a implementação real de `DiscSource` do Waffle com uma ISO sintética. O launcher ainda não inicia uma sessão; não há C++ recompilado do ELF do usuário, integração real do `DiscSource` ao gameplay, backend GS/Vulkan Android ou versão jogável.
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml) [![Host recompiler](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml)
 
@@ -36,13 +36,13 @@ A configuração de controles — gamepad físico, remapeamento, deadzone, sensi
 
 ## Launcher e seleção de disco
 
-A tela inicial permite selecionar uma imagem pelo Storage Access Framework e preservar a permissão de leitura quando o provedor Android permite. O código agora valida o descritor ISO9660, lê o diretório raiz e identifica o executável em `SYSTEM.CNF`, reconhecendo inicialmente `SCUS_973.99` (NTSC-U) e `SCES_531.33` (PAL). **A nova leitura compilou com sucesso na CI (run `42142814087`); ainda falta validação em aparelho com imagens de teste.** A imagem não é copiada para o APK nem enviada ao GitHub.
+A tela inicial permite selecionar uma imagem pelo Storage Access Framework e preservar a permissão de leitura quando o provedor Android permite. O FORGE valida o PVD ISO9660 e identifica o executável em `SYSTEM.CNF`, reconhecendo inicialmente `SCUS_973.99` (NTSC-U) e `SCES_531.33` (PAL). A ação **INSTALAR JOGO** agora chama o instalador completo: enumera os arquivos regulares das duas camadas, calcula o espaço para os arquivos e metadados, extrai para staging privado, gera `.disc_layout`/`.disc_meta` e publica somente após concluir. **A integração está aguardando a CI desta revisão e validação em aparelho com a ISO do usuário.** A imagem não é copiada para o APK nem enviada ao GitHub.
 
 O launcher mantém as ações de seleção de disco e início do jogo. A ação **JOGAR** ainda não inicia uma sessão: o runtime nativo precisa ser integrado primeiro. O teste Vulkan isolado foi retirado da interface após encerrar o aplicativo no aparelho do mantenedor; a validação gráfica será feita com o renderizador GS e o próprio jogo.
 
 ## Estado do código nativo
 
-A atividade nativa usa AndroidX GameActivity. O alvo `android-game` liga o runtime Waffle/KIexter e faz um smoke de construção/destruição de `PS2Runtime`, sem chamar `initialize()`, `loadELF()` ou `run()`. A camada ISO9660 por descritor, a ponte JNI e o provider privado `gowdisc:/` no IOP/VFS foram compilados pela CI; falta passar o FD do seletor FORGE para a Activity e validar o acesso com uma ISO real. O renderer Vulkan de clear/present permanece apenas diagnóstico opcional (`GOW_ANDROID_ENABLE_VULKAN_SMOKE=OFF` por padrão) e não é o Graphics Synthesizer do PS2. O backend GS atual da base é OpenGL e a apresentação desktop depende de Raylib; o backend GS/Vulkan e presenter Android ainda não existem. Não há execução do código de God of War nem APK jogável.
+A atividade nativa usa AndroidX GameActivity. O alvo `android-game` liga o runtime Waffle/KIexter e faz um smoke de construção/destruição de `PS2Runtime`, sem chamar `initialize()`, `loadELF()` ou `run()`. O FORGE passa o descritor SAF ao JNI para instalar os arquivos em armazenamento privado; o novo fluxo de instalação e a prova de contrato `DiscSource` ainda aguardam CI. O renderer Vulkan de clear/present permanece apenas diagnóstico opcional (`GOW_ANDROID_ENABLE_VULKAN_SMOKE=OFF` por padrão) e não é o Graphics Synthesizer do PS2. O backend GS atual da base é OpenGL e a apresentação desktop depende de Raylib; o backend GS/Vulkan e presenter Android ainda não existem. Não há execução do código de God of War nem APK jogável.
 
 ## Base do port e referências de engenharia
 

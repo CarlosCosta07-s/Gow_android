@@ -1,4 +1,5 @@
 #include "iso9660_installer.h"
+#include "iso9660_disc_layout.h"
 
 #include <algorithm>
 #include <array>
@@ -265,13 +266,68 @@ void notifyProgress(IsoInstallResult &result,
     }
 }
 
-} // namespace
+struct MetadataProgressContext {
+    IsoInstallResult *result = nullptr;
+    const IsoDiscMetadataInfo *metadata = nullptr;
+    IsoInstallProgressCallback callback = nullptr;
+    void *userData = nullptr;
+};
 
-IsoInstallResult installIsoManifest(
+bool forwardMetadataMeasureProgress(
+    const IsoDiscMetadataProgress &progress, void *opaque) {
+    auto *context = static_cast<MetadataProgressContext *>(opaque);
+    if (context == nullptr || context->callback == nullptr) return true;
+    const IsoInstallProgress installProgress{
+        progress.totalSectors, progress.completedSectors, 0u, 0u};
+    const bool keepGoing = context->callback(installProgress, context->userData);
+    if (!keepGoing && context->result != nullptr) {
+        context->result->cancelled = true;
+        context->result->error = "Installation was cancelled during disc analysis.";
+    }
+    return keepGoing;
+}
+
+bool forwardMetadataWriteProgress(
+    const IsoDiscMetadataProgress &progress, void *opaque) {
+    auto *context = static_cast<MetadataProgressContext *>(opaque);
+    if (context == nullptr || context->callback == nullptr ||
+        context->result == nullptr || context->metadata == nullptr) {
+        return true;
+    }
+
+    uint64_t metadataBytesWritten = 0u;
+    if (progress.totalSectors != 0u) {
+        const long double ratio =
+            static_cast<long double>(progress.completedSectors) /
+            static_cast<long double>(progress.totalSectors);
+        metadataBytesWritten = static_cast<uint64_t>(
+            static_cast<long double>(context->metadata->metadataFileBytes) * ratio);
+    }
+    const uint64_t generatedBytes =
+        context->metadata->layoutFileBytes + metadataBytesWritten;
+    const uint64_t copiedBytes = std::min(
+        context->result->totalBytes,
+        context->result->copiedBytes + generatedBytes);
+    const IsoInstallProgress installProgress{
+        context->result->totalBytes,
+        copiedBytes,
+        context->result->completedFiles,
+        context->result->totalFiles};
+    const bool keepGoing = context->callback(installProgress, context->userData);
+    if (!keepGoing) {
+        context->result->cancelled = true;
+        context->result->error = "Installation was cancelled during disc metadata generation.";
+    }
+    return keepGoing;
+}
+
+IsoInstallResult installIsoManifestImpl(
     const Iso9660Reader &reader,
     const std::vector<IsoInstallFile> &manifest,
     const std::string &privateRoot,
     const std::string &finalDirectoryName,
+    const IsoDiscLayout *discLayout,
+    const IsoDiscMetadataInfo *metadataInfo,
     IsoInstallProgressCallback progressCallback,
     void *userData) {
     IsoInstallResult result;
@@ -291,6 +347,26 @@ IsoInstallResult installIsoManifest(
     if (!validateManifest(reader, manifest, resolved,
                           result.totalBytes, result.error)) {
         return result;
+    }
+    const uint64_t extractedBytes = result.totalBytes;
+    if ((discLayout == nullptr) != (metadataInfo == nullptr)) {
+        result.error = "The disc layout and measured metadata must be supplied together.";
+        return result;
+    }
+    if (discLayout != nullptr) {
+        if (discLayout->files.size() != manifest.size() ||
+            metadataInfo->layoutFileBytes >
+                std::numeric_limits<uint64_t>::max() - result.totalBytes) {
+            result.error = "The disc metadata plan is inconsistent or too large.";
+            return result;
+        }
+        result.totalBytes += metadataInfo->layoutFileBytes;
+        if (metadataInfo->metadataFileBytes >
+            std::numeric_limits<uint64_t>::max() - result.totalBytes) {
+            result.error = "The complete disc installation size overflows the supported range.";
+            return result;
+        }
+        result.totalBytes += metadataInfo->metadataFileBytes;
     }
 
     const int rootFd = ::open(privateRoot.c_str(),
@@ -438,10 +514,41 @@ IsoInstallResult installIsoManifest(
         }
     }
 
-    if (copySucceeded && result.copiedBytes != result.totalBytes) {
+    if (copySucceeded && result.copiedBytes != extractedBytes) {
         copySucceeded = false;
-        result.error = "The extracted byte count does not match the installation plan.";
+        result.error = "The extracted file byte count does not match the installation plan.";
     }
+
+    if (copySucceeded && discLayout != nullptr && metadataInfo != nullptr) {
+        std::string extractedRoot = privateRoot;
+        if (!extractedRoot.empty() && extractedRoot.back() != '/') {
+            extractedRoot.push_back('/');
+        }
+        extractedRoot += stageName + "/disc";
+
+        std::string metadataError;
+        MetadataProgressContext metadataProgress{
+            &result, metadataInfo, progressCallback, userData};
+        if (!writeIsoDiscMetadataMeasured(
+                reader, *discLayout, extractedRoot, *metadataInfo,
+                nullptr, &metadataError,
+                progressCallback != nullptr ? forwardMetadataWriteProgress : nullptr,
+                progressCallback != nullptr ? &metadataProgress : nullptr)) {
+            copySucceeded = false;
+            if (result.error.empty()) {
+                result.error = metadataError.empty()
+                    ? "Could not create the PS2 disc metadata."
+                    : metadataError;
+            }
+            if (metadataProgress.result != nullptr &&
+                metadataProgress.result->cancelled) {
+                result.cancelled = true;
+            }
+        } else {
+            result.copiedBytes = result.totalBytes;
+        }
+    }
+
     if (copySucceeded && ::fsync(stageFd) != 0) {
         copySucceeded = false;
         result.error = "Could not flush the private staging directory.";
@@ -477,6 +584,64 @@ IsoInstallResult installIsoManifest(
 
     result.success = true;
     return result;
+}
+
+IsoInstallResult installIsoManifest(
+    const Iso9660Reader &reader,
+    const std::vector<IsoInstallFile> &manifest,
+    const std::string &privateRoot,
+    const std::string &finalDirectoryName,
+    IsoInstallProgressCallback progressCallback,
+    void *userData) {
+    return installIsoManifestImpl(
+        reader, manifest, privateRoot, finalDirectoryName,
+        nullptr, nullptr, progressCallback, userData);
+}
+
+IsoInstallResult installIsoDisc(
+    const Iso9660Reader &reader,
+    const std::string &privateRoot,
+    const std::string &finalDirectoryName,
+    IsoInstallProgressCallback progressCallback,
+    void *userData) {
+    IsoInstallResult failure;
+    IsoDiscLayout layout;
+    if (!reader.scanDiscLayout(layout, &failure.error)) {
+        if (failure.error.empty()) {
+            failure.error = "Could not enumerate the ISO9660 disc layout.";
+        }
+        return failure;
+    }
+
+    std::vector<IsoInstallFile> manifest;
+    manifest.reserve(layout.files.size());
+    for (const IsoDiscFile &file : layout.files) {
+        manifest.push_back({
+            file.path,
+            "disc/" + file.path,
+            static_cast<uint64_t>(file.size)
+        });
+    }
+
+    IsoDiscMetadataInfo metadata{};
+    MetadataProgressContext measureProgress{
+        &failure, nullptr, progressCallback, userData};
+    if (!measureIsoDiscMetadata(
+            reader, layout, metadata, &failure.error,
+            progressCallback != nullptr ? forwardMetadataMeasureProgress : nullptr,
+            progressCallback != nullptr ? &measureProgress : nullptr)) {
+        if (measureProgress.result != nullptr && measureProgress.result->cancelled) {
+            failure.cancelled = true;
+        }
+        if (failure.error.empty()) {
+            failure.error = "Could not measure the PS2 disc metadata.";
+        }
+        return failure;
+    }
+
+    return installIsoManifestImpl(
+        reader, manifest, privateRoot, finalDirectoryName,
+        &layout, &metadata, progressCallback, userData);
 }
 
 } // namespace gow::disc

@@ -6,10 +6,10 @@
 
 ## [DECISÃO ARQUITETURAL] Instalação BT3
 
-- O fluxo final escolhido é a extração seletiva para o armazenamento privado do aplicativo, inspirado no instalador BT3 do Dragon Rage.
 - A ISO será fonte de importação; o runtime deverá ler do `cdRoot` local depois que a instalação estiver validada.
-- Arquivos/pacotes de dados grandes serão preservados nos formatos originais. Não haverá preload de toda a instalação na RAM.
-- O manifesto de God of War ainda precisa ser derivado da árvore real da imagem e do rastreamento de boot. Os caminhos do Dragon Rage não serão presumidos.
+- O primeiro instalador completo enumera e extrai todos os arquivos regulares ISO9660 para preservar cada extent original usado pelas leituras por LSN. Não presume que um subconjunto de arquivos seja suficiente.
+- Arquivos/pacotes grandes serão mantidos nos formatos originais. Não haverá preload de toda a instalação na RAM.
+- Reduzir a instalação a um manifesto seletivo só será considerado após rastrear os acessos reais do jogo e comprovar que os setores omitidos continuam disponíveis ao `DiscSource`; não serão presumidos caminhos do Dragon Rage.
 - O leitor ISO e a ponte híbrida já compilada serão reaproveitados onde fizer sentido, mas o provider que mantém a ISO aberta durante o jogo é transitório e não define a arquitetura final.
 - O objetivo de desempenho em aparelhos modestos será avaliado por frame time, 1% low, memória, I/O e temperatura em hardware real. A instalação BT3, isoladamente, não comprova aumento de FPS.
 
@@ -25,13 +25,13 @@
 
 **[VERIFICADO NA REFERÊNCIA DO JOGO]** A documentação de KIexster explica que `SMPD_IOP.IRX` carrega dados consultando setores com `sceCdRead`; `GODOFWAR.TOC` e os pacotes `PART*.PAK` dependem de LSNs originais. O mesmo port disponibiliza os módulos IRX no diretório `IOP_MOD/` porque o jogo os solicita por caminhos relativos.
 
-**[NÃO IMPLEMENTADO NO ANDROID]** O `CdRootVfs` cobre operações por caminho, mas isso não atende sozinho às leituras brutas por LSN. O importador atual ainda instala apenas `SYSTEM.CNF` e BOOT2 ELF; não gera `.disc_layout`/ `.disc_meta`, não importa os pacotes de dados e não foi testado com `DiscSource::openExtracted()`/ `sceCdRead`. O leitor Android atual também não implementa a descoberta e a enumeração da segunda camada.
+**[IMPLEMENTAÇÃO ADICIONADA, CI PENDENTE]** O novo `installIsoDisc()` enumera o conjunto de arquivos ISO9660 nas duas camadas, prepara `disc/<caminho-original>` em staging, gera `.disc_layout` e `.disc_meta` antes de publicar e remove o staging em caso de falha/cancelamento. A interface FORGE passou a chamar esse fluxo completo, em vez da antiga importação apenas de `SYSTEM.CNF` + BOOT2. A integração ainda precisa passar pela CI; não há validação com ISO real nem boot/gameplay.
 
 **[CORREÇÃO ENVIADA, CI PENDENTE]** Os commits `e531ea1`, `1741d98`, `d124812` e `a7f93b4` removem a dependência do token virtual `gowcdroot:/` como caminho físico: o JNI disponibiliza o caminho real da instalação, e o PS2 VFS encaminha `cdrom0:` com base no dispositivo já analisado. Os workflows `42213387878` (Android) e `42213387898` (host) ainda precisam concluir na revisão atual. Isso corrige a fronteira de montagem, não comprova o boot.
 
-**[VERIFICADO NO HOST E NA CI ANDROID, run `42218565639`] Gerador `.disc_layout`/`.disc_meta`:** `iso9660_disc_layout.cpp` existia, mas não compilava com `-Wall -Wextra -Werror` (variável não usada) e não estava no CMake nem na CI. Foi corrigido e ligado ao alvo `android-game`; um teste host sintético (`iso9660_disc_layout_test.cpp`, ISO de dupla camada fabricada) passa com g++ e clang++ e cobre: conteúdo exato de `.disc_layout`, registros de `.disc_meta` (LSN little-endian + setor original), arquivo extraído ausente/com tamanho errado/symlink, layout divergente da imagem, raiz inválida e ausência de temporários após falha. Dois defeitos reais foram corrigidos: uma recusa por metadados já existentes **apagava** esses arquivos, e temporários órfãos de uma execução interrompida bloqueavam novas tentativas. `.disc_layout` agora é publicado por último. **Limites:** o instalador ainda não chama o gerador, o formato não foi validado contra `DiscSource::openExtracted()` real (apenas contra o contrato documentado) e, embora o alvo ARM64 compile na CI, o gerador ainda não é executado em aparelho.
+**[VERIFICADO NO HOST E NA CI ANDROID, run `42218565639`] Gerador de metadados:** `iso9660_disc_layout.cpp` foi corrigido, ligado ao alvo `android-game` e coberto por fixtures sintéticas de dupla camada. Os testes verificam conteúdo de `.disc_layout`, registros de `.disc_meta` (LSN little-endian + setor original), arquivos ausentes/tamanho errado/symlink, layout divergente e recuperação de temporários. A publicação de `.disc_layout` ocorre por último para sinalizar o par completo. **Nova integração em validação:** o instalador agora mede o espaço para os metadados, oferece cancelamento durante análise/geração e cria os dois arquivos no staging antes do rename final. Um novo teste compila a fonte real de `DiscSource` do Waffle e valida a instalação sintética completa; a CI dessa revisão ainda está pendente.
 
-**Próxima prioridade:** completar o leitor/instalador de disco de dupla camada, gerar os dois metadados no formato esperado pelo runtime e validar o contrato com fixtures sintéticas sem dados proprietários.
+**Próxima prioridade:** executar e corrigir a CI da integração entre o instalador completo e `DiscSource::openExtracted()`. Depois, validar em aparelho com a ISO do usuário sem copiar dados proprietários para o GitHub.
 
 ## [COMPILADO, NÃO TESTADO EM APARELHO] Refinamento do launcher, novo ícone, hora e bateria
 
@@ -44,9 +44,9 @@
 
 - `Iso9660Reader` abre o PVD ISO9660 no setor 16, resolve arquivos por diretórios/extents, enumera os filhos imediatos e lê por offset sem carregar a imagem inteira.
 - `listDirectory()` e o parser aplicam limites de tamanho/profundidade/entradas e rejeitam traversal, registros/extents inválidos e caminhos ambíguos.
-- `iso9660_installer.cpp` extrai somente o manifesto fornecido, em blocos de 64 KiB. Pré-valida caminhos/destinos/tamanhos, consulta espaço disponível, sincroniza arquivos e diretórios, oferece cancelamento e publica o staging por rename no mesmo filesystem.
-- O FORGE importa somente `SYSTEM.CNF` e o executável identificado por `BOOT2` para `files/installations/gow_boot_seed/disc`. A imagem é revalidada antes da extração e o app mostra progresso/cancelamento.
-- Fixtures sintéticas cobrem listagem ISO, extração byte a byte, tamanho incompatível, traversal, colisão de destinos, cancelamento e limpeza de staging. Nenhuma ISO/ELF de jogo é usada na CI.
+- `iso9660_installer.cpp` mantém a API genérica de manifesto e acrescenta `installIsoDisc()`: enumera todos os arquivos ISO9660 suportados, extrai-os em blocos de 64 KiB para `disc/`, calcula o espaço de `.disc_layout`/`.disc_meta` e escreve os metadados no staging antes da publicação atômica. A integração completa está aguardando o resultado da CI desta revisão.
+- O FORGE chama o novo JNI `nativeInstallIsoDisc()` e cria instalações separadas por serial/revisão reconhecida. O launcher valida o ELF local depois de abrir o `cdRoot`; ainda não inicia o runtime.
+- A CI continua usando somente fixtures sintéticas. O novo teste liga o instalador ao `ps2x::iop::DiscSource` compilado da árvore Waffle preparada no workflow e verifica leitura de setores nas duas camadas e busca de arquivos por caminho/LSN.
 
 ## [VERIFICADO] Provider local cdRoot
 
@@ -57,16 +57,16 @@
 - Fixtures sintéticas do ELF cobrem um executável válido, magic inválido e entry point fora de `PT_LOAD`. O teste valida também a busca local case-insensitive com sufixo ISO `;1`.
 - A primeira implementação compartilhou acidentalmente o offset do descritor raiz via `dup()`. Foi corrigida usando `openat(rootFd, ".", ...)` para gerar descrição de arquivo independente por operação.
 - A CI Android run `42187116530` concluiu os testes host, compilou o APK Debug ARM64 e publicou o artefato. A validação foi feita com ELF sintético; nenhum executável real de God of War foi usado.
-- O provider atual é somente por caminho; a fonte `DiscSource` do runtime exige `.disc_layout` e `.disc_meta` para reproduzir leituras por LSN. A instalação atual ainda não possui esses arquivos.
+- O provider `CdRootVfs` continua atendendo operações por caminho. O novo instalador gera os metadados necessários à fonte `DiscSource` por LSN; a integração e o contrato estão em validação de CI, sem teste ainda com dados reais.
 
 
 ## [VERIFICADO] Shell FORGE e importação de boot
 
 - O FORGE usa Storage Access Framework para selecionar a imagem e identifica `SYSTEM.CNF`/`BOOT2`, reconhecendo inicialmente `SCUS_973.99` (NTSC-U) e `SCES_531.33` (PAL).
-- A ação `PREPARAR BOOT` reabre e revalida a imagem, importa o arquivo de configuração e o executável para armazenamento privado, informa progresso e permite cancelamento.
-- Após a publicação, a Activity abre a raiz `gow_boot_seed/disc` no `CdRootVfs` e valida o executável BOOT2 local como ELF32 little-endian MIPS, incluindo segmentos carregáveis e entry point. O resultado aparece no FORGE.
-- A validação ELF não confirma serial/revisão do conteúdo nem inicia o executável; confirma somente a estrutura ELF esperada pelo loader.
-- O APK Debug ARM64 foi compilado com extração, cdRoot e validação ELF no run `42187116530`. Os testes usam ISO/ELF sintéticos; ainda falta validar uma imagem real fornecida pelo usuário em aparelho.
+- A ação `INSTALAR JOGO` reabre e revalida a imagem, enumera a árvore ISO9660 completa suportada, extrai os arquivos para armazenamento privado e gera `.disc_layout`/`.disc_meta` dentro do staging antes da publicação.
+- Após a publicação, o FORGE abre `<instalação>/disc` no `CdRootVfs` e valida o BOOT2 local como ELF32 little-endian MIPS, incluindo segmentos carregáveis e entry point.
+- A validação ELF não inicia o executável. O runtime ainda não chama `DiscSource::openExtracted()`, `loadELF()` ou `run()` como parte do fluxo de jogo.
+- A CI desta integração completa está pendente; os testes de contrato usam ISO sintética e fonte Waffle preparada no runner, sem ISO/ELF de God of War.
 
 
 ## [VERIFICADO] Componentes KIexter importados

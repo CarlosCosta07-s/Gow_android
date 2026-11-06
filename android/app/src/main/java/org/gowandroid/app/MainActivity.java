@@ -46,7 +46,6 @@ import java.util.concurrent.Executors;
  */
 public final class MainActivity extends AppCompatActivity {
     private static final String PREF_DISC_URI = "selected_disc_uri";
-    private static final String PREF_INSTALLED_BOOT_PATH = "installed_boot_path";
     private static final int ISO_SECTOR_SIZE = 2048;
     private static final long PRIMARY_VOLUME_DESCRIPTOR_OFFSET = 16L * ISO_SECTOR_SIZE;
 
@@ -72,9 +71,10 @@ public final class MainActivity extends AppCompatActivity {
                            int completedFiles, int totalFiles);
     }
 
-    private static native String nativeInstallIsoManifest(
-            int descriptor, String privateRoot, String[] sourcePaths,
-            String[] destinationPaths, InstallProgressCallback progressCallback);
+
+    private static native String nativeInstallIsoDisc(
+            int descriptor, String privateRoot, String finalDirectoryName,
+            InstallProgressCallback progressCallback);
 
     private static native boolean nativeSetCdRootDirectory(String privateCdRoot);
     private static native String nativeValidateCdRootElf(String relativePath);
@@ -86,10 +86,10 @@ public final class MainActivity extends AppCompatActivity {
     private TextView discName;
     private TextView discStatus;
     private Button selectDiscButton;
-    private Button prepareBootButton;
-    private AlertDialog bootImportDialog;
-    private ProgressBar bootImportProgressBar;
-    private TextView bootImportProgressText;
+    private Button installDiscButton;
+    private AlertDialog discInstallDialog;
+    private ProgressBar discInstallProgressBar;
+    private TextView discInstallProgressText;
 
     private TextView clockTime;
     private TextView clockDate;
@@ -103,9 +103,9 @@ public final class MainActivity extends AppCompatActivity {
     private boolean selectedDiscValid;
     private String selectedDiscSerial;
     private String selectedDiscBootPath;
-    private boolean installingBootFiles;
-    private volatile boolean cancelBootImportRequested;
-    private String preparedBootElfSummary;
+    private boolean installingDisc;
+    private volatile boolean cancelDiscInstallRequested;
+    private String preparedElfSummary;
 
     // The native runtime reads this descriptor through /proc/self/fd/<n>.
     // Keep it open while the launcher and NativeActivity share the same process.
@@ -223,9 +223,9 @@ public final class MainActivity extends AppCompatActivity {
         LinearLayout actionRow = new LinearLayout(this);
         actionRow.setOrientation(LinearLayout.HORIZONTAL);
 
-        prepareBootButton = actionButton("PREPARAR BOOT", true);
-        prepareBootButton.setOnClickListener(view -> onPlayPressed());
-        actionRow.addView(prepareBootButton, new LinearLayout.LayoutParams(
+        installDiscButton = actionButton("INSTALAR JOGO", true);
+        installDiscButton.setOnClickListener(view -> onPlayPressed());
+        actionRow.addView(installDiscButton, new LinearLayout.LayoutParams(
                 0, dp(47), 0.72f));
 
         View gap = new View(this);
@@ -733,20 +733,21 @@ public final class MainActivity extends AppCompatActivity {
         }
 
         new AlertDialog.Builder(this)
-                .setTitle("Preparar arquivos de boot")
+                .setTitle("Preparar instalação do disco")
                 .setMessage(
                         "Disco reconhecido: " + selectedDiscSerial + ".\n\n"
-                                + "O FORGE vai copiar SYSTEM.CNF e o executável indicado por BOOT2 "
-                                + "para o armazenamento privado do aplicativo. Esta é apenas a "
-                                + "primeira etapa de importação: os demais dados do jogo ainda "
-                                + "não foram mapeados e isso não inicia o jogo.")
-                .setPositiveButton("Preparar", (dialog, which) -> startBootFileImport())
+                                + "O FORGE vai copiar os arquivos ISO9660 para o armazenamento "
+                                + "privado e gerar .disc_layout e .disc_meta, que preservam as "
+                                + "leituras do disco por LSN usadas pelo runtime PS2. Esta etapa "
+                                + "não inicia o jogo. A instalação só será publicada quando "
+                                + "todos os arquivos e metadados forem concluídos.")
+                .setPositiveButton("Preparar", (dialog, which) -> startFullDiscInstall())
                 .setNegativeButton("Cancelar", null)
                 .show();
     }
 
-    private void startBootFileImport() {
-        if (installingBootFiles || selectedDiscUri == null
+    private void startFullDiscInstall() {
+        if (installingDisc || selectedDiscUri == null
                 || selectedDiscBootPath == null || !selectedDiscValid) {
             return;
         }
@@ -754,54 +755,59 @@ public final class MainActivity extends AppCompatActivity {
         final Uri sourceUri = selectedDiscUri;
         final String expectedSerial = selectedDiscSerial;
         final String bootPath = selectedDiscBootPath;
-        final String installationName = "gow_boot_seed";
+        final String installationName = "gow_" + expectedSerial.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
         final File installationRoot = new File(getFilesDir(), "installations");
         final File finalInstallation = new File(installationRoot, installationName);
 
         if (finalInstallation.exists()) {
-            boolean cdRootReady = nativeSetCdRootDirectory(
-                    new File(finalInstallation, "disc").getAbsolutePath());
-            String installedBootPath = getPreferences(MODE_PRIVATE)
-                    .getString(PREF_INSTALLED_BOOT_PATH, bootPath);
+            File cdRoot = new File(finalInstallation, "disc");
+            boolean metadataReady =
+                    new File(cdRoot, ".disc_layout").isFile()
+                            && new File(cdRoot, ".disc_meta").isFile();
+            boolean cdRootReady = metadataReady
+                    && nativeSetCdRootDirectory(cdRoot.getAbsolutePath());
+            String installedBootPath = bootPath;
             String elfValidation = cdRootReady
                     ? nativeValidateCdRootElf(installedBootPath)
-                    : "O provider cdRoot não conseguiu abrir a pasta privada.";
-            boolean elfValid = elfValidation != null
-                    && elfValidation.startsWith("OK:");
+                    : (metadataReady
+                        ? "O provider cdRoot não conseguiu abrir a pasta privada."
+                        : "A instalação existente não possui o par completo .disc_layout/.disc_meta.");
+            boolean elfValid = elfValidation != null && elfValidation.startsWith("OK:");
             String detail = cdRootReady
                     ? (elfValid
                         ? "Executável local validado: " + elfValidation.substring(4).trim() + "."
-                        : "A pasta foi aberta, mas o ELF local não passou na validação: " + elfValidation)
+                        : "O ELF local não passou na validação: " + elfValidation)
                     : elfValidation;
             new AlertDialog.Builder(this)
                     .setTitle(elfValid
-                            ? "Arquivos de boot verificados"
-                            : "Arquivos de boot já importados")
+                            ? "Instalação do disco verificada"
+                            : "Instalação existente incompleta")
                     .setMessage(
-                            "A pasta de preparação já existe no armazenamento privado. "
+                            "A pasta de instalação já existe no armazenamento privado. "
                                     + detail + "\n\n"
-                                    + "Ela contém somente os arquivos de boot importados nesta etapa; "
-                                    + "não representa uma instalação completa nem permite iniciar o jogo.")
+                                    + "Mesmo com os arquivos e metadados preparados, o runtime "
+                                    + "ainda não inicia o jogo nesta versão.")
                     .setPositiveButton("Entendi", null)
                     .show();
             return;
         }
 
         if (!installationRoot.exists() && !installationRoot.mkdirs()) {
-            showBootImportResult(false,
+            showDiscInstallResult(false,
                     "Não foi possível criar a pasta privada de instalação.");
             return;
         }
 
-        installingBootFiles = true;
-        cancelBootImportRequested = false;
-        showBootImportProgressDialog();
-        if (prepareBootButton != null) {
-            prepareBootButton.setEnabled(false);
-            prepareBootButton.setText("IMPORTANDO...");
-            prepareBootButton.setAlpha(0.6f);
+        installingDisc = true;
+        cancelDiscInstallRequested = false;
+        showDiscInstallProgressDialog();
+        if (installDiscButton != null) {
+            installDiscButton.setEnabled(false);
+            installDiscButton.setText("IMPORTANDO...");
+            installDiscButton.setAlpha(0.6f);
         }
-        discStatus.setText("Preparando SYSTEM.CNF e o executável BOOT2...");
+        discStatus.setText("Analisando e preparando os dados do disco...");
         discStatus.setTextColor(COLOR_MUTED);
 
         ioExecutor.execute(() -> {
@@ -822,42 +828,38 @@ public final class MainActivity extends AppCompatActivity {
                                     + "Selecione e valide novamente o disco.");
                 }
 
-                String[] sourcePaths = {"SYSTEM.CNF", bootPath};
-                String[] destinationPaths = {
-                        "disc/SYSTEM.CNF",
-                        "disc/" + bootPath
-                };
                 final int[] lastPercent = {-1};
                 InstallProgressCallback callback =
                         (totalBytes, copiedBytes, completedFiles, totalFiles) -> {
-                            if (cancelBootImportRequested) {
+                            if (cancelDiscInstallRequested) {
                                 return false;
                             }
-                            int percent = totalBytes <= 0L ? 100
+                            int percent = totalBytes <= 0L ? 0
                                     : (int) Math.min(100L,
                                             (copiedBytes * 100L) / totalBytes);
                             if (percent != lastPercent[0]) {
                                 lastPercent[0] = percent;
                                 runOnUiThread(() -> {
                                     if (!isFinishing() && !isDestroyed()) {
-                                        String progressText = percent + "% · "
-                                                + completedFiles + "/" + totalFiles + " arquivos";
-                                        discStatus.setText("Importando arquivos de boot: " + progressText);
-                                        if (bootImportProgressBar != null) {
-                                            bootImportProgressBar.setProgress(percent);
+                                        String progressText = totalFiles <= 0
+                                                ? "Analisando setores do disco: " + percent + "%"
+                                                : percent + "% · " + completedFiles + "/" + totalFiles + " arquivos";
+                                        discStatus.setText("Preparando instalação: " + progressText);
+                                        if (discInstallProgressBar != null) {
+                                            discInstallProgressBar.setProgress(percent);
                                         }
-                                        if (bootImportProgressText != null) {
-                                            bootImportProgressText.setText(progressText);
+                                        if (discInstallProgressText != null) {
+                                            discInstallProgressText.setText(progressText);
                                         }
                                     }
                                 });
                             }
-                            return !cancelBootImportRequested;
+                            return !cancelDiscInstallRequested;
                         };
 
-                String error = nativeInstallIsoManifest(
+                String error = nativeInstallIsoDisc(
                         candidate.getFd(), installationRoot.getAbsolutePath(),
-                        sourcePaths, destinationPaths, callback);
+                        installationName, callback);
                 if (error != null && !error.isEmpty()) {
                     failure = error;
                 } else if (!nativeSetCdRootDirectory(
@@ -869,10 +871,7 @@ public final class MainActivity extends AppCompatActivity {
                         failure = "O arquivo de BOOT2 foi copiado, mas falhou na validação ELF local: "
                                 + (elfValidation == null ? "resposta nativa vazia." : elfValidation);
                     } else {
-                        preparedBootElfSummary = elfValidation.substring(4).trim();
-                        getPreferences(MODE_PRIVATE).edit()
-                                .putString(PREF_INSTALLED_BOOT_PATH, bootPath)
-                                .apply();
+                        preparedElfSummary = elfValidation.substring(4).trim();
                     }
                 }
             } catch (IOException | SecurityException | ErrnoException exception) {
@@ -884,94 +883,94 @@ public final class MainActivity extends AppCompatActivity {
             }
 
             final String finalFailure = failure;
-            runOnUiThread(() -> showBootImportResult(
+            runOnUiThread(() -> showDiscInstallResult(
                     finalFailure == null, finalFailure));
         });
     }
 
-    private void showBootImportProgressDialog() {
+    private void showDiscInstallProgressDialog() {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(20), dp(14), dp(20), dp(8));
 
-        bootImportProgressText = text(
-                "Preparando arquivos...", 10, COLOR_MUTED,
+        discInstallProgressText = text(
+                "Analisando a estrutura do disco...", 10, COLOR_MUTED,
                 Typeface.create("sans-serif", Typeface.NORMAL));
-        content.addView(bootImportProgressText, matchWrap());
+        content.addView(discInstallProgressText, matchWrap());
 
-        bootImportProgressBar = new ProgressBar(
+        discInstallProgressBar = new ProgressBar(
                 this, null, android.R.attr.progressBarStyleHorizontal);
-        bootImportProgressBar.setIndeterminate(false);
-        bootImportProgressBar.setMax(100);
-        bootImportProgressBar.setProgress(0);
+        discInstallProgressBar.setIndeterminate(false);
+        discInstallProgressBar.setMax(100);
+        discInstallProgressBar.setProgress(0);
         LinearLayout.LayoutParams progressParams = matchWrap();
         progressParams.topMargin = dp(13);
-        content.addView(bootImportProgressBar, progressParams);
+        content.addView(discInstallProgressBar, progressParams);
 
-        bootImportDialog = new AlertDialog.Builder(this)
-                .setTitle("Importando arquivos de boot")
+        discInstallDialog = new AlertDialog.Builder(this)
+                .setTitle("Preparando instalação do disco")
                 .setView(content)
                 .setNegativeButton("Cancelar", null)
                 .create();
-        bootImportDialog.setCancelable(false);
-        bootImportDialog.setCanceledOnTouchOutside(false);
-        bootImportDialog.setOnShowListener(dialog -> {
-            Button cancelButton = bootImportDialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+        discInstallDialog.setCancelable(false);
+        discInstallDialog.setCanceledOnTouchOutside(false);
+        discInstallDialog.setOnShowListener(dialog -> {
+            Button cancelButton = discInstallDialog.getButton(AlertDialog.BUTTON_NEGATIVE);
             cancelButton.setOnClickListener(view -> {
-                cancelBootImportRequested = true;
+                cancelDiscInstallRequested = true;
                 cancelButton.setEnabled(false);
-                if (bootImportProgressText != null) {
-                    bootImportProgressText.setText("Cancelando e limpando os arquivos temporários...");
+                if (discInstallProgressText != null) {
+                    discInstallProgressText.setText("Cancelando e limpando os arquivos temporários...");
                 }
             });
         });
-        bootImportDialog.show();
+        discInstallDialog.show();
     }
 
-    private void showBootImportResult(boolean success, String error) {
+    private void showDiscInstallResult(boolean success, String error) {
         if (isFinishing() || isDestroyed()) {
             return;
         }
-        if (bootImportDialog != null) {
-            bootImportDialog.dismiss();
-            bootImportDialog = null;
+        if (discInstallDialog != null) {
+            discInstallDialog.dismiss();
+            discInstallDialog = null;
         }
-        bootImportProgressBar = null;
-        bootImportProgressText = null;
-        installingBootFiles = false;
-        if (prepareBootButton != null) {
-            prepareBootButton.setEnabled(true);
-            prepareBootButton.setAlpha(1f);
-            prepareBootButton.setText(success ? "BOOT PREPARADO" : "TENTAR NOVAMENTE");
-            if (success) prepareBootButton.setEnabled(false);
+        discInstallProgressBar = null;
+        discInstallProgressText = null;
+        installingDisc = false;
+        if (installDiscButton != null) {
+            installDiscButton.setEnabled(true);
+            installDiscButton.setAlpha(1f);
+            installDiscButton.setText(success ? "DISCO INSTALADO" : "TENTAR NOVAMENTE");
+            if (success) installDiscButton.setEnabled(false);
         }
 
         if (success) {
             discStatus.setText(
-                    "Executável local validado: " + preparedBootElfSummary + ". "
-                            + "Os demais arquivos do disco ainda precisam ser identificados; "
-                            + "o jogo ainda não pode iniciar.");
+                    "Instalação completa do disco preparada. "
+                            + preparedElfSummary + ". O runtime ainda não foi iniciado.");
             discStatus.setTextColor(0xFF8BC28F);
             new AlertDialog.Builder(this)
-                    .setTitle("Preparação inicial concluída")
+                    .setTitle("Instalação do disco concluída")
                     .setMessage(
-                            "SYSTEM.CNF e o executável BOOT2 foram copiados e publicados "
-                                    + "na pasta privada gow_boot_seed. "
-                                    + preparedBootElfSummary + ". A instalação ainda está "
-                                    + "incompleta e o runtime não foi iniciado.")
+                            "Os arquivos ISO9660 foram extraídos para a pasta privada "
+                                    + "gow_full_install/disc. Os metadados .disc_layout e "
+                                    + ".disc_meta foram gerados e publicados junto com os dados. "
+                                    + preparedElfSummary + ". A instalação foi preparada, "
+                                    + "mas o jogo ainda não foi iniciado.")
                     .setPositiveButton("Continuar", null)
                     .show();
         } else {
             String message = error == null || error.isEmpty()
-                    ? "Não foi possível importar os arquivos de boot."
+                    ? "Não foi possível preparar a instalação do disco."
                     : error;
             boolean cancelled = message.startsWith("Importação cancelada");
             discStatus.setText(cancelled
-                    ? "Importação cancelada; os arquivos temporários foram removidos."
+                    ? "Instalação cancelada; os arquivos temporários foram removidos."
                     : "Falha na importação: " + message);
             discStatus.setTextColor(cancelled ? COLOR_MUTED : 0xFFE27676);
             new AlertDialog.Builder(this)
-                    .setTitle(cancelled ? "Importação cancelada" : "Falha na preparação")
+                    .setTitle(cancelled ? "Instalação cancelada" : "Falha na instalação")
                     .setMessage(message)
                     .setPositiveButton("Fechar", null)
                     .show();
@@ -1342,11 +1341,11 @@ public final class MainActivity extends AppCompatActivity {
         if (deviceStatusMonitor != null) {
             deviceStatusMonitor.stop();
         }
-        cancelBootImportRequested = true;
+        cancelDiscInstallRequested = true;
         ioExecutor.shutdownNow();
-        if (bootImportDialog != null) {
-            bootImportDialog.dismiss();
-            bootImportDialog = null;
+        if (discInstallDialog != null) {
+            discInstallDialog.dismiss();
+            discInstallDialog = null;
         }
         closeQuietly(selectedDiscDescriptor);
         selectedDiscDescriptor = null;

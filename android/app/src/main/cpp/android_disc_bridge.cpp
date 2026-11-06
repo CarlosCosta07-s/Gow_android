@@ -256,60 +256,26 @@ Java_org_gowandroid_app_MainActivity_nativeValidateCdRootElf(
     }
 }
 
-// Imports a small, explicit set of boot files into private app storage. It does
-// not imply that the complete game data set is installed or that the game can
-// boot yet. Returns an empty string on success, otherwise a diagnostic message.
+// Imports the complete ISO9660 file tree and creates the sector metadata
+// consumed by Waffle DiscSource::openExtracted(). Publication happens only
+// after both files and metadata have been generated in the staging directory.
 extern "C" JNIEXPORT jstring JNICALL
-Java_org_gowandroid_app_MainActivity_nativeInstallIsoManifest(
+Java_org_gowandroid_app_MainActivity_nativeInstallIsoDisc(
     JNIEnv *env, jclass, jint descriptor, jstring privateRoot,
-    jobjectArray sourcePaths, jobjectArray destinationPaths,
-    jobject progressCallback) {
+    jstring finalDirectoryName, jobject progressCallback) {
     auto makeResult = [env](const std::string &message) -> jstring {
         return env->NewStringUTF(message.c_str());
     };
-
     try {
-        if (descriptor < 0 || privateRoot == nullptr ||
-            sourcePaths == nullptr || destinationPaths == nullptr) {
-            return makeResult("Parâmetros de instalação inválidos.");
+        if (descriptor < 0 || privateRoot == nullptr || finalDirectoryName == nullptr) {
+            return makeResult("Parâmetros de instalação completa inválidos.");
         }
-
-        const jsize sourceCount = env->GetArrayLength(sourcePaths);
-        const jsize destinationCount = env->GetArrayLength(destinationPaths);
-        if (sourceCount <= 0 || sourceCount != destinationCount ||
-            sourceCount > 65536) {
-            return makeResult("O manifesto está vazio ou possui tamanhos incompatíveis.");
-        }
-
         std::string rootPath;
-        if (!copyJavaString(env, privateRoot, rootPath) || rootPath.empty()) {
-            return makeResult("Não foi possível ler o caminho privado do aplicativo.");
+        std::string finalName;
+        if (!copyJavaString(env, privateRoot, rootPath) || rootPath.empty() ||
+            !copyJavaString(env, finalDirectoryName, finalName) || finalName.empty()) {
+            return makeResult("O caminho privado ou o identificador da instalação é inválido.");
         }
-
-        std::vector<gow::disc::IsoInstallFile> manifest;
-        manifest.reserve(static_cast<size_t>(sourceCount));
-        for (jsize index = 0; index < sourceCount; ++index) {
-            auto source = static_cast<jstring>(
-                env->GetObjectArrayElement(sourcePaths, index));
-            auto destination = static_cast<jstring>(
-                env->GetObjectArrayElement(destinationPaths, index));
-            std::string sourcePath;
-            std::string destinationPath;
-            const bool copied =
-                copyJavaString(env, source, sourcePath) &&
-                copyJavaString(env, destination, destinationPath);
-            if (source != nullptr) env->DeleteLocalRef(source);
-            if (destination != nullptr) env->DeleteLocalRef(destination);
-            if (!copied) {
-                return makeResult("O manifesto contém um caminho inválido.");
-            }
-            manifest.push_back({
-                std::move(sourcePath),
-                std::move(destinationPath),
-                gow::disc::kUnknownExpectedFileSize
-            });
-        }
-
         ProgressContext progress;
         if (progressCallback != nullptr) {
             progress.env = env;
@@ -318,15 +284,13 @@ Java_org_gowandroid_app_MainActivity_nativeInstallIsoManifest(
             if (callbackClass == nullptr) {
                 return makeResult("Não foi possível acessar o callback de progresso.");
             }
-            progress.method = env->GetMethodID(
-                callbackClass, "onProgress", "(JJII)Z");
+            progress.method = env->GetMethodID(callbackClass, "onProgress", "(JJII)Z");
             env->DeleteLocalRef(callbackClass);
             if (progress.method == nullptr || env->ExceptionCheck()) {
                 env->ExceptionClear();
                 return makeResult("O callback de progresso possui uma assinatura inválida.");
             }
         }
-
         gow::disc::Iso9660Reader reader;
         std::string openError;
         if (!reader.openDescriptor(descriptor, &openError)) {
@@ -334,23 +298,22 @@ Java_org_gowandroid_app_MainActivity_nativeInstallIsoManifest(
                 ? "Não foi possível abrir a imagem ISO no leitor nativo."
                 : openError);
         }
-
-        const auto result = gow::disc::installIsoManifest(
-            reader, manifest, rootPath, "gow_boot_seed",
+        const auto result = gow::disc::installIsoDisc(
+            reader, rootPath, finalName,
             progressCallback != nullptr ? forwardInstallProgress : nullptr,
             progressCallback != nullptr ? &progress : nullptr);
         if (!result.success) {
             if (result.cancelled) {
-                return makeResult("Importação cancelada. Os arquivos temporários foram removidos.");
+                return makeResult("Instalação cancelada. O diretório temporário foi removido.");
             }
             return makeResult(result.error.empty()
-                ? "A extração dos arquivos de boot falhou."
+                ? "A instalação completa do disco falhou."
                 : result.error);
         }
         return makeResult("");
     } catch (const std::exception &exception) {
-        return makeResult(std::string("Falha interna no instalador: ") + exception.what());
+        return makeResult(std::string("Falha interna na instalação do disco: ") + exception.what());
     } catch (...) {
-        return makeResult("Falha interna desconhecida no instalador.");
+        return makeResult("Falha interna desconhecida na instalação do disco.");
     }
 }

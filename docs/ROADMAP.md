@@ -72,9 +72,10 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [ ] Verificar tamanhos/hashes disponíveis e publicar a instalação atomicamente; limpar ou retomar staging incompleto sem marcar instalação parcial como pronta.
 - [ ] Configurar `PS2Runtime::loadELF()` para o ELF local e o `PS2IopHostAdapter`/`PS2Vfs` para usar o `cdRoot` local da instalação.
 - [ ] Manter `IoPaths.cdRoot` como o caminho físico da instalação privada; encaminhar `cdrom0:` no PS2 VFS antes de normalizar caminhos virtuais (correção enviada, aguardando CI).
-- [ ] Implementar descoberta da segunda camada do DVD e enumeração recursiva de diretórios/extents nas duas camadas.
-- [ ] Gerar `.disc_layout` e `.disc_meta` compatíveis com `ps2x::iop::DiscSource::openExtracted()`, preservando LSNs originais.
-- [ ] Extrair o conjunto completo de arquivos do disco para staging privado, com previsão de espaço, progresso, cancelamento, validação e publicação atômica.
+- [x] Implementar descoberta da segunda camada do DVD e enumeração recursiva de diretórios/extents nas duas camadas; fixtures ISO sintéticas cobrem extents em ambas as camadas.
+- [x] Implementar o gerador `.disc_layout`/`.disc_meta` com LSNs originais, medição de espaço e publicação do par com `.disc_layout` por último; testes sintéticos isolados aprovados no run `42218565639`.
+- [ ] Integrar o gerador ao instalador completo `installIsoDisc()`: extrair todos os arquivos ISO9660 para staging, criar os metadados antes da publicação atômica e cancelar com limpeza segura. **Código adicionado; CI pendente nesta revisão.**
+- [ ] Validar o produto do instalador com a implementação real de `ps2x::iop::DiscSource` compilada da árvore Waffle preparada; o novo teste sintético cobre `openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()`. **CI pendente nesta revisão.**
 - [ ] Disponibilizar os módulos IRX no layout `IOP_MOD/` esperado pelo jogo, sem enviar módulos do disco para Git/CI.
 - [ ] Testar `DiscSource::openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` com ISO sintética de dupla camada.
 - [ ] Remover o uso residual do provider ISO transitório `gowdisc:/` do caminho normal de gameplay após validar a instalação local completa; não manter um FD da ISO aberto durante a partida.

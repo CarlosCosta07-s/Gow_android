@@ -14,7 +14,7 @@ O módulo `android/app/src/main/cpp/iso9660_reader.h/.cpp` implementa leitura al
 - Lê intervalos por offset, inclusive atravessando limites de setor.
 - Valida limites da imagem, registros, tamanho de diretórios e componentes de caminho; rejeita traversal, diretório usado como arquivo e extents fora da imagem.
 
-O componente tem fixture ISO sintética e testes host. Ele é a **fonte do instalador seletivo**. A implementação inclui enumeração imediata de diretórios e leitura de arquivos por offset; a extração de boot inicial está documentada em [IMPORTACAO_ISO.md](IMPORTACAO_ISO.md).
+O componente tem fixture ISO sintética e testes host. Ele é a **fonte do instalador completo atual**. A implementação também enumera recursivamente os diretórios das duas camadas e produz um layout com todos os arquivos regulares ISO9660 e seus LSNs originais. A extração de boot inicial documentada em [IMPORTACAO_ISO.md](IMPORTACAO_ISO.md) foi substituída no fluxo do FORGE pela instalação completa descrita abaixo.
 
 ## 2. Limitações atuais
 
@@ -26,13 +26,13 @@ A primeira versão não aceita:
 
 A imagem selecionada precisa ser uma ISO9660 compatível com o parser. O reconhecimento do PVD não prova que a revisão do jogo é suportada nem que todos os arquivos necessários foram instalados.
 
-## 3. Decisão de arquitetura: instalação por extração seletiva, inspirada no Dragon Rage BT3
+## 3. Decisão de arquitetura: instalação privada inspirada no Dragon Rage BT3
 
 A referência é [Dragon Rage / Tenkaichi3DecompAndroid](https://github.com/dfdx047/Tenkaichi3DecompAndroid). Seu fluxo BT3 valida a imagem e copia o executável e diretórios de dados selecionados para a área privada do aplicativo. Os arquivos AFS são mantidos como arquivos inteiros, em vez de serem desmembrados em milhares de arquivos menores.
 
-**Decisão para Gow_android:** adotar esse modelo de instalação. A ISO será usada como fonte de importação; depois que a instalação terminar e for validada, o jogo deverá ler os arquivos preparados no armazenamento privado do aplicativo, e não depender de acesso aleatório contínuo à ISO via SAF durante a partida.
+**Decisão para Gow_android:** adotar a instalação privada, fora do loop do jogo. A primeira implementação copia todos os arquivos regulares encontrados na árvore ISO9660 suportada para preservar os extents de dados necessários à reconstrução de qualquer leitura por LSN. Arquivos grandes permanecem nos formatos originais; não são descompactados em árvores artificiais.
 
-Não vamos copiar cegamente a lista de caminhos do Dragon Rage. God of War tem sua própria estrutura, e a lista de arquivos será determinada pela revisão suportada e pelo rastreamento dos acessos de boot/runtime.
+Esta primeira versão não é uma extração seletiva otimizada. O manifesto é derivado da própria imagem escolhida, nunca de caminhos presumidos de outro jogo. Reduzir o conjunto extraído exigirá uma estratégia explícita para continuar atendendo os setores omitidos e evidência de acessos reais durante o boot.
 
 ### Fluxo de instalação planejado
 
@@ -45,7 +45,7 @@ Não vamos copiar cegamente a lista de caminhos do Dragon Rage. God of War tem s
 7. **Executar localmente:** configurar o VFS/CD root para a pasta instalada. A sessão não deve precisar manter um descritor da ISO aberto.
 8. **Reparar/reinstalar:** se arquivos locais estiverem ausentes ou corrompidos, solicitar a ISO novamente e refazer a validação antes de reparar.
 
-O identificador do cache deve considerar título, serial/revisão, versão do instalador e hash do manifesto. A instalação não pode ser aceita apenas porque existe um marcador antigo.
+O identificador da instalação usa o serial/região reconhecidos para não misturar os dois alvos suportados. A validação atual confere a presença do par de metadados e o ELF local; ainda falta um manifesto/hash de integridade persistente para detectar corrupção ou substituição de arquivos após a instalação.
 
 ### Regras de desempenho para aparelhos modestos
 
@@ -88,24 +88,23 @@ O contrato do runtime Waffle/KIexter também inclui `ps2x::iop::DiscSource::open
 
 ### Limite atual
 
-**[IMPLEMENTAÇÃO NO CÓDIGO]** A ponte de caminho físico foi adicionada e o PS2 VFS Android foi alterado para roteamento por dispositivo, sem depender do token virtual.
+**[IMPLEMENTAÇÃO ADICIONADA, CI PENDENTE]** O JNI `nativeInstallIsoDisc()` chama o instalador completo. O instalador produz `.disc_layout` e `.disc_meta` no diretório `disc/` e só publica a instalação depois da geração dos dois arquivos. O FORGE abre esse `cdRoot` e valida o ELF local.
 
-**[PENDENTE DE CI]** Os workflows acionados pelos commits `e531ea1`, `1741d98`, `d124812` e `a7f93b4` ainda precisam concluir. A compilação do APK após a alteração do bridge JNI já passou nos runs `42213205739` e `42213209556`; os testes host do VFS e a compilação host/Android da preparação final ainda estão em execução na revisão deste documento.
+**[VALIDAÇÃO PENDENTE]** Um novo teste de host liga `installIsoDisc()` à implementação real de `ps2x::iop::DiscSource` exportada pelo workflow, e verifica `openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` em uma ISO sintética de dupla camada. O resultado da CI ainda será registrado após a execução.
 
-**[NÃO IMPLEMENTADO]** O importador Android ainda instala somente `SYSTEM.CNF` e o ELF BOOT2. Ainda não cria `.disc_layout` nem `.disc_meta`, não extrai o conjunto completo de arquivos, e não foi validado com `DiscSource::openExtracted()` ou uma chamada real de `sceCdRead`.
+**[NÃO IMPLEMENTADO]** O runtime de gameplay ainda não chama `DiscSource::openExtracted()` nem `sceCdRead` durante uma sessão real. Nenhuma ISO real, ELF real ou sequência de boot foi testada nesta etapa.
 
-A auditoria de referência, o formato dos metadados e o plano de implementação estão em [DISC_RUNTIME_AUDIT.md](DISC_RUNTIME_AUDIT.md).
+A auditoria do contrato de referência e o formato dos metadados estão em [DISC_RUNTIME_AUDIT.md](DISC_RUNTIME_AUDIT.md).
 
 ## 6. Próximas etapas
 
-1. Concluir os workflows host e Android da correção de montagem e resolver eventuais falhas.
-2. Implementar leitura das duas camadas do DVD e enumeração recursiva de todos os arquivos/extents do disco selecionado.
-3. Gerar `.disc_layout` e `.disc_meta` exatamente no formato consumido por `DiscSource::openExtracted()`, preservando LSNs originais.
-4. Criar instalação privada completa com previsão de espaço, staging, progresso, cancelamento, validação e publicação atômica.
-5. Criar fixtures sintéticas para DVD de dupla camada e testar `openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()`.
-6. Disponibilizar os IRX no layout esperado, conectar o lifecycle do runtime à GameActivity e instrumentar a inicialização.
+1. Concluir a CI do instalador completo e corrigir falhas de compilação/contrato encontradas.
+2. Validar a instalação completa em aparelho com a ISO do usuário, sem compartilhar a imagem ou os dados extraídos.
+3. Definir um manifesto de integridade persistente e recuperação/reinstalação por serial/revisão.
+4. Disponibilizar os IRX no layout esperado e instrumentar os caminhos de arquivo e CDVD usados durante o boot.
+5. Conectar `DiscSource::openExtracted()` ao IOP/runtime real; o teste sintético de contrato não substitui essa integração.
+6. Integrar o lifecycle do runtime à GameActivity, gerar/compilar o C++ privado do ELF e avançar na cadeia de boot.
 7. Integrar GS/Vulkan e apresentar a primeira imagem real.
-8. Validar boot, menu e primeiro combate; somente depois medir desempenho e otimizar.
 
 ## 6. Privacidade e integridade
 

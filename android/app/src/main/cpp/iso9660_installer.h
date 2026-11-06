@@ -52,4 +52,14 @@ IsoInstallResult installIsoManifest(
     IsoInstallProgressCallback progressCallback = nullptr,
     void *userData = nullptr);
 
+// Installs every supported ISO9660 file into <installation>/disc, generates
+// the Waffle DiscSource .disc_layout/.disc_meta pair inside staging, and only
+// then atomically publishes the complete installation.
+IsoInstallResult installIsoDisc(
+    const Iso9660Reader &reader,
+    const std::string &privateRoot,
+    const std::string &finalDirectoryName,
+    IsoInstallProgressCallback progressCallback = nullptr,
+    void *userData = nullptr);
+
 } // namespace gow::disc

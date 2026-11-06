@@ -153,7 +153,9 @@ bool readNonFileSectorCount(const Iso9660Reader &reader,
                             const IsoDiscLayout &layout,
                             const std::vector<FileInterval> &intervals,
                             uint64_t &count,
-                            std::string *error) {
+                            std::string *error,
+                            IsoDiscMetadataProgressCallback progressCallback,
+                            void *userData) {
     count = 0u;
     std::vector<uint8_t> buffer(static_cast<size_t>(kSectorBatch) * kIsoSectorSize);
     size_t intervalIndex = 0u;
@@ -180,6 +182,14 @@ bool readNonFileSectorCount(const Iso9660Reader &reader,
             }
         }
         first += batch;
+        if (progressCallback != nullptr &&
+            (first == layout.sectorCount || first % (kSectorBatch * 64u) == 0u)) {
+            const IsoDiscMetadataProgress progress{first, layout.sectorCount};
+            if (!progressCallback(progress, userData)) {
+                setError(error, "Disc metadata analysis was cancelled.");
+                return false;
+            }
+        }
     }
     return true;
 }
@@ -273,15 +283,18 @@ void writeU32Le(uint8_t *destination, uint32_t value) {
 bool measureIsoDiscMetadata(const Iso9660Reader &reader,
                             const IsoDiscLayout &layout,
                             IsoDiscMetadataInfo &info,
-                            std::string *error) {
+                            std::string *error,
+                            IsoDiscMetadataProgressCallback progressCallback,
+                            void *userData) {
     info = {};
     std::vector<FileInterval> intervals;
     if (!validateLayoutAgainstReader(reader, layout, intervals, error)) return false;
 
-    std::string text = buildLayoutText(layout);
+    const std::string text = buildLayoutText(layout);
     info.layoutFileBytes = static_cast<uint64_t>(text.size());
     if (!readNonFileSectorCount(reader, layout, intervals,
-                                info.metadataSectorCount, error)) {
+                                info.metadataSectorCount, error,
+                                progressCallback, userData)) {
         info = {};
         return false;
     }
@@ -299,13 +312,44 @@ bool writeIsoDiscMetadata(const Iso9660Reader &reader,
                           const IsoDiscLayout &layout,
                           const std::string &extractedRoot,
                           IsoDiscMetadataInfo *info,
-                          std::string *error) {
+                          std::string *error,
+                          IsoDiscMetadataProgressCallback progressCallback,
+                          void *userData) {
     IsoDiscMetadataInfo measured{};
-    if (!measureIsoDiscMetadata(reader, layout, measured, error)) return false;
+    if (!measureIsoDiscMetadata(reader, layout, measured, error,
+                                progressCallback, userData)) {
+        return false;
+    }
+    return writeIsoDiscMetadataMeasured(
+        reader, layout, extractedRoot, measured, info, error,
+        progressCallback, userData);
+}
+
+bool writeIsoDiscMetadataMeasured(
+    const Iso9660Reader &reader,
+    const IsoDiscLayout &layout,
+    const std::string &extractedRoot,
+    const IsoDiscMetadataInfo &measured,
+    IsoDiscMetadataInfo *info,
+    std::string *error,
+    IsoDiscMetadataProgressCallback progressCallback,
+    void *userData) {
+    const std::string layoutText = buildLayoutText(layout);
+    if (measured.layoutFileBytes != static_cast<uint64_t>(layoutText.size()) ||
+        measured.metadataSectorCount > layout.sectorCount ||
+        measured.metadataSectorCount >
+            std::numeric_limits<uint64_t>::max() / kMetadataRecordSize ||
+        measured.metadataFileBytes != measured.metadataSectorCount * kMetadataRecordSize) {
+        setError(error, "The measured disc metadata does not match the supplied layout.");
+        return false;
+    }
     if (extractedRoot.empty()) {
         setError(error, "The extracted disc root path is empty.");
         return false;
     }
+
+    std::vector<FileInterval> intervals;
+    if (!validateLayoutAgainstReader(reader, layout, intervals, error)) return false;
 
     const int rootFd = ::open(extractedRoot.c_str(),
         O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
@@ -347,14 +391,6 @@ bool writeIsoDiscMetadata(const Iso9660Reader &reader,
         return false;
     }
 
-    std::vector<FileInterval> intervals;
-    if (!buildIntervals(layout, intervals, error)) {
-        ::close(rootFd);
-        return false;
-    }
-
-    // A previous interrupted run may have left temporaries; they are ours
-    // (dot-prefixed, never part of the disc), so clear them before O_EXCL.
     removeTemporaries();
 
     struct statvfs storageInfo {};
@@ -372,7 +408,6 @@ bool writeIsoDiscMetadata(const Iso9660Reader &reader,
         return fail("Insufficient private storage for the PS2 disc metadata files.");
     }
 
-    const std::string layoutText = buildLayoutText(layout);
     const int layoutFd = ::openat(rootFd, ".disc_layout.tmp",
         O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (layoutFd < 0) {
@@ -397,6 +432,7 @@ bool writeIsoDiscMetadata(const Iso9660Reader &reader,
     size_t intervalIndex = 0u;
     uint64_t writtenSectors = 0u;
     bool metaOk = true;
+    bool wasCancelled = false;
     for (uint64_t first = 0u; first < layout.sectorCount && metaOk;) {
         const uint32_t batch = static_cast<uint32_t>(
             std::min<uint64_t>(kSectorBatch, layout.sectorCount - first));
@@ -423,6 +459,14 @@ bool writeIsoDiscMetadata(const Iso9660Reader &reader,
             ++writtenSectors;
         }
         first += batch;
+        if (metaOk && progressCallback != nullptr &&
+            (first == layout.sectorCount || first % (kSectorBatch * 64u) == 0u)) {
+            const IsoDiscMetadataProgress progress{first, layout.sectorCount};
+            if (!progressCallback(progress, userData)) {
+                metaOk = false;
+                wasCancelled = true;
+            }
+        }
     }
 
     if (metaOk && writtenSectors != measured.metadataSectorCount) {
@@ -431,7 +475,9 @@ bool writeIsoDiscMetadata(const Iso9660Reader &reader,
     if (metaOk && ::fsync(metaFd) != 0) metaOk = false;
     if (::close(metaFd) != 0) metaOk = false;
     if (!metaOk) {
-        return fail("Could not generate a complete .disc_meta sector index.");
+        return fail(wasCancelled
+            ? "Disc metadata generation was cancelled."
+            : "Could not generate a complete .disc_meta sector index.");
     }
 
     // .disc_layout is published last: its presence marks a complete pair.
