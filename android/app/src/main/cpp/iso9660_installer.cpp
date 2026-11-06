@@ -53,7 +53,7 @@ bool splitRelativePath(const std::string &path, std::vector<std::string> &parts)
         const size_t end = path.find('/', cursor);
         const size_t componentEnd = end == std::string::npos ? path.size() : end;
         const std::string component = path.substr(cursor, componentEnd - cursor);
-        if (!isSafeNameComponent(component)) return false;
+        if (!isSafeNameComponent(component) || parts.size() >= 32u) return false;
         parts.push_back(component);
         if (end == std::string::npos) break;
         cursor = end + 1u;
