@@ -32,7 +32,7 @@ Para compilar e validar somente a ferramenta host, sem fornecer ou acessar qualq
 
 **python tools/build_recompiler_host.py --build-only --work-dir "D:/gowport"**
 
-O modo build-only é usado pelo workflow recompiler-tool-check.yml. Ele valida o patch-base, as dependências e o alvo ps2_recomp, mas não prova que a configuração do ELF gera C++ correto.
+<badge>CI aprovada — execução 42146201136</badge> O modo build-only compilou com sucesso o alvo ps2_recomp no GitHub Actions, incluindo dependências e aplicação do patch-base. Isso valida a compilação do executável host, mas não prova que o ELF do jogo é analisado corretamente ou que o código C++ gerado compila para ARM64.
 
 Para escolher a pasta privada de trabalho:
 
@@ -51,7 +51,7 @@ Por segurança, o script:
 
 O script limpa alterações locais dentro das duas cópias Git privadas antes de reaplicar a revisão fixada. Não coloque arquivos próprios dentro de sources/PS2Recomp ou sources/KIexster.
 
-A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. O resultado do workflow ainda precisa ser consultado após sua execução; a existência do workflow não equivale a build aprovada.
+A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. O resultado da execução 42146201136 foi consultado: os passos de sintaxe, CLI e build do recompilador terminaram com sucesso. A execução não recebeu material do jogo.
 
 ## Dependências do host
 
