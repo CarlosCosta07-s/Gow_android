@@ -43,7 +43,7 @@ A versão atual reconhece os executáveis `SCUS_973.99` (NTSC-U) e `SCES_531.33`
 - A pasta publicada é `files/installations/gow_boot_seed`, no armazenamento privado do aplicativo.
 - O `CdRootVfs` é somente leitura, faz acesso por descritores relativos à raiz, rejeita traversal e symlinks, aceita apenas arquivos regulares, limita listagens a 65.536 entradas e mantém handles para leituras por offset. A busca de componentes é case-insensitive ASCII e ignora sufixos ISO `;versão`; duas entradas que colidam após essa normalização são rejeitadas.
 - A validação ELF local não carrega o executável inteiro na memória; verifica os metadados ELF32/MIPS e os limites dos segmentos carregáveis. Ela não autentica serial/revisão e não executa o ELF.
-- O provider expõe a API C ABI `gowAndroidCdRootOpenFile/ReadFile/CloseFile` e o sinalizador `gowAndroidCdRootIsReady`. O patch local do runtime Waffle foi atualizado para usar o prefixo `gowcdroot:/` no lugar do provider direto da ISO; a compilação desse patch ainda está em validação na CI.
+- O provider expõe a API C ABI `gowAndroidCdRootOpenFile/ReadFile/CloseFile` e o sinalizador `gowAndroidCdRootIsReady`. O patch local do runtime Waffle foi atualizado para usar o prefixo `gowcdroot:/` no lugar do provider direto da ISO; a compilação host estrita desse patch passou no run `42186655605`, e o target Android ARM64 que o consome foi compilado no run `42187116530`. Isso ainda não comprova que os serviços PS2 estejam abrindo arquivos durante um boot real.
 - Se essa pasta já existir, a importação não a substitui automaticamente.
 
 ## O que esta etapa NÃO significa
