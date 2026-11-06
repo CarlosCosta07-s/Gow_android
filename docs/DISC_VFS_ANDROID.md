@@ -5,7 +5,7 @@
 
 ## 1. Leitor ISO9660 disponível
 
-O módulo `android/app/src/main/cpp/iso9660_reader.h/.cpp` implementa leitura aleatória de imagens ISO9660 com setores de 2048 bytes.
+O módulo `android/app/src/main/cpp/iso9660_reader.h/.cpp` implementa leitura aleatória e enumeração de diretórios em imagens ISO9660 com setores de 2048 bytes.
 
 - Recebe um descritor aberto pelo Storage Access Framework e duplica o FD.
 - Verifica o descritor primário ISO9660 no setor 16 e o registro do diretório raiz.
