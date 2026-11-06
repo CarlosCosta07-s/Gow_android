@@ -191,6 +191,11 @@ public:
 
     void shutdown() {
         ready_ = false;
+        {
+            std::lock_guard<std::mutex> lock(gsQueueMutex_);
+            queuedGsVertices_.clear();
+            queuedGsDraws_.clear();
+        }
 
         if (device_ != VK_NULL_HANDLE) {
             vkDeviceWaitIdle(device_);
@@ -588,6 +593,9 @@ private:
         if (!ensureUploadBuffer(requiredBytes)) return false;
         std::memcpy(uploadMapped_, vertices.data(),
                     static_cast<size_t>(requiredBytes));
+        // The staging buffer is shared with optional CPU frame uploads.
+        // Invalidate that cached content after writing geometry into it.
+        uploadBufferReady_ = false;
         if ((uploadMemoryFlags_ & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u) {
             VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
             range.memory = uploadMemory_;
