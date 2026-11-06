@@ -18,12 +18,22 @@ PS2RECOMP_COMMIT = "c5a9d02573410a2085a4b4b831b0b68ba3515440"
 KIEXTER_URL = "https://github.com/KIexster/god-of-war-recomp.git"
 KIEXTER_COMMIT = "a226151feb6ed22937e42be485aaf28a83acd166"
 BASE_PATCH = "patches/ps2recomp-waffle-runtime.patch"
-ANDROID_IOP_PATCH = "patches/android/ps2x-iop-native-only.patch"
 
 
 def run(command: list[str], *, cwd: Path | None = None) -> None:
     print("+ " + " ".join(str(part) for part in command), flush=True)
     subprocess.run(command, cwd=cwd, check=True)
+
+
+def replace_exactly_once(path: Path, old: str, new: str, description: str) -> None:
+    source = path.read_text(encoding="utf-8")
+    matches = source.count(old)
+    if matches != 1:
+        raise RuntimeError(
+            f"Expected one anchor for {description} in {path}, found {matches}."
+        )
+    path.write_text(source.replace(old, new, 1), encoding="utf-8")
+    print(f"Applied Android runtime policy: {description}")
 
 
 def checkout_pinned_repo(url: str, commit: str, destination: Path) -> None:
@@ -134,18 +144,52 @@ def main() -> int:
         cwd=recompiler_source,
     )
 
-    # Strict Android IOP policy: reject missing AOT coverage instead of interpreting IRX instructions.
-    # The patch is checked and compiled in the dedicated ps2_iop host build below.
-    android_iop_patch = repo_root / ANDROID_IOP_PATCH
-    if not android_iop_patch.is_file():
-        raise RuntimeError(f"Required Android IOP policy patch not found: {android_iop_patch}")
-    run(
-        ["git", "apply", "--check", "--ignore-whitespace", str(android_iop_patch)],
-        cwd=recompiler_source,
+    # Strict IOP mode: dispatch known AOT IRX functions, but refuse the guest CPU fallback.
+    iop_cpp = recompiler_source / "ps2xIOP/src/emulator/iop_emulator.cpp"
+    replace_exactly_once(
+        iop_cpp,
+        "            ++interpretedInstructions;\n",
+        """#if defined(PS2X_IOP_NATIVE_ONLY)
+            std::ostringstream out;
+            out << "[IOP:native-required] refusing fallback to interpreted IOP instruction"
+                << " pc=0x" << std::hex << cpu.pc
+                << " ra=0x" << cpu.gpr[31]
+                << " branchPending=" << std::dec << (cpu.branchPending ? 1 : 0);
+            log(LogLevel::Error, out.str());
+            cpu.stopped = true;
+            cpu.gpr[2] = 0xFFFFFFFFu;
+            return false;
+#else
+            ++interpretedInstructions;
+""",
+        "IOP interpreted-instruction fallback guard",
     )
-    run(
-        ["git", "apply", "--ignore-whitespace", str(android_iop_patch)],
-        cwd=recompiler_source,
+    replace_exactly_once(
+        iop_cpp,
+        "            return running;\n        }\n\n        uint32_t runCpu(CpuState &cpu, uint32_t instructionBudget)",
+        "            return running;\n#endif\n        }\n\n        uint32_t runCpu(CpuState &cpu, uint32_t instructionBudget)",
+        "IOP strict-mode preprocessor close",
+    )
+
+    iop_cmake = recompiler_source / "ps2xIOP/CMakeLists.txt"
+    replace_exactly_once(
+        iop_cmake,
+        'option(PS2X_IOP_BUILD_TESTS "Build ps2xIOP emulator smoke tests" OFF)\n',
+        'option(PS2X_IOP_BUILD_TESTS "Build ps2xIOP emulator smoke tests" OFF)\n'
+        'option(PS2X_IOP_NATIVE_ONLY "Reject interpreted IOP instructions without AOT coverage" OFF)\n'
+        'if(ANDROID)\n'
+        '    set(PS2X_IOP_NATIVE_ONLY ON CACHE BOOL "" FORCE)\n'
+        'endif()\n',
+        "IOP native-only CMake option",
+    )
+    replace_exactly_once(
+        iop_cmake,
+        "target_compile_features(ps2_iop PUBLIC cxx_std_20)\n",
+        "if(PS2X_IOP_NATIVE_ONLY)\n"
+        "    target_compile_definitions(ps2_iop PRIVATE PS2X_IOP_NATIVE_ONLY=1)\n"
+        "endif()\n\n"
+        "target_compile_features(ps2_iop PUBLIC cxx_std_20)\n",
+        "IOP native-only compile definition",
     )
 
     cmake = shutil.which("cmake")
