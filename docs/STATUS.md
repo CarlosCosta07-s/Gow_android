@@ -19,6 +19,18 @@
 
 **Referência futura de otimização:** [Black for Android](https://github.com/RanggaCasper/Black-Android), documentada em [ANDROID_LOW_END_OPTIMIZATION.md](ANDROID_LOW_END_OPTIMIZATION.md). Não estamos adotando agora suas opções nem assumindo equivalência entre Xbox e PS2.
 
+## Auditoria da origem de disco (06/11/2026)
+
+**[VERIFICADO NA REFERÊNCIA KIEXSTER/WAFFLE]** O runtime de PC contém `ps2x::iop::DiscSource`, com `readSectors(lsn, count, destination)`, `findFile()` e `layer1Start()`. O extrator `tools/iso_extract.py --layout` produz `.disc_layout` (tamanho total, início da segunda camada e LSN/tamanho/caminho de cada arquivo) e `.disc_meta` (setores não pertencentes a arquivos, cada registro com LSN + 2048 bytes). O contrato é descrito em [DISC_RUNTIME_AUDIT.md](DISC_RUNTIME_AUDIT.md).
+
+**[VERIFICADO NA REFERÊNCIA DO JOGO]** A documentação de KIexster explica que `SMPD_IOP.IRX` carrega dados consultando setores com `sceCdRead`; `GODOFWAR.TOC` e os pacotes `PART*.PAK` dependem de LSNs originais. O mesmo port disponibiliza os módulos IRX no diretório `IOP_MOD/` porque o jogo os solicita por caminhos relativos.
+
+**[NÃO IMPLEMENTADO NO ANDROID]** O `CdRootVfs` cobre operações por caminho, mas isso não atende sozinho às leituras brutas por LSN. O importador atual ainda instala apenas `SYSTEM.CNF` e BOOT2 ELF; não gera `.disc_layout`/ `.disc_meta`, não importa os pacotes de dados e não foi testado com `DiscSource::openExtracted()`/ `sceCdRead`. O leitor Android atual também não implementa a descoberta e a enumeração da segunda camada.
+
+**[CORREÇÃO ENVIADA, CI PENDENTE]** Os commits `e531ea1`, `1741d98`, `d124812` e `a7f93b4` removem a dependência do token virtual `gowcdroot:/` como caminho físico: o JNI disponibiliza o caminho real da instalação, e o PS2 VFS encaminha `cdrom0:` com base no dispositivo já analisado. Os workflows `42213387878` (Android) e `42213387898` (host) ainda precisam concluir na revisão atual. Isso corrige a fronteira de montagem, não comprova o boot.
+
+**Próxima prioridade:** completar o leitor/instalador de disco de dupla camada, gerar os dois metadados no formato esperado pelo runtime e validar o contrato com fixtures sintéticas sem dados proprietários.
+
 ## [VERIFICADO] Leitor ISO9660 e importador privado
 
 - `Iso9660Reader` abre o PVD ISO9660 no setor 16, resolve arquivos por diretórios/extents, enumera os filhos imediatos e lê por offset sem carregar a imagem inteira.
@@ -36,6 +48,7 @@
 - Fixtures sintéticas do ELF cobrem um executável válido, magic inválido e entry point fora de `PT_LOAD`. O teste valida também a busca local case-insensitive com sufixo ISO `;1`.
 - A primeira implementação compartilhou acidentalmente o offset do descritor raiz via `dup()`. Foi corrigida usando `openat(rootFd, ".", ...)` para gerar descrição de arquivo independente por operação.
 - A CI Android run `42187116530` concluiu os testes host, compilou o APK Debug ARM64 e publicou o artefato. A validação foi feita com ELF sintético; nenhum executável real de God of War foi usado.
+- O provider atual é somente por caminho; a fonte `DiscSource` do runtime exige `.disc_layout` e `.disc_meta` para reproduzir leituras por LSN. A instalação atual ainda não possui esses arquivos.
 
 
 ## [VERIFICADO] Shell FORGE e importação de boot
