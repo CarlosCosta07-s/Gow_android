@@ -1256,12 +1256,25 @@ def main() -> int:
     {""",
         "exclude VU1 interpreter A/B verifier from strict runtime",
     )
-    replace_exactly_once(
-        vu_core,
-        "    if (m_unit == Unit::VU1 && m_native && m_native->enabled && vuData && codeSize == PS2_VU1_CODE_SIZE)\n",
-        "#endif\n"
-        "    if (m_unit == Unit::VU1 && m_native && m_native->enabled && vuData && codeSize == PS2_VU1_CODE_SIZE)\n",
-        "close the strict VU1 verifier exclusion before native dispatch",
+    vu_dispatch_anchor = (
+        "    if (m_unit == Unit::VU1 && m_native && m_native->enabled && "
+        "vuData && codeSize == PS2_VU1_CODE_SIZE)\\n"
+    )
+    vu_core_text = vu_core.read_text(encoding="utf-8")
+    if vu_core_text.count(vu_dispatch_anchor) != 2:
+        raise RuntimeError(
+            "Expected the two VU1 native dispatch sites (run and resume); "
+            f"found {vu_core_text.count(vu_dispatch_anchor)}."
+        )
+    vu_core_text = vu_core_text.replace(
+        vu_dispatch_anchor,
+        "#endif\\n" + vu_dispatch_anchor,
+        1,
+    )
+    vu_core.write_text(vu_core_text, encoding="utf-8")
+    print(
+        "Applied Android runtime policy: close the strict VU1 verifier exclusion before run dispatch",
+        flush=True,
     )
     # Fail closed on Android if a VU1 program cannot be dispatched natively.
     # The pinned KIexster patch provides runNativeLoop(); unlike the older archived
