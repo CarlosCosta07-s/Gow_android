@@ -142,7 +142,7 @@ A etapa de fragmento inclui teste e escrita Z para Z32/Z24/Z16/Z16S, modos ZTST,
 
 `presentGsVramCircuit()` lê DISPFB/DISPLAY e compõe os dois circuitos ativos; aplica MMOD/ALP, alpha do circuito 1 e SLBG/BGCOLOR. Fixtures sintéticas verificam composição, alpha fixo e fundo. Interlace, overscan e todos os casos dos registradores de display ainda não foram validados.
 
-**Evidência host:** a execução `42266913226` passou pelos testes offline de comparação, captura PPM, suíte nativa GS e VFS; o APK ARM64 estava em compilação. A execução `42266994501` repetiu as etapas host e VFS; a compilação Android ARM64 estava em andamento. Nenhum desses testes usa arquivos do jogo.
+**Evidência CI completa:** run `42268386758` passou pelos testes offline de comparação e captura PPM, suíte nativa de entrada/disco/GS, VFS privado, verificador do botão de captura sob demanda e compilação/publicação do APK Debug ARM64. Artefato `gow-android-arm64-shell`, ID `13528990480`. A CI usa fixtures sintéticas e não usa arquivos do jogo; build verde não equivale a boot nem a cena real.
 
 ### Captura e comparação de cena
 
