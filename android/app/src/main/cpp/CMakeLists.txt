@@ -23,6 +23,7 @@ add_library(android-game SHARED
     iso9660_reader.cpp
     iso9660_installer.cpp
     cdroot_vfs.cpp
+    ps2_elf_validator.cpp
     android_disc_bridge.cpp
     vu1_neon_compat_smoke.cpp
     # Satisfies Raylib's renamed, dormant NativeActivity wrapper. GameActivity
