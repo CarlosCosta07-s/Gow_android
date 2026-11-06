@@ -666,6 +666,7 @@ def main():
                 extra.add(int(line, 16) & 0x3FF8)
     blocks = {}
     unsupported = 0
+    interpreter_callouts = 0
     processed = 0
     for f in inputs:
         code = open(f, 'rb').read()
@@ -682,12 +683,14 @@ def main():
                 continue
             tail = []
             body = gen_block(pc, pairs, tail)
-            if strict and body is not None and any(
+            if body is not None and any(
                 "VU1NativeAccess::callLower(" in line or "VU1NativeAccess::callUpper(" in line
                 for line in body
             ):
-                # These are exact-engine interpreter callouts, not native AOT semantics.
-                body = None
+                interpreter_callouts += 1
+                if strict:
+                    # These are exact-engine interpreter callouts, not native AOT semantics.
+                    body = None
             blocks[key] = (pc, len(pairs), body, tail[0] if tail else None)
             if body is None:
                 unsupported += 1
@@ -724,16 +727,16 @@ def main():
         old = open(path, encoding='utf-8').read() if os.path.exists(path) else None
         if old != body:
             open(path, 'w', encoding='utf-8').write(body)
-    print(f"[vu1n_gen] {processed}/{len(inputs)} valid images, {len(blocks)} distinct blocks, {count} generated, {unsupported} unsupported")
+    print(f"[vu1n_gen] {processed}/{len(inputs)} valid images, {len(blocks)} distinct blocks, {count} generated, {unsupported} unsupported, {interpreter_callouts} interpreter callouts")
     if strict:
-        if processed == 0 or count == 0 or unsupported != 0:
+        if processed == 0 or count == 0 or unsupported != 0 or interpreter_callouts != 0:
             print(
                 f"[vu1n_gen] STRICT AOT COVERAGE FAILED: valid_images={processed}, "
-                f"generated={count}, unsupported_or_interpreter_callout={unsupported}",
+                f"generated={count}, unsupported={unsupported}, interpreter_callouts={interpreter_callouts}",
                 file=sys.stderr,
             )
             raise SystemExit(2)
-        print("[vu1n_gen] STRICT AOT COVERAGE PASSED: every discovered block has native code")
+        print("[vu1n_gen] STRICT AOT COVERAGE PASSED: every discovered block is native and has no exact-engine callouts")
 
 
 if __name__ == '__main__':
