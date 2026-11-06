@@ -789,17 +789,26 @@ void handleAppCommand(android_app* app, int32_t command) {
     switch (command) {
         case APP_CMD_INIT_WINDOW:
             if (app->window != nullptr) {
+#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
                 gRenderer.initialize(app->window);
+#else
+                logMessage(ANDROID_LOG_INFO,
+                    "GameActivity surface available; PS2 GS/Vulkan renderer is not integrated yet");
+#endif
             }
             break;
 
         case APP_CMD_TERM_WINDOW:
+#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
             gRenderer.shutdown();
+#endif
             break;
 
         case APP_CMD_WINDOW_RESIZED:
         case APP_CMD_CONTENT_RECT_CHANGED:
+#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
             gRenderer.recreateSwapchain();
+#endif
             break;
 
         case APP_CMD_LOST_FOCUS:
@@ -850,7 +859,11 @@ extern "C" void android_main(android_app* app) {
     while (app->destroyRequested == 0) {
         int events = 0;
         android_poll_source* source = nullptr;
+#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
         const int timeout = gRenderer.isReady() ? 0 : -1;
+#else
+        const int timeout = -1;
+#endif
 
         int pollTimeout = timeout;
         int pollResult = 0;
@@ -875,12 +888,16 @@ extern "C" void android_main(android_app* app) {
             processInputEvents(app);
         }
 
+#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
         if (gRenderer.isReady()) {
             gRenderer.drawFrame();
         }
+#endif
     }
 
+#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
     gRenderer.shutdown();
+#endif
     if (runtime != nullptr) {
         gowDestroyPs2Runtime(runtime);
         runtime = nullptr;
