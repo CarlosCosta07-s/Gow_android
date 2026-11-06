@@ -32,16 +32,19 @@
 - `CdRootVfs` abre a raiz privada e executa listagem/leitura somente de arquivos regulares; usa `openat`/`O_NOFOLLOW` para bloquear symlinks e traversal e `pread` para leitura aleatória. A resolução de nomes segue ISO9660 (maiúsculas/minúsculas indiferentes e sufixo `;versão` opcional), rejeitando colisões após normalização.
 - A enumeração é limitada a 65.536 entradas; paths têm limites de tamanho, componente e profundidade. Handles podem ser abertos, lidos por offset e fechados.
 - O teste sintético `cdroot_vfs_test.cpp` cobre raiz/subdiretórios, listagem repetida, leitura parcial/EOF, handles fechados, nomes/traversal inválidos e symlinks.
+- `validatePs2Elf()` lê somente o cabeçalho ELF32 e a tabela de program headers do arquivo local; confere MIPS/little-endian/ET_EXEC, limites de `PT_LOAD` e cobertura do entry point.
+- Fixtures sintéticas do ELF cobrem um executável válido, magic inválido e entry point fora de `PT_LOAD`. O teste valida também a busca local case-insensitive com sufixo ISO `;1`.
 - A primeira implementação compartilhou acidentalmente o offset do descritor raiz via `dup()`. Foi corrigida usando `openat(rootFd, ".", ...)` para gerar descrição de arquivo independente por operação.
-- A CI Android run `42184743140` concluiu os testes host e a compilação do APK Debug ARM64 com o VFS incluído. A integração de runtime preparada para usar `gowcdroot:/` está sendo verificada separadamente pela CI Host recompiler.
+- A CI Android run `42187116530` concluiu os testes host, compilou o APK Debug ARM64 e publicou o artefato. A validação foi feita com ELF sintético; nenhum executável real de God of War foi usado.
 
 
 ## [VERIFICADO] Shell FORGE e importação de boot
 
 - O FORGE usa Storage Access Framework para selecionar a imagem e identifica `SYSTEM.CNF`/`BOOT2`, reconhecendo inicialmente `SCUS_973.99` (NTSC-U) e `SCES_531.33` (PAL).
 - A ação `PREPARAR BOOT` reabre e revalida a imagem, importa o arquivo de configuração e o executável para armazenamento privado, informa progresso e permite cancelamento.
-- Após a publicação, a Activity abre a raiz `gow_boot_seed/disc` no `CdRootVfs`. Se a instalação já existir, pode tentar reabrir esse provider.
-- O APK Debug ARM64 foi compilado com a extração e o cdRoot no run `42184743140`. O teste foi feito com fixture ISO sintética na CI; ainda falta uma ISO real de usuário e aparelho real para validar a importação.
+- Após a publicação, a Activity abre a raiz `gow_boot_seed/disc` no `CdRootVfs` e valida o executável BOOT2 local como ELF32 little-endian MIPS, incluindo segmentos carregáveis e entry point. O resultado aparece no FORGE.
+- A validação ELF não confirma serial/revisão do conteúdo nem inicia o executável; confirma somente a estrutura ELF esperada pelo loader.
+- O APK Debug ARM64 foi compilado com extração, cdRoot e validação ELF no run `42187116530`. Os testes usam ISO/ELF sintéticos; ainda falta validar uma imagem real fornecida pelo usuário em aparelho.
 
 
 ## [VERIFICADO] Componentes KIexter importados
