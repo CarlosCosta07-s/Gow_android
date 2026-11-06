@@ -1375,6 +1375,12 @@ public final class MainActivity extends AppCompatActivity {
                 if (elf.length() != expected.size) {
                     throw new IOException("O tamanho atual do ELF difere do manifesto SHA-256.");
                 }
+                String destinationName = queryDisplayName(destination);
+                if (!"SCUS_973.99".equalsIgnoreCase(destinationName)) {
+                    throw new IOException(
+                            "Salve o executável com o nome exato SCUS_973.99; "
+                                    + "o recompilador usa esse nome para selecionar o perfil NTSC-U.");
+                }
                 MessageDigest digest = MessageDigest.getInstance("SHA-256");
                 long copiedBytes = 0L;
                 OutputStream rawOutput = getContentResolver().openOutputStream(destination, "w");
