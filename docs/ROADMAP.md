@@ -83,7 +83,8 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [ ] Disponibilizar os módulos IRX no layout `IOP_MOD/` esperado pelo jogo, sem enviar módulos do disco para Git/CI.
 - [x] Testar `DiscSource::openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` com ISO sintética de dupla camada e validar a checagem JNI pós-instalação (CI `42225710064`).
 - [ ] Remover o uso residual do provider ISO transitório `gowdisc:/` do caminho normal de gameplay após validar a instalação local completa; não manter um FD da ISO aberto durante a partida.
-- [ ] Testar instalação, cancelamento, falta de espaço, reparo, integridade e validações `IoPaths`/DiscSource/CDVD com ISO do usuário em aparelho Android.
+- [x] Implementar verificação da instalação existente e fluxo de reinstalação explicitamente confirmado; fechar o `cdRoot` e remover apenas a pasta privada da revisão selecionada usando `openat`/`O_NOFOLLOW`. Testes sintéticos de symlinks, traversal e preservação de diretórios irmãos aprovados na CI `42235192717`.
+- [ ] Exercitar no aparelho a instalação, cancelamento, falta de espaço, reparo, integridade e validações `IoPaths`/DiscSource/CDVD com a ISO do usuário.
 - [ ] Exercitar o CDVD já incorporado ao `IopEmulator` na sessão real e registrar chamadas originadas pelo jogo; os probes atuais ainda são sintéticos/isolados.
 - [ ] Ligar código recompilado, overrides de God of War e serviços mínimos de boot.
 - [ ] Resolver CD/DVD, IRX, SIF, DMA e cadeia inicial de execução.
