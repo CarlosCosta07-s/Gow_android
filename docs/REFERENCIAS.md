@@ -63,10 +63,11 @@ Referência de comportamento para EE, VU, GS, DMA e IOP. Não será o runtime fi
 
 ## Decisão de integração
 
-1. Usar CodeAbhi como referência de fluxo Android/SAF/NDK, adaptando a camada de aplicação.
-2. Usar KIexster como referência para função/configuração e regressões do jogo.
-3. Usar Waffle565 para estudar arquitetura de GS/VU1/IOP, sem cópia direta até resolver licença e commit.
-4. Usar PCSX2 para comparar comportamento, não como runtime final.
-5. Implementar e testar um backend GS/Vulkan que apresente frames reais no Android.
+1. **Base principal do runtime Android:** adotar a branch android de CodeAbhi826/God-Of-War-Recomp como ponto de partida para PS2Recomp, runtime EE/IOP, hooks do jogo e configuração Android ARM64. Antes de importar qualquer arquivo, fixar o SHA exato do commit e conferir os avisos de terceiros.
+2. **Preservar o FORGE:** manter a interface, o seletor SAF e a identidade visual deste repositório; não substituir o launcher pela interface da referência.
+3. **Código específico do jogo:** usar KIexster como referência para mapa de funções, configuração e regressões NTSC-U.
+4. **GS/VU1/IOP desktop:** estudar Waffle565 para entender os componentes já funcionais no PC. Não transportar diretamente o backend OpenGL desktop para Android.
+5. **Compatibilidade gráfica:** completar o backend GS/Vulkan Android e validar somente com comandos e frames reais do jogo, não com um clear/present isolado.
+6. **Execução final:** exigir recompilação estática do EE e VU1 compilada antecipadamente; nenhum interpretador/JIT deve permanecer no caminho final.
 
-Até este commit, as fontes estão **referenciadas, não importadas**.
+A base CodeAbhi é uma **candidata de integração**, não código já incorporado. Até este commit, as fontes seguem **referenciadas, não importadas**.
