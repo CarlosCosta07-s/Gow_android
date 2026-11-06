@@ -60,6 +60,9 @@ bool gGsBackendAttached = false;
 std::atomic<bool> gGsUnsupportedStateWarned{false};
 std::atomic<bool> gGsRenderTargetWarned{false};
 bool gGsSceneCaptureAttempted = false;
+std::atomic<bool> gGsSceneCaptureRequested{false};
+std::atomic<uint32_t> gGsSceneCaptureSequence{0u};
+constexpr uint32_t kMaxRequestedGsSceneCaptures = 32u;
 
 void reportRuntimeStatus(android_app *app, const char *message, bool failed) {
     if (app == nullptr || message == nullptr) {
@@ -1646,6 +1649,17 @@ Java_org_gowandroid_app_GowGameActivity_nativeClearActivityReference(
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
+Java_org_gowandroid_app_GowGameActivity_nativeRequestGsSceneCapture(
+    JNIEnv *, jclass) noexcept {
+    if (gGsSceneCaptureSequence.load(std::memory_order_relaxed) >=
+        kMaxRequestedGsSceneCaptures) {
+        return JNI_FALSE;
+    }
+    gGsSceneCaptureRequested.store(true, std::memory_order_release);
+    return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
 Java_org_gowandroid_app_GowGameActivity_nativeConfigurePrivateBoot(
     JNIEnv *env, jclass, jstring privateCdRoot,
     jstring relativePath) noexcept {
@@ -1806,8 +1820,11 @@ extern "C" void android_main(android_app* app) {
                 uint32_t frameHeight = 0u;
                 if (runtime->gs().copyLatchedHostPresentationFrame(
                         framePixels, frameWidth, frameHeight)) {
-                    if (!gGsSceneCaptureAttempted) {
-                        gGsSceneCaptureAttempted = true;
+                    const bool firstFrameCapture = !gGsSceneCaptureAttempted;
+                    const bool requestedCapture = gGsSceneCaptureRequested.exchange(
+                        false, std::memory_order_acq_rel);
+                    if (firstFrameCapture || requestedCapture) {
+                        if (firstFrameCapture) gGsSceneCaptureAttempted = true;
                         const GameActivity *activity = app->activity;
                         const char *captureDirectory = activity != nullptr
                             ? (activity->externalDataPath != nullptr
@@ -1819,20 +1836,40 @@ extern "C" void android_main(android_app* app) {
                             if (!capturePath.empty() && capturePath.back() != '/') {
                                 capturePath.push_back('/');
                             }
-                            capturePath += "gow_android_first_gs_frame.ppm";
-                            std::string captureError;
-                            if (gow::android::writeRgbaPpmCapture(
-                                    capturePath, framePixels, frameWidth,
-                                    frameHeight, captureError)) {
-                                __android_log_print(
-                                    ANDROID_LOG_INFO, kTag,
-                                    "Saved first GS scene capture: %s",
-                                    capturePath.c_str());
-                            } else {
-                                __android_log_print(
-                                    ANDROID_LOG_WARN, kTag,
-                                    "Could not save first GS scene capture: %s",
-                                    captureError.c_str());
+                            std::string captureName = "gow_android_first_gs_frame.ppm";
+                            if (!firstFrameCapture) {
+                                const uint32_t sequence =
+                                    gGsSceneCaptureSequence.fetch_add(
+                                        1u, std::memory_order_relaxed) + 1u;
+                                if (sequence <= kMaxRequestedGsSceneCaptures) {
+                                    char numberedName[64]{};
+                                    std::snprintf(
+                                        numberedName, sizeof(numberedName),
+                                        "gow_android_scene_%02u.ppm", sequence);
+                                    captureName = numberedName;
+                                } else {
+                                    __android_log_print(
+                                        ANDROID_LOG_WARN, kTag,
+                                        "GS scene capture limit reached (%u).",
+                                        kMaxRequestedGsSceneCaptures);
+                                }
+                            }
+                            if (!captureName.empty()) {
+                                capturePath += captureName;
+                                std::string captureError;
+                                if (gow::android::writeRgbaPpmCapture(
+                                        capturePath, framePixels, frameWidth,
+                                        frameHeight, captureError)) {
+                                    __android_log_print(
+                                        ANDROID_LOG_INFO, kTag,
+                                        "Saved GS scene capture: %s",
+                                        capturePath.c_str());
+                                } else {
+                                    __android_log_print(
+                                        ANDROID_LOG_WARN, kTag,
+                                        "Could not save GS scene capture: %s",
+                                        captureError.c_str());
+                                }
                             }
                         } else {
                             logMessage(ANDROID_LOG_WARN,
