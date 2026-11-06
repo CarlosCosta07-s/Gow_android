@@ -103,7 +103,6 @@ public final class MainActivity extends AppCompatActivity {
     private TextView discStatus;
     private Button selectDiscButton;
     private Button installDiscButton;
-    private Button exportElfButton;
     private AlertDialog discInstallDialog;
     private ProgressBar discInstallProgressBar;
     private TextView discInstallProgressText;
@@ -121,29 +120,13 @@ public final class MainActivity extends AppCompatActivity {
     private String selectedDiscSerial;
     private String selectedDiscBootPath;
     private boolean installingDisc;
-    private boolean exportingElf;
     private volatile boolean cancelDiscInstallRequested;
-    private String preparedElfSummary;
+    private String preparedDiscSummary;
 
     private final ActivityResultLauncher<String[]> openDocumentLauncher =
             registerForActivityResult(
                     new ActivityResultContracts.OpenDocument(),
                     this::onDiscSelected);
-
-    private final ActivityResultLauncher<String> createElfDocumentLauncher =
-            registerForActivityResult(
-                    new ActivityResultContracts.CreateDocument("application/octet-stream"),
-                    this::onElfExportDestinationSelected);
-
-    private static final class IntegrityFileExpectation {
-        final long size;
-        final String sha256;
-
-        IntegrityFileExpectation(long size, String sha256) {
-            this.size = size;
-            this.sha256 = sha256;
-        }
-    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -266,12 +249,6 @@ public final class MainActivity extends AppCompatActivity {
         actionRow.addView(selectDiscButton, new LinearLayout.LayoutParams(
                 0, dp(47), 1.28f));
         content.addView(actionRow, topMargin(8));
-
-        exportElfButton = actionButton("EXPORTAR ELF PARA BUILD AOT", false);
-        exportElfButton.setEnabled(false);
-        exportElfButton.setAlpha(0.5f);
-        exportElfButton.setOnClickListener(view -> confirmAotElfExport());
-        content.addView(exportElfButton, topMargin(7));
 
         content.addView(sectionLabel("STATUS"), topMargin(17));
 
@@ -747,7 +724,6 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void onPlayPressed() {
-        if (exportingElf) return;
         if (selectedDiscUri == null) {
             new AlertDialog.Builder(this)
                     .setTitle("Nenhuma imagem selecionada")
@@ -809,7 +785,6 @@ public final class MainActivity extends AppCompatActivity {
         if (installingDisc) return;
 
         installingDisc = true;
-        refreshExportElfButtonState();
         cancelDiscInstallRequested = false;
         showDiscInstallProgressDialog(
                 "Verificando instalação existente",
@@ -980,7 +955,7 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void startFullDiscInstall(boolean repairExisting) {
-        if (installingDisc || exportingElf || selectedDiscUri == null
+        if (installingDisc || selectedDiscUri == null
                 || selectedDiscBootPath == null || !selectedDiscValid) {
             return;
         }
@@ -1248,202 +1223,6 @@ public final class MainActivity extends AppCompatActivity {
         }
     }
 
-    private File privateDiscRootForSelectedGame() {
-        if (selectedDiscSerial == null || selectedDiscSerial.isEmpty()) return null;
-        return new File(
-                new File(
-                        new File(getFilesDir(), "installations"),
-                        installationDirectoryName(selectedDiscSerial)),
-                "disc");
-    }
-
-    private void refreshExportElfButtonState() {
-        if (exportElfButton == null) return;
-        boolean ntScU = selectedDiscBootPath != null
-                && "SCUS_973.99".equalsIgnoreCase(new File(selectedDiscBootPath).getName());
-        File cdRoot = privateDiscRootForSelectedGame();
-        boolean ready = selectedDiscValid && ntScU && cdRoot != null
-                && new File(cdRoot, ".gow_disc_integrity").isFile()
-                && !installingDisc && !exportingElf;
-        exportElfButton.setEnabled(ready);
-        exportElfButton.setAlpha(ready ? 1f : 0.5f);
-    }
-
-    private void confirmAotElfExport() {
-        refreshExportElfButtonState();
-        if (exportingElf || exportElfButton == null || !exportElfButton.isEnabled()) {
-            new AlertDialog.Builder(this)
-                    .setTitle("ELF ainda não disponível")
-                    .setMessage("Instale e valide primeiro a imagem NTSC-U com o executável SCUS_973.99.")
-                    .setPositiveButton("Fechar", null)
-                    .show();
-            return;
-        }
-        new AlertDialog.Builder(this)
-                .setTitle("Exportar executável para AOT")
-                .setMessage("O FORGE vai validar e copiar somente SCUS_973.99 para um local escolhido por você, comparando o tamanho e o SHA-256 desse ELF com o manifesto privado. Isso não verifica os outros arquivos do disco nem libera o gameplay: a verificação integral continua obrigatória antes de qualquer tentativa de iniciar o jogo. A ISO e os demais arquivos permanecerão no armazenamento privado. O ELF será usado como entrada para gerar o código C++ nativo em um computador. Não envie esse arquivo ao GitHub, CI ou releases.")
-                .setPositiveButton("Escolher local", (dialog, which) ->
-                        createElfDocumentLauncher.launch("SCUS_973.99"))
-                .setNegativeButton("Cancelar", null)
-                .show();
-    }
-
-    private IntegrityFileExpectation readIntegrityExpectation(
-            File cdRoot, String relativePath) throws IOException {
-        File manifest = new File(cdRoot, ".gow_disc_integrity");
-        if (!manifest.isFile()) {
-            throw new IOException("O manifesto SHA-256 da instalação está ausente.");
-        }
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                new FileInputStream(manifest), StandardCharsets.US_ASCII))) {
-            String header = reader.readLine();
-            if (!"GOW-DISC-INTEGRITY\t1".equals(header)) {
-                throw new IOException("A versão do manifesto SHA-256 não é suportada.");
-            }
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String[] fields = line.split("\\t", 3);
-                if (fields.length != 3 || !fields[0].matches("[0-9a-f]{64}")) {
-                    throw new IOException("O manifesto SHA-256 contém uma entrada inválida.");
-                }
-                if (relativePath.equals(fields[2])) {
-                    try {
-                        long size = Long.parseLong(fields[1]);
-                        if (size < 0L) throw new NumberFormatException("negative size");
-                        return new IntegrityFileExpectation(size, fields[0]);
-                    } catch (NumberFormatException exception) {
-                        throw new IOException("O tamanho registrado para SCUS_973.99 é inválido.", exception);
-                    }
-                }
-            }
-        }
-        throw new IOException("SCUS_973.99 não está registrado no manifesto SHA-256.");
-    }
-
-    private static String sha256Hex(byte[] digest) {
-        final char[] hex = "0123456789abcdef".toCharArray();
-        char[] output = new char[digest.length * 2];
-        for (int i = 0; i < digest.length; ++i) {
-            int value = digest[i] & 0xFF;
-            output[i * 2] = hex[value >>> 4];
-            output[i * 2 + 1] = hex[value & 0x0F];
-        }
-        return new String(output);
-    }
-
-    private void onElfExportDestinationSelected(Uri destination) {
-        if (destination == null || installingDisc || exportingElf
-                || selectedDiscBootPath == null) return;
-        final String bootPath = selectedDiscBootPath;
-        final File cdRoot = privateDiscRootForSelectedGame();
-        if (cdRoot == null) return;
-        exportingElf = true;
-        refreshExportElfButtonState();
-        if (selectDiscButton != null) {
-            selectDiscButton.setEnabled(false);
-            selectDiscButton.setAlpha(0.5f);
-        }
-        if (installDiscButton != null) {
-            installDiscButton.setEnabled(false);
-            installDiscButton.setAlpha(0.5f);
-        }
-        discStatus.setText("Validando e exportando SCUS_973.99 para o local escolhido...");
-        discStatus.setTextColor(COLOR_MUTED);
-        ioExecutor.execute(() -> {
-            String failure = null;
-            boolean destinationMayContainPartialFile = false;
-            try {
-                if (!cdRoot.isDirectory()) {
-                    throw new IOException("A pasta privada da instalação não existe.");
-                }
-                if (!nativeSetCdRootDirectory(cdRoot.getAbsolutePath())) {
-                    throw new IOException("O provider cdRoot não conseguiu abrir a instalação privada.");
-                }
-                String elfValidation = nativeValidateCdRootElf(bootPath);
-                if (elfValidation == null || !elfValidation.startsWith("OK:")) {
-                    throw new IOException("O executável não passou pela validação ELF32/MIPS: "
-                            + (elfValidation == null ? "resposta nativa vazia." : elfValidation));
-                }
-                String relativePath = bootPath.replace('\\', '/');
-                IntegrityFileExpectation expected = readIntegrityExpectation(cdRoot, relativePath);
-                File rootCanonical = cdRoot.getCanonicalFile();
-                File elf = new File(rootCanonical, relativePath).getCanonicalFile();
-                String rootPrefix = rootCanonical.getPath() + File.separator;
-                if (!elf.getPath().startsWith(rootPrefix) || !elf.isFile()) {
-                    throw new IOException("O caminho do ELF não aponta para um arquivo privado regular.");
-                }
-                if (elf.length() != expected.size) {
-                    throw new IOException("O tamanho atual do ELF difere do manifesto SHA-256.");
-                }
-                String destinationName = queryDisplayName(destination);
-                if (!"SCUS_973.99".equalsIgnoreCase(destinationName)) {
-                    throw new IOException(
-                            "Salve o executável com o nome exato SCUS_973.99; "
-                                    + "o recompilador usa esse nome para selecionar o perfil NTSC-U.");
-                }
-                MessageDigest digest = MessageDigest.getInstance("SHA-256");
-                long copiedBytes = 0L;
-                OutputStream rawOutput = getContentResolver().openOutputStream(destination, "w");
-                if (rawOutput == null) throw new IOException("O provedor escolhido não abriu o destino para gravação.");
-                destinationMayContainPartialFile = true;
-                try (InputStream input = new BufferedInputStream(new FileInputStream(elf));
-                     OutputStream output = new BufferedOutputStream(rawOutput)) {
-                    byte[] buffer = new byte[1024 * 1024];
-                    int count;
-                    while ((count = input.read(buffer)) != -1) {
-                        output.write(buffer, 0, count);
-                        digest.update(buffer, 0, count);
-                        copiedBytes += count;
-                    }
-                    output.flush();
-                }
-                String actualHash = sha256Hex(digest.digest());
-                if (copiedBytes != expected.size || !expected.sha256.equals(actualHash)) {
-                    throw new IOException("A cópia não corresponde ao SHA-256 registrado.");
-                }
-                destinationMayContainPartialFile = false;
-            } catch (Exception exception) {
-                failure = safeMessage(exception);
-                if (destinationMayContainPartialFile) {
-                    try { DocumentsContract.deleteDocument(getContentResolver(), destination); }
-                    catch (Exception ignored) { /* Provider may not support deletion. */ }
-                    failure += " Se o provedor não conseguiu apagar o destino, remova o arquivo parcial manualmente.";
-                }
-            }
-            final String finalFailure = failure;
-            runOnUiThread(() -> {
-                if (isFinishing() || isDestroyed()) return;
-                exportingElf = false;
-                if (selectDiscButton != null) {
-                    selectDiscButton.setEnabled(true);
-                    selectDiscButton.setAlpha(1f);
-                }
-                if (installDiscButton != null) {
-                    installDiscButton.setEnabled(true);
-                    installDiscButton.setAlpha(1f);
-                }
-                refreshExportElfButtonState();
-                if (finalFailure == null) {
-                    discStatus.setText("SCUS_973.99 exportado e conferido por SHA-256. O ELF permanece sob seu controle local.");
-                    discStatus.setTextColor(COLOR_SUCCESS);
-                    new AlertDialog.Builder(this)
-                            .setTitle("ELF exportado com sucesso")
-                            .setMessage("SCUS_973.99 foi salvo no local escolhido e o SHA-256 corresponde ao manifesto da instalação. Use esse arquivo como entrada --elf no build AOT local. Mantenha-o privado; ele não foi enviado ao GitHub.")
-                            .setPositiveButton("Fechar", null)
-                            .show();
-                } else {
-                    discStatus.setText("Falha ao exportar o ELF: " + finalFailure);
-                    discStatus.setTextColor(COLOR_ERROR);
-                    new AlertDialog.Builder(this)
-                            .setTitle("Falha na exportação do ELF")
-                            .setMessage(finalFailure)
-                            .setPositiveButton("Fechar", null)
-                            .show();
-                }
-            });
-        });
-    }
-
     private void openRuntimeDiagnostics() {
         if (selectedDiscSerial == null || selectedDiscSerial.isEmpty()
                 || selectedDiscBootPath == null || selectedDiscBootPath.isEmpty()) {
@@ -1510,7 +1289,7 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void onDiscSelected(Uri uri) {
-        if (uri == null || exportingElf) {
+        if (uri == null) {
             return;
         }
 
