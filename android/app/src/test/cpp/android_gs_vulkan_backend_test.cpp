@@ -182,6 +182,14 @@ int main() {
         require(spritePixel[0] == 0u && spritePixel[1] == 0u &&
                 spritePixel[2] == 255u && spritePixel[3] == 255u,
                 "CRTC frame did not contain the rasterized blue sprite.");
+        const auto textureTopLeft = pixelAt(36u, 12u);
+        require(textureTopLeft[0] == 255u && textureTopLeft[1] == 0u &&
+                textureTopLeft[2] == 0u && textureTopLeft[3] == 255u,
+                "Textured GS sprite did not sample its top-left CT32 texel.");
+        const auto textureBottomRight = pixelAt(39u, 15u);
+        require(textureBottomRight[0] == 255u && textureBottomRight[1] == 255u &&
+                textureBottomRight[2] == 255u && textureBottomRight[3] == 255u,
+                "Textured GS sprite did not sample its bottom-right CT32 texel.");
         const auto emptyPixel = pixelAt(60u, 30u);
         require(emptyPixel[0] == 0u && emptyPixel[1] == 0u &&
                 emptyPixel[2] == 0u,
