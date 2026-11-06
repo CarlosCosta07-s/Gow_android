@@ -427,19 +427,19 @@ def main() -> int:
     for source in diagnostic_sources:
         replace_exactly_once(
             vu_cmake,
-            f"    {source}\\n",
+            f"    {source}\n",
             "",
             f"remove diagnostic-only source from strict VU1 target: {source}",
         )
     replace_exactly_once(
         vu_cmake,
-        "    src/lib/games_database.cpp\\n)\\n",
-        "    src/lib/games_database.cpp\\n)\\n"
-        "if(NOT PS2X_VU1_NATIVE_ONLY)\\n"
-        "    target_sources(ps2_runtime PRIVATE\\n"
-        + "".join(f"        {source}\\n" for source in diagnostic_sources)
-        + "    )\\n"
-        "endif()\\n",
+        "    src/lib/games_database.cpp\n)\n",
+        "    src/lib/games_database.cpp\n)\n"
+        "if(NOT PS2X_VU1_NATIVE_ONLY)\n"
+        "    target_sources(ps2_runtime PRIVATE\n"
+        + "".join(f"        {source}\n" for source in diagnostic_sources)
+        + "    )\n"
+        "endif()\n",
         "keep PCSX2 differential files only in non-strict diagnostic builds",
     )
     replace_exactly_once(
