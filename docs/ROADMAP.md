@@ -75,7 +75,7 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - [ ] Rodar `iopn_gen.py` sobre os módulos IRX necessários e compilar as unidades geradas para ARM64.
 - [ ] Garantir que os IRX necessários ao jogo não caiam em caminho interpretado no produto final.
 - [ ] Adaptar comandos VIF/GIF/DMA e sincronização do GS.
-- [ ] Adaptar controles físicos e overlay de toque.
+- [ ] Adaptar controles físicos e overlay de toque; a configuração de controles do port deverá ficar dentro das opções do próprio jogo, não em uma tela independente do FORGE.
 - [ ] Validar movimento, câmera, combate, HUD, partículas e efeitos.
 
 **Aceitação:** menu, novo jogo e primeiro combate reproduzidos em Android ARM64 por código recompilado/AOT, sem interpretadores no caminho normal do jogo.
@@ -109,6 +109,7 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - A validação de gráficos acontecerá com o GS real e o jogo em execução.
 - Reutilizar seletivamente KIexter/Waffle/PS2Recomp quando isso reduzir trabalho e for necessário ao jogo; documentar cada arquivo, commit e licença.
 - Não importar o runner desktop, o renderer OpenGL/WGL ou a camada de janela/áudio/entrada de PC diretamente para Android.
+- As opções de remapeamento, gamepad e controle touch do port devem ser integradas às opções/menu de pausa do próprio jogo; o FORGE não terá uma interface separada de configuração de controles.
 - O caminho final não usará emulador, interpretador de EE, interpretador de VU1 ou fallback interpretado dos IRX necessários.
 - O jogo será recompilado estaticamente; os serviços PS2 serão nativos e adaptados para o host Android.
 - Não declarar FPS sem medições reproduzíveis.

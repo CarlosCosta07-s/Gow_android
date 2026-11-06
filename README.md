@@ -28,7 +28,11 @@ Não queremos um emulador genérico, uma ISO dentro do APK ou um caminho final b
 
 **FORGE** é o nome da interface de biblioteca do projeto. Sua organização moderna inclui navegação lateral, biblioteca do jogo, ações rápidas e cartões de status. A direção visual combina tons grafite, tipografia limpa e detalhes vermelhos, com referência sutil à identidade grega de God of War I.
 
-O ícone adaptativo é um **Ômega branco sobre fundo vermelho sólido**, desenhado como vetor original do projeto. Não são utilizados retratos de Kratos, capturas do jogo ou artes promocionais.
+O ícone adaptativo instalado usa um **Ômega branco sobre fundo vermelho sólido**, desenhado como vetor original, com camada monocromática para ícones temáticos do Android. O recurso do ícone do aplicativo é separado do emblema usado dentro do launcher FORGE, então a atualização do ícone não altera o layout nem os elementos visuais da biblioteca. Não são utilizados retratos de Kratos, capturas do jogo ou artes promocionais.
+
+## Controles do port dentro do jogo
+
+A configuração de controles — gamepad físico, remapeamento, deadzone, sensibilidade e layout touch — ficará em uma página das **opções do próprio God of War**, acessível também a partir do menu de pausa quando possível. Não será criada uma interface separada de controles no FORGE. O overlay touch será exibido durante a partida, mas sua configuração será conduzida pelo menu do jogo. Consulte [as referências Android e decisões de integração](docs/REFERENCIAS_ANDROID.md).
 
 ## Launcher e seleção de disco
 
@@ -92,6 +96,7 @@ A licença GPL-3.0 deste repositório cobre somente o código que seus autores p
 
 ## Documentação
 
+- [Referências de ports Android e integração dos controles no jogo](docs/REFERENCIAS_ANDROID.md)
 - [Arquitetura técnica](docs/ARQUITETURA.md)
 - [Base KIexter: arquivos, origem e adaptação Android](docs/BASE_KIEXTER.md)
 - [Pipeline host do recompilador](docs/PIPELINE_RECOMPILADOR.md)

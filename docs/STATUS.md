@@ -112,3 +112,11 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 7. Atingir boot, primeira imagem, menus e primeiro combate.
 
 **Nenhum gameplay foi testado ou declarado funcional.** Os arquivos importados são preparação da base; não constituem ainda um runtime jogável.
+
+## [VERIFICADO] Shell Android ligado com tabela vazia de funções recompiladas
+
+- Em 2026-11-06, a execução GitHub Actions [42155712137](https://github.com/CarlosCosta07-s/Gow_android/actions/runs/42155712137), no commit 262b1f2f4087c3d8d8c28176bb42dbaca73b0ff8, concluiu todas as etapas com sucesso, incluindo preparação do runtime Waffle, assembleDebug e upload do APK.
+- Artefato: gow-android-arm64-shell. O artefato contém o shell de desenvolvimento, não os dados do jogo.
+- A tabela g_ps2RecompiledFunctionTable ligada nesta etapa é explicitamente vazia (zero slots). Ela resolve apenas o contrato de link do shell enquanto não existe C++ gerado a partir do ELF privado do usuário.
+- A conclusão do build não prova boot, rendering GS, áudio, controles ou gameplay. Nenhum ELF, IRX, microcódigo ou dado de jogo foi adicionado ao repositório.
+- A construção/inicialização do objeto PS2Runtime e a integração do seu ciclo de vida com GameActivity ainda precisam de um smoke test controlado; PS2Runtime::initialize() não deve ser chamado antes da substituição dos adaptadores desktop de janela, gráficos e áudio.
