@@ -119,8 +119,6 @@ def main() -> int:
     )
     for required in (
         "nativeSetActivityReference(this)",
-        "gBootRelativePath.clear()",
-        "gBootPathConfigurationReceived = false",
         "nativeClearActivityReference(this)",
         "nativeClearActivityReference(GowGameActivity activity)",
         "protected void onDestroy()",
@@ -172,6 +170,8 @@ def main() -> int:
         "gBootPathCondition.wait(",
         "gBootPathCondition.notify_all()",
         "gBootPathConfigurationReceived",
+        "gBootRelativePath.clear()",
+        "gBootPathConfigurationReceived = false",
         "gowRuntimeLoadElfAndCheckAot(",
         "gBootRelativePath = rootReady ? std::move(candidate) : std::string{}",
     ):
