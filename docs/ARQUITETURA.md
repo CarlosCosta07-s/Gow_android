@@ -28,7 +28,7 @@ Essas versões fixam a primeira build de CI; serão atualizadas deliberadamente,
 O código executável inicial do projeto está em:
 
 - `android/app`: configuração Gradle, manifesto e Activity.
-- `android/app/src/main/java/org/gowandroid/app/MainActivity.java`: launcher AppCompat temático, menu nativo, seletor SAF e validação ISO9660 do setor 16.
+- `android/app/src/main/java/org/gowandroid/app/MainActivity.java`: launcher AppCompat temático, menu nativo, seletor SAF, validação ISO9660 e parser inicial de SYSTEM.CNF/serial.
 - `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`: ícone adaptativo do aplicativo.
 - `android/app/src/main/res/drawable-nodpi/ic_launcher_foreground.webp`: arte original do ícone do projeto.
 - `android/app/src/main/java/org/gowandroid/app/GowGameActivity.java`: Activity baseada em AndroidX GameActivity.
@@ -37,7 +37,7 @@ O código executável inicial do projeto está em:
 
 O código nativo inicial em `main.cpp` ainda contém um bring-up Vulkan de clear/present. Embora compile na CI, o mantenedor observou que iniciar esse teste separado fecha o aplicativo no aparelho. Por decisão de escopo, o botão foi removido; esse teste não será tratado como critério de progresso nem como prova de compatibilidade gráfica. A atividade nativa será reaproveitada para receber o runtime real. A validação Vulkan acontecerá por meio do GS e de frames reais do jogo.
 
-A interface FORGE e o seletor SAF/ISO9660 estão implementados. A validação atual ainda não lê `SYSTEM.CNF` nem identifica o serial/revisão do disco. Não há frontend GS, código recompilado do jogo ou runtime de God of War integrado.
+A interface FORGE e o seletor SAF/ISO9660 estão implementados. O parser de `SYSTEM.CNF` e a identificação inicial de `SCUS_973.99`/`SCES_531.33` foram adicionados ao código, mas ainda aguardam compilação CI e validação com imagens de teste em aparelho. Não há frontend GS, código recompilado do jogo ou runtime de God of War integrado.
 
 ## Camadas futuras do port
 
@@ -61,8 +61,8 @@ Fluxo previsto:
 
 1. Receber URI pelo seletor Android (`MainActivity` já implementa esta etapa).
 2. Abrir o fluxo de leitura e tentar preservar a permissão concedida.
-3. Validar ISO9660, descritor primário no setor 16 (implementado; CI ainda pendente para a última alteração).
-4. Ler `SYSTEM.CNF` para identificar serial e revisão; esta etapa ainda não está implementada.
+3. Validar ISO9660, descritor primário no setor 16.
+4. Ler a entrada de diretório raiz e `SYSTEM.CNF`; o parser inicial já está no código e reconhece as revisões NTSC-U/PAL conhecidas, mas ainda aguarda build e validação física.
 5. Ler diretamente do descritor ou preparar somente elementos de boot estritamente necessários no diretório privado.
 6. Nunca enviar dados do usuário para repositório, Issues, releases ou CI pública.
 
@@ -122,7 +122,7 @@ Próximas etapas:
 
 ### 7. Áudio
 
-O SPU2/LIBSD deverá alimentar um mixer nativo e saída Android de baixa latência. Oboe é a opção inicial para a saída; buffers e sincronização permanecem responsabilidade do runtime. O callback não deve bloquear, alocar memória imprevisivelmente nem ler disco.
+O SPU2/LIBSD deverá alimentar um mixer próprio e saída de baixa latência pela API nativa AAudio do Android. Buffers e sincronização permanecem responsabilidade do runtime. O callback não deve bloquear, alocar memória imprevisivelmente nem ler disco.
 
 ### 8. Entrada e interface
 
@@ -134,7 +134,7 @@ O SPU2/LIBSD deverá alimentar um mixer nativo e saída Android de baixa latênc
 
 ### 9. Frame pacing e desempenho
 
-Separar relógio da lógica, submissão GPU e apresentação. Avaliar Frame Pacing/Swappy do Android Game Development Kit. Prioridade: estabilidade e velocidade correta; metas de FPS só serão publicadas após medições em dispositivos e cenas identificados.
+Separar relógio da lógica, submissão GPU e apresentação. Usar inicialmente AChoreographer/Choreographer e os mecanismos de sincronização Vulkan do sistema; soluções externas de frame pacing só serão avaliadas se medições demonstrarem necessidade. Prioridade: estabilidade e velocidade correta; metas de FPS só serão publicadas após medições reproduzíveis.
 
 ## Política de implementação própria
 
