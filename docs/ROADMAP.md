@@ -55,17 +55,20 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 ## Fase 3 — GS no Android: reaproveitar frontend e substituir backend
 
 - [x] Auditar o frontend GS/GIF e identificar as fronteiras OpenGL/Raylib; documentar o contrato do backend em `docs/GS_VULKAN_ANDROID.md`.
-- [ ] Reaproveitar apenas a camada de comandos, formatos PSM, CLUT, swizzle e estado que não dependa de OpenGL/host desktop.
+- [x] Reaproveitar a memória GS/VRAM, swizzle, transferências e CLUT da `GSTextureStore`/GSMem sem levar o contexto GL para a rota Android; o frontend GS Waffle ainda mantém dependências host que precisam ser isoladas integralmente.
 - [ ] Isolar completamente o backend OpenGL/WGL/Raylib do runner Android.
-- [ ] Implementar backend GS/Vulkan Android: render targets, depth, alpha test, destination-alpha, blending e sincronização (contrato e dependências auditados; veja `docs/GS_VULKAN_ANDROID.md`).
+- [x] Implementar o primeiro backend CPU de referência para VRAM/FBP/PSM no Android, com depth, alpha test, DATE, blending básico, PABE/FBA e CLUT; cobertura limitada e registrada em `docs/GS_VULKAN_ANDROID.md`.
+- [ ] Substituir/otimizar a rota CPU de correção por renderização GS Vulkan nativa, mantendo a mesma semântica de registradores e memória.
 - [x] Ligar a primeira via Vulkan de primitivas sólidas (point/line/triangle/sprite), fila thread-safe entre GS worker e surface, criação/destruição conforme `ANativeWindow` e opção ativa somente no Debug; CIs `42258381042`–`42258945494` aprovaram build ARM64 e checagens estruturais. Não é rasterizador GS completo: sem texturas/CLUT, FBP/PSM, depth, alpha/DATE, blending/fog ou composição de display.
 - [x] Testar adaptador real de memória GS com `GSTextureStore`/`ps2_gs_memory.cpp`: CT32 read/write, scissor/FBMSK, HOST→LOCAL e snapshot 4 MiB aprovados na CI `42260019446`; artefato ARM64 ID `13524986210`.
 - [x] Rasterizar primitivas opacas não texturizadas em VRAM FBP/FBW/PSM e apresentar o circuito CRTC básico; host test e APK ARM64 passaram na CI `42261321872`. Texturas, Z, blending e composição completa continuam pendentes.
 - [x] Implementar leitura básica do circuito ativo DISPFB/DISPLAY e criar `PresentationFrame` com stride host de 640 pixels; triângulo/sprite sintéticos conferidos em CI `42261321872`.
-- [ ] Compor corretamente DISPLAY1/DISPLAY2, PMODE, ALP, SLBG/BGCOLOR e interlace/overscan para o jogo real.
+- [x] Compor DISPLAY1/DISPLAY2, PMODE, ALP, SLBG/BGCOLOR no caminho CPU/CRTC e verificar alpha/fundo com fixtures sintéticas; interlace/overscan ainda pendentes.
+- [ ] Completar interlace, overscan e demais combinações de registradores de display exigidas por cenas reais.
 - [x] Preparar presenter Vulkan de frames RGBA para a GameActivity (staging `VkBuffer`, barriers e `vkCmdCopyBufferToImage`), scaler aspect-fit e invalidação do cache após recriação da swapchain; host tests e builds ARM64 aprovados nas CIs `42255177609`/`42255283925`. Esse marco **não** implementa rasterização GS nem produz frames do jogo.
 - [ ] Adaptar shaders e operações para GPUs móveis; usar passes intermediários quando necessário.
-- [ ] Validar comandos reais do jogo, começando pelo logo/menu e primeira cena.
+- [x] Criar comparador PPM offline e captura local do primeiro `PresentationFrame` Android; testes host do gravador e comparador executados pela CI.
+- [ ] Obter o primeiro frame realmente produzido pelo God of War no Android e comparar com a mesma cena no renderer de referência; AOT/boot real ainda bloqueiam esse marco.
 
 **Aceitação:** primeira imagem real do jogo apresentada em Android e comparada com referência visual. Um clear/present isolado não conta como conclusão.
 
