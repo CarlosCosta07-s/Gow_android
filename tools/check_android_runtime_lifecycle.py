@@ -433,7 +433,7 @@ def main() -> int:
     for required in (
         "VU1_MICRO_MEMORY_BYTES",
         "normalize_and_validate_iop_dump",
-        "--strict",
+        "--strict-partial",
         "full_native_aot",
     ):
         require(required in native_aot_source, f"Private native AOT builder is missing: {required}")
