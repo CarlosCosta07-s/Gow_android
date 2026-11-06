@@ -8,6 +8,10 @@ on:
       - "android/**"
       - "port/kiexter/vu1/ps2_vu1_neon_compat.h"
       - "tools/build_recompiler_host.py"
+      - "tools/ps2_vfs_cdroot_smoke.cpp"
+      - "tools/run_ps2_vfs_cdroot_smoke.py"
+      - "android/app/src/main/cpp/cdroot_vfs.cpp"
+      - "android/app/src/main/cpp/cdroot_vfs.h"
       - ".github/workflows/android-shell.yml"
 
 permissions:
@@ -132,6 +136,12 @@ jobs:
             -Iandroid/app/src/main/cpp \
             -o "$RUNNER_TEMP/cdroot-vfs-test"
           "$RUNNER_TEMP/cdroot-vfs-test"
+
+      - name: Test PS2 VFS through the Android private cdRoot provider
+        shell: bash
+        run: |
+          python tools/run_ps2_vfs_cdroot_smoke.py \
+            --work-dir "$RUNNER_TEMP/gowport-android-runtime"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
