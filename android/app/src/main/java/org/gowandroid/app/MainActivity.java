@@ -1353,7 +1353,7 @@ public final class MainActivity extends AppCompatActivity {
                     throw new IOException("O executável não passou pela validação ELF32/MIPS: "
                             + (elfValidation == null ? "resposta nativa vazia." : elfValidation));
                 }
-                String relativePath = bootPath.replace('\\\\', '/');
+                String relativePath = bootPath.replace('\\', '/');
                 IntegrityFileExpectation expected = readIntegrityExpectation(cdRoot, relativePath);
                 File rootCanonical = cdRoot.getCanonicalFile();
                 File elf = new File(rootCanonical, relativePath).getCanonicalFile();
