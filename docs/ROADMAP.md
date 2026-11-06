@@ -42,6 +42,7 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 ## Fase 2 — Recompilação estática ARM64 com base KIexster
 
 - [x] Importar `funcmap.csv` (6.414 funções) e `recomp.template.toml` para `recompiler/config/`.
+- [x] Adicionar pré-validação da tabela AOT gerada (não vazia, slots/endereço coerentes, sem duplicatas e com entrypoint do ELF registrado); fixtures de aceitação/rejeição passaram na CI host `42270355202`.
 - [x] Fixar PS2Recomp no commit `c5a9d02573410a2085a4b4b831b0b68ba3515440` e integrar/buildar a ferramenta host (run `42159359104`).
 - [x] Preparar o pipeline privado que recebe o ELF NTSC-U sem armazená-lo no repositório; falta executá-lo com o ELF real do usuário.
 - [x] Criar o orquestrador local `tools/build_android_game.py` para validar o ELF NTSC-U privado, executar PS2Recomp, exportar C++ para staging ignorado e compilar APK ARM64; testes de planejamento/privacidade e CLI passam em CI. Execução com o ELF real do usuário ainda pendente.
@@ -82,6 +83,7 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Gerar `.gow_disc_integrity` na instalação privada com SHA-256 incremental de cada arquivo ISO extraído e hashes de `.disc_layout`/`.disc_meta`; publicar o manifesto junto com a instalação atômica. Verificação segura com `openat`/`O_NOFOLLOW` e fixtures de corrupção, arquivo ausente e symlink aprovadas na CI `42237906079`.
 - [x] Executar a verificação de instalações existentes fora da thread principal, informar bytes/arquivos verificados e permitir cancelamento; qualquer cancelamento ou verificação parcial permanece inválido. Teste de cancelamento e build ARM64 aprovados na CI `42240082689`.
 - [x] Separar o núcleo PS2 do ciclo host de janela/áudio: `initializeCoreHeadless()` inicializa memória e liga EE/IOP/VU sem Raylib; Android `android_main` chama a etapa via C ABI. O perfil Android usa `GSNullBackend`, bloqueia `initialize()` desktop e mantém `run()`/guest execution desativados. Validador do código Waffle preparado, testes host/VFS e APK ARM64 aprovados na CI `42243707680`.
+- [x] Preparar um worker EE Android separado da GameActivity: exige núcleo e entrypoint AOT, executa o scheduler numa thread própria e usa `join()` seguro no encerramento, sem `detach()`. O método ainda não é chamado pelo launcher. Checker, compilação host estrita e APK ARM64 passaram nas CIs `42274965500`/`42274999877`.
 - [ ] Implementar e ligar o backend de apresentação GS/Vulkan e o backend de áudio Android ao ciclo de vida da GameActivity.
 - [x] Encaminhar `cdRoot`/BOOT2 do FORGE à GameActivity, sincronizar a configuração JNI com `android_main()`, resetar BOOT2 entre sessões e chamar a porta ELF/AOT protegida após a inicialização headless; CIs `42250619735` e `42252442268` aprovaram checker, testes host/VFS e APK ARM64. A tabela AOT pública continua vazia e a execução guest permanece bloqueada.
 - [x] Implementar painel de diagnóstico da inicialização nativa na `GowGameActivity`, com callback JNI, atualização na thread principal e retenção de mensagens precoces; checker e build ARM64 passaram nas CIs `42250619735` e `42252442268`.
@@ -116,6 +118,7 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Importar os geradores KIexter/Waffle de VU1 e IOP para staging.
 - [ ] Capturar/obter localmente os microprogramas VU1 e módulos IRX da cópia do usuário, sem publicá-los.
 - [ ] Rodar `vu1n_gen.py` como ferramenta host e compilar os blocos C++ gerados para ARM64.
+- [x] Ativar a política estrita `PS2X_VU1_NATIVE_ONLY` no Android: se um microprograma não tiver bloco nativo, a VU1 para com diagnóstico em vez de cair no interpretador. A compilação host/ARM64 foi aprovada em `42274965500`/`42274999877`; isso não comprova cobertura do microcódigo do jogo.
 - [ ] Garantir cobertura dos microprogramas usados pelo jogo; o caminho final não pode depender do fallback interpretado.
 - [ ] Rodar `iopn_gen.py` sobre os módulos IRX necessários e compilar as unidades geradas para ARM64.
 - [ ] Garantir que os IRX necessários ao jogo não caiam em caminho interpretado no produto final.
