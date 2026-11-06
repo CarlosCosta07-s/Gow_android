@@ -67,6 +67,12 @@ Essa estratégia evita materializar uma cópia completa do disco no armazenament
 
 **[NÃO IMPLEMENTADO]** persistência da URI SAF no Gow_android, transmissão do FD de MainActivity para GowGameActivity, cache seletivo do ELF/arquivos pequenos, provider de arquivos no `PS2IopHostAdapter`, configuração `cdRoot` do runtime e boot a partir da ISO. Nenhum dado de jogo foi adicionado ao repositório.
 
+## 5. Estado
+
+**[COMPILADO NA CI]** leitor ISO9660, provider C ABI, ponte JNI e patches privados do `PS2IopHostAdapter`/`PS2Vfs` foram incluídos e compilados no Android run `42161298942`; o runtime/recompiler host foi aprovado no run `42161298950`. O workflow Android também executou fixtures sintéticas sem dados do jogo.
+
+**[NÃO TESTADO]** a transferência real do FD a partir do launcher, leitura de uma ISO real, enumeração completa do dispositivo CD/DVD, cache seletivo do ELF/arquivos de boot, requisições reais do IOP e boot do jogo. O `EXTRA_DISC_FD` em `GowGameActivity` está preparado, mas MainActivity não inicia a Activity nesta revisão. Nenhum dado de jogo foi adicionado ao repositório.
+
 ## Referências de implementação do Dragon Rage
 
 - [IsoImage.kt](https://github.com/dfdx047/Tenkaichi3DecompAndroid/blob/main/android/app/src/main/java/com/dfdx047/dragonrage/data/IsoImage.kt): PVD, árvore ISO9660 e leitura aleatória por `FileChannel`.
