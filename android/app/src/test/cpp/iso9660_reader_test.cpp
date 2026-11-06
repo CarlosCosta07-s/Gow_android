@@ -140,7 +140,7 @@ int main() {
         return fail("nested ISO file extent or size mismatch");
     }
 
-    std::array<uint8_t, 16> bytes{};
+    std::array<uint8_t, 10> bytes{};
     size_t bytesRead = 0u;
     if (!reader.readFile(found, 2040u, bytes.data(), bytes.size(), bytesRead) ||
         bytesRead != bytes.size()) {
