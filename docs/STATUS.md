@@ -77,8 +77,8 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 
 - Foi criado port/kiexter/vu1/ps2_vu1_neon_compat.h para mapear a API SSE usada pelos blocos nativos VU1 para intrínsecos ARM NEON, incluindo operações vetoriais, máscaras, shuffle/blend, conversões e um mapeamento inicial MXCSR -> FPCR/FPSR.
 - Foi adicionado vu1_neon_compat_smoke.cpp ao alvo android-game. A execução Android shell 42150765223 compilou o APK Debug arm64-v8a com esse arquivo de smoke, usando o NDK 30.0.16248370.
-- Esse teste comprova que o cabeçalho e as chamadas de intrínsecos compilam no NDK ARM64; não executa a função smoke nem prova equivalência numérica, precisão de arredondamento ou runtime VU1 em aparelho.
-- O próximo passo é usar esse cabeçalho no patch privado do Waffle, compilar o próprio ps2_vu1_native.h com a seleção NEON e realizar testes de equivalência de lanes, NaN, signed zero, conversão e FPCR/FPSR.
+- Esse teste comprova que o cabeçalho e as chamadas de intrínsecos compilam no NDK ARM64; não executa a função smoke nem prova equivalência numérica, precisão de arredondamento ou runtime VU1 em aparelho. A execução host 42150853233 também comprovou que o builder aplica a seleção condicional no header Waffle, mas compilou o ramo SSE (x86-64), não o ramo NEON do runtime completo.
+- O builder privado agora copia o shim para a árvore Waffle e modifica ps2_vu1_native.h para escolher NEON em __aarch64__/__ARM_NEON e SSE em x86-64. A execução host 42150853233 aplicou essa transformação e recompilou ps2_runtime pelo ramo SSE. Ainda falta compilar o runtime Waffle completo com NDK ARM64 e executar testes de equivalência de lanes, NaN, signed zero, conversão e FPCR/FPSR.
 
 ## [PREPARADO, NÃO TESTADO] Geração do C++ do jogo
 
