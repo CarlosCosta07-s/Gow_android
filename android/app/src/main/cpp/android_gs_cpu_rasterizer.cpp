@@ -378,7 +378,9 @@ uint32_t applyGsAlphaBlend(
         static_cast<uint8_t>((destinationRgba >> 8u) & 0xFFu),
         static_cast<uint8_t>((destinationRgba >> 16u) & 0xFFu)};
     const uint8_t sourceAlpha = static_cast<uint8_t>((sourceRgba >> 24u) & 0xFFu);
-    const uint8_t destinationAlpha = static_cast<uint8_t>((destinationRgba >> 24u) & 0xFFu);
+    const uint8_t destinationAlpha = destinationPsm == GS_PSM_CT24
+        ? 128u
+        : static_cast<uint8_t>((destinationRgba >> 24u) & 0xFFu);
     const uint8_t aSelector = static_cast<uint8_t>(alphaRegister & 0x3u);
     const uint8_t bSelector = static_cast<uint8_t>((alphaRegister >> 2u) & 0x3u);
     const uint8_t cSelector = static_cast<uint8_t>((alphaRegister >> 4u) & 0x3u);
@@ -444,6 +446,14 @@ void writePixel(
             outputRgba = applyGsAlphaBlend(
                 sourceRgba, oldFramebuffer, state.context.frame.psm,
                 state.context.alpha, (state.colclamp & 1u) != 0u);
+        }
+        if ((state.context.fba & 1u) != 0u) {
+            if (state.context.frame.psm == GS_PSM_CT32) {
+                outputRgba |= 0x80000000u;
+            } else if (state.context.frame.psm == GS_PSM_CT16 ||
+                       state.context.frame.psm == GS_PSM_CT16S) {
+                outputRgba = (outputRgba & 0xFFFFu) | 0x8000u;
+            }
         }
         writeFramebufferPixel(
             store, state.context, pixelX, pixelY, outputRgba,
