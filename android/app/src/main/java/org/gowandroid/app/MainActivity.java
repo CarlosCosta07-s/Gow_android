@@ -44,6 +44,7 @@ import java.util.concurrent.Executors;
  */
 public final class MainActivity extends AppCompatActivity {
     private static final String PREF_DISC_URI = "selected_disc_uri";
+    private static final String PREF_INSTALLED_BOOT_PATH = "installed_boot_path";
     private static final int ISO_SECTOR_SIZE = 2048;
     private static final long PRIMARY_VOLUME_DESCRIPTOR_OFFSET = 16L * ISO_SECTOR_SIZE;
 
@@ -69,6 +70,7 @@ public final class MainActivity extends AppCompatActivity {
             String[] destinationPaths, InstallProgressCallback progressCallback);
 
     private static native boolean nativeSetCdRootDirectory(String privateCdRoot);
+    private static native String nativeValidateCdRootElf(String relativePath);
 
     static {
         System.loadLibrary("android-game");
@@ -88,6 +90,7 @@ public final class MainActivity extends AppCompatActivity {
     private String selectedDiscBootPath;
     private boolean installingBootFiles;
     private volatile boolean cancelBootImportRequested;
+    private String preparedBootElfSummary;
 
     // The native runtime reads this descriptor through /proc/self/fd/<n>.
     // Keep it open while the launcher and NativeActivity share the same process.
@@ -587,14 +590,26 @@ public final class MainActivity extends AppCompatActivity {
         if (finalInstallation.exists()) {
             boolean cdRootReady = nativeSetCdRootDirectory(
                     new File(finalInstallation, "disc").getAbsolutePath());
+            String installedBootPath = getPreferences(MODE_PRIVATE)
+                    .getString(PREF_INSTALLED_BOOT_PATH, bootPath);
+            String elfValidation = cdRootReady
+                    ? nativeValidateCdRootElf(installedBootPath)
+                    : "O provider cdRoot não conseguiu abrir a pasta privada.";
+            boolean elfValid = elfValidation != null
+                    && elfValidation.startsWith("OK:");
+            String detail = cdRootReady
+                    ? (elfValid
+                        ? "Executável local validado: " + elfValidation.substring(4).trim() + "."
+                        : "A pasta foi aberta, mas o ELF local não passou na validação: " + elfValidation)
+                    : elfValidation;
             new AlertDialog.Builder(this)
-                    .setTitle("Arquivos de boot já importados")
+                    .setTitle(elfValid
+                            ? "Arquivos de boot verificados"
+                            : "Arquivos de boot já importados")
                     .setMessage(
                             "A pasta de preparação já existe no armazenamento privado. "
-                                    + (cdRootReady
-                                        ? "O provider cdRoot foi aberto para leitura."
-                                        : "O provider cdRoot não conseguiu abrir a pasta.")
-                                    + " Ela contém somente os arquivos de boot importados nesta etapa; "
+                                    + detail + "\\n\\n"
+                                    + "Ela contém somente os arquivos de boot importados nesta etapa; "
                                     + "não representa uma instalação completa nem permite iniciar o jogo.")
                     .setPositiveButton("Entendi", null)
                     .show();
@@ -677,6 +692,17 @@ public final class MainActivity extends AppCompatActivity {
                 } else if (!nativeSetCdRootDirectory(
                         new File(finalInstallation, "disc").getAbsolutePath())) {
                     failure = "Os arquivos foram publicados, mas o provider cdRoot não conseguiu abrir a pasta privada.";
+                } else {
+                    String elfValidation = nativeValidateCdRootElf(bootPath);
+                    if (elfValidation == null || !elfValidation.startsWith("OK:")) {
+                        failure = "O arquivo de BOOT2 foi copiado, mas falhou na validação ELF local: "
+                                + (elfValidation == null ? "resposta nativa vazia." : elfValidation);
+                    } else {
+                        preparedBootElfSummary = elfValidation.substring(4).trim();
+                        getPreferences(MODE_PRIVATE).edit()
+                                .putString(PREF_INSTALLED_BOOT_PATH, bootPath)
+                                .apply();
+                    }
                 }
             } catch (IOException | SecurityException | ErrnoException exception) {
                 failure = "Falha na importação: " + safeMessage(exception);
@@ -751,7 +777,7 @@ public final class MainActivity extends AppCompatActivity {
 
         if (success) {
             discStatus.setText(
-                    "Arquivos de boot importados para o armazenamento privado. "
+                    "Executável local validado: " + preparedBootElfSummary + ". "
                             + "Os demais arquivos do disco ainda precisam ser identificados; "
                             + "o jogo ainda não pode iniciar.");
             discStatus.setTextColor(0xFF8BC28F);
@@ -759,7 +785,8 @@ public final class MainActivity extends AppCompatActivity {
                     .setTitle("Preparação inicial concluída")
                     .setMessage(
                             "SYSTEM.CNF e o executável BOOT2 foram copiados e publicados "
-                                    + "na pasta privada gow_boot_seed. A instalação ainda está "
+                                    + "na pasta privada gow_boot_seed. "
+                                    + preparedBootElfSummary + ". A instalação ainda está "
                                     + "incompleta e o runtime não foi iniciado.")
                     .setPositiveButton("Continuar", null)
                     .show();
