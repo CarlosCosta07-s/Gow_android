@@ -146,6 +146,6 @@ A etapa de fragmento inclui teste e escrita Z para Z32/Z24/Z16/Z16S, modos ZTST,
 
 ### Captura e comparação de cena
 
-O helper `android_gs_scene_capture.cpp` grava o primeiro frame compacto RGBA fornecido pelo frontend GS em `gow_android_first_gs_frame.ppm`, no diretório de arquivos externos da aplicação (fallback para o interno). O Logcat registra o caminho. `tools/compare_gs_scene.py` compara capturas PPM P6 com a mesma resolução e produz métricas e um mapa de diferenças.
+O helper `android_gs_scene_capture.cpp` grava o primeiro frame compacto RGBA fornecido pelo frontend GS em `gow_android_first_gs_frame.ppm`; o APK Debug também oferece o botão **Capturar cena** para salvar até 32 frames adicionais sob demanda (`gow_android_scene_01.ppm` … `gow_android_scene_32.ppm`). Os arquivos ficam no diretório de arquivos externos da aplicação (fallback para o interno), e o Logcat registra o caminho. `tools/compare_gs_scene.py` compara capturas PPM P6 com a mesma resolução e produz métricas e um mapa de diferenças.
 
 **Ainda não é validação real:** a tabela AOT pública está vazia, a porta de carga recusa uma tabela vazia e `PS2Runtime::run()` continua bloqueado. Não há um frame de God of War produzido pelo runtime Android, nem comparação com a mesma cena em um renderer de referência. O capture/comparator prepara a etapa seguinte, mas só uma execução real no aparelho poderá concluir esse marco.
