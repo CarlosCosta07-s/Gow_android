@@ -158,3 +158,11 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 - A CI precisa compilar esta alteração. Não há teste físico automatizado de gamepad nem prova de que GameActivity executou o smoke em aparelho.
 
 **Bloqueio preservado:** PS2Runtime::initialize(), loadELF() e run() continuam sem chamada no Android. O host Raylib/OpenGL ainda não foi substituído pelos adaptadores GS/Vulkan e áudio Android, e a tabela de funções recompiladas continua vazia.
+
+## [DECISÃO DE ARQUITETURA] Instalação híbrida de ISO
+
+- A estratégia do projeto passa a seguir o fluxo do Dragon Rage BT4: permissão SAF persistente, cópia privada do ELF original e dos arquivos pequenos de boot que forem comprovadamente necessários; os dados grandes permanecem na ISO.
+- A imagem será aberta por `ParcelFileDescriptor` no início da sessão e seu FD será transferido/duplicado para a camada nativa com ownership explícito.
+- `Iso9660Reader` será o provider de leitura aleatória; o próximo trabalho é ligá-lo ao `PS2IopHostAdapter` para atender caminhos `cdrom0:`.
+- A estratégia não está implementada no launcher/runtime ainda. O leitor isolado e seus testes host não significam que o jogo já consegue abrir arquivos da ISO.
+- Referência de código: `GameDataInstaller.kt`, `Bt4Installer.kt` e `Bt4Activity.kt` do Dragon Rage. Detalhes em `docs/DISC_VFS_ANDROID.md`.

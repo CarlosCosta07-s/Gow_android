@@ -26,7 +26,28 @@ Esta primeira versão não aceita:
 
 O seletor SAF atual reconhece PVD ISO9660 de 2048 bytes e lê `SYSTEM.CNF`; o leitor nativo estende essa fundação com lookup em diretórios e leitura de arquivo por offset. A aceitação de uma imagem pelo parser ainda não significa que o runtime saiba montá-la.
 
-## 3. Integração pendente com o runtime Waffle
+## 3. Decisão de arquitetura: instalação híbrida, inspirada no Dragon Rage
+
+A referência analisada é o projeto [Dragon Rage / Tenkaichi3DecompAndroid](https://github.com/dfdx047/Tenkaichi3DecompAndroid). Ele possui dois fluxos úteis:
+
+- **BT3 — instalação por extração seletiva:** o instalador lê a ISO por SAF e copia o executável e diretórios de dados selecionados (`BIN/`, `DATA/`). Arquivos AFS são mantidos inteiros, sem dividir suas entradas em milhares de arquivos pequenos.
+- **BT4 — instalação híbrida com imagem mantida:** o instalador valida o ELF, copia o executável e arquivos menores exigidos pelo runtime, guarda a URI com permissão persistente e mantém os grandes arquivos de dados na imagem. Ao iniciar, a Activity abre um `ParcelFileDescriptor` e entrega ao motor nativo `/proc/self/fd/<fd>`.
+
+Para God of War, adotaremos a **estratégia híbrida do BT4**, adaptada aos serviços de CD/DVD do PS2. Não vamos copiar a ISO de vários gigabytes nem presumir que a estrutura de dados do BT3 se aplica ao jogo.
+
+### Fluxo planejado para God of War
+
+1. O launcher usa SAF `ACTION_OPEN_DOCUMENT`, solicita permissão persistente de leitura e valida se o provider permite acesso aleatório ao descritor.
+2. O importador verifica PVD ISO9660, `SYSTEM.CNF`, serial/região e identidade/revisão do ELF. O cache registra URI, tamanho, identidade e versão do importador.
+3. O ELF original é copiado para o armazenamento privado com o nome esperado pelo runtime. Isso é necessário porque `PS2Runtime::loadELF()` atualmente recebe um caminho e abre o arquivo com `std::ifstream`.
+4. Arquivos pequenos de boot/IRX/BIN só serão copiados depois de uma lista de dependências confirmada por rastreamento do boot. O instalador verifica tamanho/hash do que copiou e publica o marcador de instalação apenas ao final.
+5. A imagem permanece na origem SAF. Ao iniciar `GowGameActivity`, o Java abre `ParcelFileDescriptor`; a camada nativa recebe um descritor duplicado/transferido com ownership explícito e o mantém até encerrar a sessão.
+6. O provider ISO nativo mapeia caminhos `cdrom0:\\...` para entradas ISO9660 e implementa abrir, consultar tamanho, ler em offset e fechar handle para o IOP. O leitor usa acesso aleatório e poderá adicionar cache limitado de blocos; não extrai toda a árvore.
+7. Se a permissão persistente tiver sido revogada ou a imagem estiver indisponível, o launcher solicita que o usuário selecione novamente a mesma imagem e revalida a identidade antes de iniciar.
+
+**Não copiar por suposição:** a lista de diretórios/arquivos a extrair será derivada dos acessos reais durante o boot de God of War. Primeiro manteremos os dados grandes na imagem; somente arquivos que o runtime precise como caminho físico local serão colocados no cache privado.
+
+## 4. Integração pendente com o runtime Waffle
 
 A base Waffle usa `PS2Runtime::IoPaths` para definir `hostRoot`, `cdRoot` e `mcRoot`. O `PS2IopHostAdapter` resolve caminhos de disco para caminhos do host e armazena `FILE*` em sua tabela de arquivos; `PS2Vfs::open` também abre arquivos com `fopen`. Isso não consegue consumir diretamente uma URI SAF nem um leitor ISO baseado em `pread`.
 
@@ -40,8 +61,15 @@ A ponte de runtime ainda precisa:
 
 Essa estratégia evita materializar uma cópia completa do disco no armazenamento interno, mas exige integração do provider com a interface de arquivos do IOP. O leitor ISO está pronto para ser esse provider; o provider do runtime ainda não está conectado.
 
-## 4. Estado
+## 5. Estado
 
-**[IMPLEMENTADO; CI PENDENTE]** leitor ISO9660 nativo por FD e fixture sintética, integrado ao alvo Android. A execução do teste host está no workflow `Android shell`.
+**[IMPLEMENTADO; TESTE HOST APROVADO]** leitor ISO9660 nativo por FD e fixture sintética, integrado ao alvo Android. Os testes host passaram na etapa de testes do workflow `Android shell`; o APK completo do commit mais recente ainda precisa de sua própria confirmação CI.
 
-**[NÃO IMPLEMENTADO]** transmissão do FD de MainActivity para GowGameActivity, provider de arquivos no `PS2IopHostAdapter`, configuração `cdRoot` do runtime e boot a partir da ISO. Nenhum dado de jogo foi adicionado ao repositório.
+**[NÃO IMPLEMENTADO]** persistência da URI SAF no Gow_android, transmissão do FD de MainActivity para GowGameActivity, cache seletivo do ELF/arquivos pequenos, provider de arquivos no `PS2IopHostAdapter`, configuração `cdRoot` do runtime e boot a partir da ISO. Nenhum dado de jogo foi adicionado ao repositório.
+
+## Referências de implementação do Dragon Rage
+
+- [IsoImage.kt](https://github.com/dfdx047/Tenkaichi3DecompAndroid/blob/main/android/app/src/main/java/com/dfdx047/dragonrage/data/IsoImage.kt): PVD, árvore ISO9660 e leitura aleatória por `FileChannel`.
+- [GameDataInstaller.kt](https://github.com/dfdx047/Tenkaichi3DecompAndroid/blob/main/android/app/src/main/java/com/dfdx047/dragonrage/data/GameDataInstaller.kt): verificação e extração seletiva do BT3, progresso, espaço livre e verificação dos arquivos copiados.
+- [Bt4Installer.kt](https://github.com/dfdx047/Tenkaichi3DecompAndroid/blob/main/android/app/src/main/java/com/dfdx047/dragonrage/data/Bt4Installer.kt): permissão persistente, extração dos arquivos pequenos e preservação da ISO.
+- [Bt4Activity.kt](https://github.com/dfdx047/Tenkaichi3DecompAndroid/blob/main/android/app/src/main/java/com/dfdx047/dragonrage/engine/Bt4Activity.kt): abertura do descritor e passagem de `/proc/self/fd/<fd>` ao motor.

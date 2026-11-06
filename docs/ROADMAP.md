@@ -58,8 +58,11 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 
 - [ ] Selecionar e importar os módulos portáveis do runtime Waffle/KIexter (EE, memória, scheduler, stubs e serviços usados pelo título).
 - [x] Adaptar o runner nativo para AndroidX GameActivity/NDK, ligar `ps2_runtime` ao alvo `android-game` e preservar o MainActivity FORGE (smoke apenas de construção/destruição; sem iniciar o runtime).
-- [ ] Implementar passagem segura do arquivo/URI do usuário para o runtime.
-- [ ] Criar cache privado ou VFS para os arquivos do disco no layout e setores que o runtime espera.
+- [ ] Implementar passagem segura do descritor SAF do usuário para o runtime nativo, mantendo o handle durante toda a sessão.
+- [ ] Implementar instalação híbrida inspirada no Dragon Rage BT4: permissão SAF persistente, cache privado do ELF original e somente arquivos pequenos de boot comprovadamente necessários; manter os dados grandes na ISO.
+- [ ] Transferir um descritor ISO válido do GowGameActivity para o código nativo com ownership explícito e encerramento seguro.
+- [ ] Ligar `Iso9660Reader` ao `PS2IopHostAdapter` como provider de `cdrom0:` (open/size/read/close por caminho e offset), sem extrair a ISO inteira.
+- [ ] Validar acesso aleatório, revogação da permissão SAF, pausa/retorno e troca de imagem em aparelho Android.
 - [ ] Ligar código recompilado, overrides de God of War e serviços mínimos de boot.
 - [ ] Resolver CD/DVD, IRX, SIF, DMA e cadeia inicial de execução.
 - [ ] Registrar diagnóstico por etapa, PC/RA e último subsistema confirmado.

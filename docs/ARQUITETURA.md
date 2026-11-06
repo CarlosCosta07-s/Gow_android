@@ -42,9 +42,9 @@ A interface FORGE e o seletor SAF/ISO9660 estão implementados. O parser de `SYS
 
 ## Camadas futuras do port
 
-### Leitor de disco Android
+### Leitor de disco Android — estratégia híbrida
 
-`iso9660_reader.cpp` abre um descritor SAF duplicado, valida o PVD ISO9660 e resolve arquivos por diretórios/extents com leitura aleatória usando `pread`. O componente está no alvo Android e tem teste host com imagem sintética. Ele ainda não está ligado ao `PS2IopHostAdapter`: a base Waffle atualmente converte `cdrom0:` em caminho do host e abre `FILE*`. O provider Android deverá conectar handles ISO às operações open/size/read/close do IOP, sem extrair a imagem inteira. Veja [DISC_VFS_ANDROID.md](DISC_VFS_ANDROID.md).
+`iso9660_reader.cpp` abre um descritor SAF duplicado, valida o PVD ISO9660 e resolve arquivos por diretórios/extents com leitura aleatória usando `pread`. O componente tem fixture sintética e teste host. Vamos seguir a arquitetura híbrida do Dragon Rage BT4: persistir a permissão SAF, copiar o ELF original (o loader Waffle ainda usa `std::ifstream`) e somente os pequenos arquivos de boot/IRX que forem comprovadamente necessários, mantendo os dados grandes na ISO aberta por `ParcelFileDescriptor`. A integração ainda exige um provider ISO no IOP que traduza caminhos `cdrom0:\\...` em operações open/size/read/close; `/proc/self/fd/N` sozinho é só o descritor do arquivo ISO, não uma pasta. Não extrair arquivos por suposição. Veja [DISC_VFS_ANDROID.md](DISC_VFS_ANDROID.md).
 
 ### Entrada física e estado virtual de DualShock 2
 
