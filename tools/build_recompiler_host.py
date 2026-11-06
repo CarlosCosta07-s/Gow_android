@@ -1263,9 +1263,9 @@ def main() -> int:
     )
     vu_core_text = vu_core.read_text(encoding="utf-8")
     vu_dispatch_matches = list(vu_dispatch_pattern.finditer(vu_core_text))
-    if len(vu_dispatch_matches) != 1:
+    if len(vu_dispatch_matches) != 2:
         raise RuntimeError(
-            "Expected one VU1 run dispatch following the optional A/B verifier; "
+            "Expected the VU1 run and resume dispatch sites; "
             f"found {len(vu_dispatch_matches)}."
         )
     dispatch_position = vu_dispatch_matches[0].start()
