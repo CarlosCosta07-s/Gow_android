@@ -235,8 +235,8 @@ def generate_native_aot(
         raise ValueError("Keep the user's AOT capture ZIP outside the public repository.")
     if is_within(work, root):
         raise ValueError("The AOT work directory must stay outside the public repository.")
-    if not is_within(output, build_root) or output == build_root:
-        raise ValueError("Generated AOT output must be a dedicated subdirectory of android/app/build.")
+    if not is_within(output, build_root):
+        raise ValueError("Generated AOT output must remain inside android/app/build.")
     reject_symlink_components(captures)
     reject_symlink_components(work)
     reject_symlink_components(output)
@@ -283,7 +283,10 @@ def generate_native_aot(
     iop_registry = iop_output / "iopn_registry.cpp"
     if not iop_registry.is_file():
         raise RuntimeError("IOP AOT generator did not produce iopn_registry.cpp.")
-    iop_sources = sorted(iop_output.glob("iopn_*.cpp"))
+    iop_sources = sorted(
+        path for path in iop_output.glob("iopn_*.cpp")
+        if path.name != "iopn_registry.cpp"
+    )
     if len(iop_sources) != len(iop_records):
         raise RuntimeError(
             f"IOP AOT output mismatch: {len(iop_records)} modules were validated, "
