@@ -75,6 +75,12 @@ extern "C" void gowAndroidDiscCloseFile(uint64_t handle) noexcept {
     g_openFiles.erase(handle);
 }
 
+extern "C" void gowAndroidDiscCloseImage() noexcept {
+    std::lock_guard<std::mutex> lock(g_discMutex);
+    g_openFiles.clear();
+    g_discReader.close();
+}
+
 extern "C" JNIEXPORT jboolean JNICALL
 Java_org_gowandroid_app_GowGameActivity_nativeSetDiscFileDescriptor(
     JNIEnv *, jclass, jint descriptor) {
