@@ -2,7 +2,7 @@
 
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
-> Estado atual: APK Debug ARM64 com ícone adaptativo e launcher temático compilado com sucesso pela CI no run `42128232489` (commit `e2094dc9`). O jogo ainda não está integrado ou jogável.
+> Estado atual: APK Debug ARM64 com launcher em estilo biblioteca e emblema vetorial original compilado com sucesso pela CI. O jogo ainda não está integrado ou jogável.
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml)
 
@@ -26,11 +26,11 @@ Não queremos um emulador genérico, uma ISO dentro do APK ou um caminho final b
 
 ## Identidade visual e launcher customizado
 
-O aplicativo utiliza um ícone adaptativo próprio com retrato de Kratos, Ômega vermelho e moldura bronze. A tela inicial adota uma estética de pedra escura, vermelho de guerra e bronze antigo, com menu horizontal e estado do disco sempre visível. A interface foi construída com componentes Android nativos; a arte não substitui os botões nem as funções reais.
+O launcher tem uma organização de biblioteca inspirada em launchers de PC, com barra lateral, página principal do jogo e ações rápidas. A direção de arte usa pedra escura, vermelho profundo, bronze envelhecido e um emblema geométrico vetorial original com referências à simbologia grega. Não são utilizados retratos de Kratos, capturas do jogo ou artes promocionais. A interface é construída com componentes Android nativos e mantém as funções reais de seleção de disco, diagnóstico e teste Vulkan.
 
 ## Launcher e seleção de disco
 
-A tela inicial permite selecionar uma imagem pelo Storage Access Framework, manter a permissão quando o provedor Android permite e validar o descritor primário ISO9660 no setor 16. Essa verificação **não identifica o serial nem confirma que o arquivo é God of War**; a leitura de `SYSTEM.CNF` e a identificação da revisão ainda serão implementadas. A implementação SAF/ISO9660 e a versão visual customizada foram compiladas nos runs CI `42125956300` e `42128232489`. A imagem não é copiada para o aplicativo nem enviada ao GitHub.
+A tela inicial permite selecionar uma imagem pelo Storage Access Framework, manter a permissão quando o provedor Android permite e validar o descritor primário ISO9660 no setor 16. Essa verificação **não identifica o serial nem confirma que o arquivo é God of War**; a leitura de `SYSTEM.CNF` e a identificação da revisão ainda serão implementadas. A imagem não é copiada para o aplicativo nem enviada ao GitHub.
 
 O botão de teste Vulkan abre a atividade nativa separadamente; ele não inicia o jogo.
 
