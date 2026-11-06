@@ -8,13 +8,13 @@
 
 ## Build AOT Android a partir do ELF privado
 
-O fluxo local está documentado em [docs/ANDROID_AOT_LOCAL_BUILD.md](docs/ANDROID_AOT_LOCAL_BUILD.md). Ele recebe o ELF NTSC-U `SCUS_973.99` da própria cópia do usuário, mantém o workspace fora do repositório, exporta o C++ para `android/app/build/gow-generated-game/` (Git-ignored) e compila o APK Debug ARM64. A CI testa o orquestrador e as regras de privacidade com fixtures, sem ler ou enviar conteúdo do jogo. Esse APK poderá validar a ligação da tabela AOT e a porta de carga ELF; ainda não libera gameplay.
+O fluxo local está documentado em [docs/ANDROID_AOT_LOCAL_BUILD.md](docs/ANDROID_AOT_LOCAL_BUILD.md). Ele recebe o ELF NTSC-U `SCUS_973.99` da própria cópia do usuário, mantém o workspace fora do repositório e exporta o C++ para `android/app/build/gow-generated-game/` (Git-ignored). Antes de chamar Gradle, o orquestrador verifica que a tabela gerada não está vazia, que cada endereço ocupa o slot correto e que o endereço de entrada do ELF está registrado. A CI testa esse gate com tabelas sintéticas, sem ler ou enviar conteúdo do jogo. A compilação local com o ELF do usuário ainda não foi executada.
 
-## Pipeline Vulkan GS experimental (Debug)
+## Pipeline gráfico GS experimental (Debug)
 
-O APK Debug ativa `GOW_ANDROID_ENABLE_GS_VULKAN=ON` e, quando a `ANativeWindow` está pronta, substitui o backend GS nulo pelo adaptador experimental. Ele encaminha lotes do frontend Waffle para pipelines Vulkan point/line/triangle e os desenha como cor sólida na surface Android. A fila é protegida entre a thread GS e a thread da surface e é limpa na perda/recriação da janela.
+O APK Debug habilita o caminho de referência **CPU GS→VRAM→CRTC→Vulkan**. Depois da inicialização headless do núcleo, o adaptador Android recebe os lotes do frontend Waffle, usa `GSTextureStore` e o rasterizador CPU para atualizar a VRAM GS de 4 MiB, compõe os circuitos de display e entrega um `PresentationFrame` RGBA ao presenter Vulkan da surface Android. O botão Debug **Capturar cena** e a captura inicial salvam frames PPM localmente.
 
-Esse estágio é **somente uma prova da ligação da geometria e do pipeline**. Não representa a memória de framebuffer GS correta e ainda ignora texturas, CLUT no shader, depth, alpha test/DATE, blending, fog, FBP/PSM render targets e composição do sinal de vídeo. A compilação não prova que God of War iniciou ou que uma cena foi apresentada. Consulte [docs/GS_VULKAN_ANDROID.md](docs/GS_VULKAN_ANDROID.md).
+A cobertura sintética inclui primitivas básicas, CT32 e formatos de textura indexados testados, CLUT CSM1/CSM2, clamp e filtragem inicial, alguns estados de depth/alpha/blending e composição PMODE. **Vulkan é o caminho de apresentação da imagem; não é ainda um rasterizador GS GPU completo.** Fog/FGE, antialiasing, dithering, parte da interpolação/perspective, todos os estados GS, interlace/overscan e validação em GPU física permanecem pendentes. Os testes usam fixtures, não cenas do jogo. Consulte [docs/GS_VULKAN_ANDROID.md](docs/GS_VULKAN_ANDROID.md) e a [matriz de cenas reais](docs/GS_SCENE_VALIDATION.md).
 
 ## Objetivo
 
@@ -52,7 +52,7 @@ O launcher verifica os hashes dos arquivos extraídos em background ao revalidar
 
 ## Estado do código nativo
 
-A atividade nativa usa AndroidX GameActivity. O alvo `android-game` liga o runtime Waffle/KIexter. O FORGE passa o descritor SAF ao JNI para instalar os arquivos em armazenamento privado; em seguida, a ponte JNI configura o `IoPaths` que o `loadELF()` usará e valida a implementação real de `DiscSource::openExtracted()`. A CI `42225710064` aprovou os testes host e o APK Debug ARM64. O runner Android ainda não chama `PS2Runtime::initialize()`, `loadELF()` ou `run()`; a base ainda usa a inicialização host Raylib para gráficos/áudio. O renderer Vulkan de clear/present permanece apenas diagnóstico opcional (`GOW_ANDROID_ENABLE_VULKAN_SMOKE=OFF` por padrão) e não é o Graphics Synthesizer do PS2. O backend GS atual da base é OpenGL e a apresentação desktop depende de Raylib; o backend GS/Vulkan e presenter Android ainda não existem. Não há execução do código de God of War nem APK jogável.
+A atividade nativa usa AndroidX GameActivity. O FORGE passa a instalação privada e o caminho BOOT2 pelo JNI; `android_main()` inicializa a memória e o núcleo EE/IOP/VU por `initializeCoreHeadless()`, sem janela ou áudio Raylib. A ponte de carga só chama `loadELF()` quando existe uma tabela AOT não vazia e, depois, verifica se o endereço de entrada possui função registrada. O build público continua usando a tabela placeholder de zero slots, então essa porta recusa a carga do ELF nesse APK. `PS2Runtime::run()` continua bloqueado até que AOT, boot PS2, GS/presenter e áudio Android estejam integrados. O caminho CPU GS→VRAM→CRTC e o presenter Vulkan estão presentes no Debug, mas ainda são experimentais e não foram ligados a uma execução real do jogo. Não há gameplay nem cena real validada.
 
 ## Base do port e referências de engenharia
 
