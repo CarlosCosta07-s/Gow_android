@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "tools/build_recompiler_host.py"
+      - "tools/build_android_game.py"
+      - "tools/test_android_game_build.py"
       - "tools/ps2_vfs_cdroot_smoke.cpp"
       - "tools/run_ps2_vfs_cdroot_smoke.py"
       - "tools/test_elf_validation.py"
@@ -52,6 +54,12 @@ jobs:
 
       - name: Check CLI help
         run: python tools/build_recompiler_host.py --help
+
+      - name: Test private Android AOT build orchestrator
+        run: |
+          python -m py_compile tools/build_android_game.py tools/test_android_game_build.py
+          python tools/test_android_game_build.py
+          python tools/build_android_game.py --help
 
       - name: Check VU1 generator syntax and strict coverage gate
         run: |
