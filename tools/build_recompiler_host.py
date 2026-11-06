@@ -7,6 +7,7 @@ host-side static recompiler. Keep the ELF and generated C++ outside this repo.
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import json
 import os
 import shutil
@@ -65,6 +66,124 @@ def toml_path(path: Path) -> str:
     return value.replace('"', '\\"')
 
 
+
+@dataclass(frozen=True)
+class Ps2ElfInfo:
+    file_size: int
+    entry_point: int
+    program_headers: int
+    loadable_segments: int
+
+
+def validate_ps2_elf(path: Path) -> Ps2ElfInfo:
+    """Validate the ELF32 little-endian MIPS executable shape expected by the PS2 runtime."""
+    elf32_header_size = 52
+    elf32_program_header_size = 32
+    max_program_headers = 4096
+    et_exec = 2
+    em_mips = 8
+    pt_load = 1
+    address_space_end = 1 << 32
+
+    file_size = path.stat().st_size
+    if file_size < elf32_header_size:
+        raise ValueError("ELF is shorter than an ELF32 header.")
+
+    with path.open("rb") as stream:
+        header = stream.read(elf32_header_size)
+        if len(header) != elf32_header_size:
+            raise ValueError("Could not read the complete ELF32 header.")
+
+        if header[0:4] != b"\\x7fELF":
+            raise ValueError("Invalid ELF magic.")
+        if header[4] != 1:
+            raise ValueError("Unsupported ELF class; expected 32-bit ELF.")
+        if header[5] != 1:
+            raise ValueError("Unsupported ELF byte order; expected little-endian.")
+        if header[6] != 1:
+            raise ValueError("Unsupported ELF identification version.")
+
+        (
+            elf_type,
+            machine,
+            version,
+            entry_point,
+            program_header_offset,
+            _section_header_offset,
+            _flags,
+            header_size,
+            program_header_entry_size,
+            program_header_count,
+            _section_header_entry_size,
+            _section_header_count,
+            _section_name_index,
+        ) = struct.unpack_from("<HHIIIIIHHHHHH", header, 16)
+
+        if elf_type != et_exec:
+            raise ValueError(f"ELF type {elf_type} is not ET_EXEC.")
+        if machine != em_mips:
+            raise ValueError(f"ELF machine {machine} is not EM_MIPS.")
+        if version != 1:
+            raise ValueError("Unsupported ELF header version.")
+        if header_size < elf32_header_size or header_size > file_size:
+            raise ValueError("ELF header size is invalid.")
+        if program_header_count == 0 or program_header_count > max_program_headers:
+            raise ValueError("ELF program-header count is empty or exceeds the safety limit.")
+        if program_header_entry_size != elf32_program_header_size:
+            raise ValueError("Unsupported ELF32 program-header entry size.")
+
+        table_size = program_header_count * program_header_entry_size
+        table_end = program_header_offset + table_size
+        if program_header_offset < elf32_header_size or table_end > file_size:
+            raise ValueError("ELF program-header table is outside the file.")
+
+        loadable_segments = 0
+        entry_is_loadable = False
+        for index in range(program_header_count):
+            offset = program_header_offset + index * program_header_entry_size
+            stream.seek(offset)
+            raw = stream.read(elf32_program_header_size)
+            if len(raw) != elf32_program_header_size:
+                raise ValueError(f"ELF program header {index} is truncated.")
+
+            (
+                segment_type,
+                file_offset,
+                virtual_address,
+                _physical_address,
+                file_bytes,
+                memory_bytes,
+                _segment_flags,
+                _alignment,
+            ) = struct.unpack("<IIIIIIII", raw)
+
+            if segment_type != pt_load or memory_bytes == 0:
+                continue
+            if file_bytes > memory_bytes:
+                raise ValueError(f"ELF PT_LOAD segment {index} has p_filesz greater than p_memsz.")
+            if file_offset + file_bytes > file_size:
+                raise ValueError(f"ELF PT_LOAD segment {index} exceeds the file bounds.")
+            memory_end = virtual_address + memory_bytes
+            if memory_end > address_space_end:
+                raise ValueError(f"ELF PT_LOAD segment {index} overflows the 32-bit address space.")
+
+            loadable_segments += 1
+            if virtual_address <= entry_point < memory_end:
+                entry_is_loadable = True
+
+    if loadable_segments == 0:
+        raise ValueError("ELF contains no non-empty PT_LOAD segment.")
+    if not entry_is_loadable:
+        raise ValueError("ELF entry point is not covered by a PT_LOAD segment.")
+
+    return Ps2ElfInfo(
+        file_size=file_size,
+        entry_point=entry_point,
+        program_headers=program_header_count,
+        loadable_segments=loadable_segments,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Compile PS2Recomp on the host and generate private GoW C++."
@@ -115,6 +234,17 @@ def main() -> int:
         elf = Path(args.elf).expanduser().resolve()
         if not elf.is_file():
             parser.error(f"ELF file not found: {elf}")
+        try:
+            elf_info = validate_ps2_elf(elf)
+        except (OSError, ValueError) as error:
+            parser.error(f"Invalid PS2 ELF '{elf}': {error}")
+        print(
+            "Validated PS2 ELF32/MIPS: "
+            f"entry=0x{elf_info.entry_point:08X}, "
+            f"PT_LOAD={elf_info.loadable_segments}, "
+            f"program_headers={elf_info.program_headers}, "
+            f"bytes={elf_info.file_size}"
+        )
 
     work = Path(args.work_dir).expanduser().resolve()
     try:
