@@ -27,6 +27,7 @@ add_library(android-game SHARED
     cdroot_vfs.cpp
     private_boot_path.cpp
     android_frame_scaler.cpp
+    android_gs_geometry.cpp
     ps2_elf_validator.cpp
     android_disc_bridge.cpp
     vu1_neon_compat_smoke.cpp
