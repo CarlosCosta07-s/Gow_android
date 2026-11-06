@@ -1272,7 +1272,7 @@ def main() -> int:
         "#if defined(PS2X_VU1_NATIVE_ONLY)\n"
         "    if (m_unit == Unit::VU1 && (!m_native || !m_native->enabled || !vuData || codeSize != PS2_VU1_CODE_SIZE))\n"
         "    {\n"
-        "        std::fprintf(stderr, \"[VU1:native-required] invalid VU1 native dispatch state; execution stopped.\n\");\n"
+        "        std::fprintf(stderr, \"[VU1:native-required] invalid VU1 native dispatch state; execution stopped.\");\n",
         "        m_stopRequested = true;\n"
         "        return;\n"
         "    }\n"
@@ -1285,7 +1285,7 @@ def main() -> int:
         "            runExact(context);",
         "        if (!runNativeLoop(context))\n"
         "        {\n"
-        "            std::fprintf(stderr, \"[VU1:native-required] native microprogram unavailable; stopping instead of interpreting.\n\");\n"
+        "            std::fprintf(stderr, \"[VU1:native-required] native microprogram unavailable; stopping instead of interpreting.\");\n",
         "            m_stopRequested = true;\n"
         "            return true;\n"
         "        }",
