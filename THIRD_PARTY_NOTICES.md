@@ -1,12 +1,12 @@
 # Créditos e avisos de terceiros
 
-Este projeto reconhece os autores dos projetos, bibliotecas e bases de runtime utilizadas. Referências técnicas não significam que os componentes estejam prontos ou funcionais no nosso aplicativo.
+Este documento separa dependências efetivamente usadas de projetos consultados somente como referência. **Nenhum código de outro port de jogo, recompilador ou emulador foi importado para o runtime do FORGE.**
 
 ## Estado de integração
 
 O shell Android utiliza AndroidX AppCompat, AndroidX Core e AndroidX GameActivity como dependências Maven; seus códigos não foram copiados manualmente para este repositório. Manter os avisos das versões efetivamente empacotadas.
 
-A base Android God of War: Recomp está fixada como submódulo Git em `third_party/gow-recomp-android`, no commit `ea5f61bf61f3faf972a816cf9ba2309b0f9876ef` da branch `android`. Neste estágio o ponteiro da fonte foi adicionado, mas o runtime ainda não foi ligado ao CMake/Gradle do FORGE e não compõe o APK. Para integrar arquivos, preservar avisos, origem, commits, licenças e modificações.
+A tentativa inicial de fixar God of War: Recomp como submódulo foi revertida por decisão do projeto. O repositório não contém submódulo, cópia ou integração de código dos projetos de referência. Black para Android, Dragon Rage/Budokai Tenkaichi 3 e os projetos de recompilação de God of War são estudados apenas em nível de arquitetura e documentação.
 
 ## Dependências integradas
 
@@ -17,11 +17,14 @@ A base Android God of War: Recomp está fixada como submódulo Git em `third_par
 | [AndroidX GameActivity](https://developer.android.com/games/agdk/game-activity) | Activity de jogo e ponte de eventos/lifecycle para C++. | `androidx.games:games-activity:4.4.2`; Apache-2.0. |
 | [Android NDK](https://developer.android.com/ndk) | Compilação nativa ARM64 e APIs Android/Vulkan. | NDK `30.0.16248370`, toolchain Android. |
 
-## Código versionado como submódulo
+## Referências consultadas — sem incorporação
 
-| Componente | Uso previsto | Revisão / licença |
+| Projeto | O que foi estudado | Código incorporado |
 |---|---|---|
-| [God of War: Recomp — CodeAbhi826](https://github.com/CodeAbhi826/God-Of-War-Recomp) | Base candidata do runtime Android, PS2Recomp, EE/IOP, hooks do jogo e GS/Vulkan. | Submódulo `third_party/gow-recomp-android`; commit `ea5f61bf61f3faf972a816cf9ba2309b0f9876ef`; GPL-3.0. Ainda não vinculado ao build do app. |
+| [Black para Android](https://github.com/RanggaCasper/Black-Android) | Recompilação estática, Vulkan, SDL3, controles e arquitetura mobile. | Nenhum. |
+| [Dragon Rage / Budokai Tenkaichi 3](https://github.com/dfdx047/Tenkaichi3DecompAndroid) | Separação app/engine, instalação de ISO, organização de dados e testes em GPUs móveis. | Nenhum. |
+| [God of War: Recomp](https://github.com/CodeAbhi826/God-Of-War-Recomp) | Documentação do fluxo Android, boot e subsistemas PS2. | Nenhum; submódulo removido. |
+| [KIexster / Waffle565 / PS2Recomp / PCSX2](https://github.com/KIexster/god-of-war-recomp) | Documentação e comportamento de referência de God of War/PS2. | Nenhum. |
 
 ## Referências de engenharia
 
