@@ -100,6 +100,11 @@ def main() -> int:
         default=None,
         help="ignored android/app/build directory where the prepared Waffle source tree is exported",
     )
+    parser.add_argument(
+        "--export-game-cpp-dir",
+        default=None,
+        help="copy generated game .cpp/.h files to an ignored android/app/build directory for NDK compilation",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -930,16 +935,65 @@ def main() -> int:
     config_path.write_text(config, encoding="ascii")
     run([str(executable), str(config_path)])
 
-    generated_files = list(generated_dir.glob("*.cpp"))
-    if not generated_files:
+    # The template uses individual-function output, so generated .cpp files can
+    # be nested below generated_dir rather than stored only in its root.
+    generated_files = sorted(generated_dir.rglob("*.cpp"))
+    function_sources = [path for path in generated_files if path.name != "register_functions.cpp"]
+    required_outputs = (
+        generated_dir / "register_functions.cpp",
+        generated_dir / "ps2_recompiled_functions.h",
+        generated_dir / "ps2_recompiled_stubs.h",
+    )
+    missing_outputs = [path.name for path in required_outputs if not path.is_file()]
+    if not function_sources or missing_outputs:
         raise RuntimeError(
-            "PS2Recomp did not produce C++ files. Check the ELF, function map and config."
+            "PS2Recomp output is incomplete. "
+            f"Function C++ files: {len(function_sources)}; missing: {', '.join(missing_outputs) or 'none'}."
         )
 
     print("")
-    print(f"Generated C++ files: {len(generated_files)}")
+    print(f"Generated game C++ files: {len(function_sources)}")
+    print(f"Generated registration file: {generated_dir / 'register_functions.cpp'}")
     print(f"Private output: {generated_dir}")
-    print("Not done by this script: Android ARM64 compilation, runtime integration, VU1/IOP AOT, or gameplay testing.")
+
+    if args.export_game_cpp_dir:
+        export_dir = Path(args.export_game_cpp_dir).expanduser().resolve()
+        build_root = (repo_root / "android/app/build").resolve()
+        try:
+            export_dir.relative_to(build_root)
+        except ValueError:
+            parser.error("--export-game-cpp-dir must be inside android/app/build (ignored by Git).")
+        if export_dir == build_root:
+            parser.error("--export-game-cpp-dir must name a dedicated subdirectory of android/app/build.")
+        if export_dir.exists():
+            shutil.rmtree(export_dir)
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        exported_cpp = 0
+        exported_headers = 0
+        for path in generated_dir.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in {".cpp", ".h", ".hpp", ".inc", ".ipp"}:
+                continue
+            destination = export_dir / path.relative_to(generated_dir)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, destination)
+            if path.suffix.lower() == ".cpp":
+                exported_cpp += 1
+            else:
+                exported_headers += 1
+
+        for required in ("register_functions.cpp", "ps2_recompiled_functions.h", "ps2_recompiled_stubs.h"):
+            if not (export_dir / required).is_file():
+                raise RuntimeError(f"Exported game-code staging is missing {required}.")
+        if exported_cpp != len(generated_files):
+            raise RuntimeError(
+                f"Export mismatch: expected {len(generated_files)} C++ files, copied {exported_cpp}."
+            )
+        print(f"Android-private staging: {export_dir}")
+        print(f"Exported generated files: {exported_cpp} C++ and {exported_headers} headers/includes")
+        print("The Android CMake target will compile these sources and omit the empty shell table.")
+
+    print("Not done by this script: VU1/IOP AOT, Android runtime execution, boot, or gameplay testing.")
     return 0
 
 
