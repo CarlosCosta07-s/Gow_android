@@ -852,17 +852,23 @@ extern "C" void android_main(android_app* app) {
         android_poll_source* source = nullptr;
         const int timeout = gRenderer.isReady() ? 0 : -1;
 
-        while (ALooper_pollOnce(
-                   timeout,
-                   nullptr,
-                   &events,
-                   reinterpret_cast<void**>(&source)) >= 0) {
+        int pollTimeout = timeout;
+        int pollResult = 0;
+        while ((pollResult = ALooper_pollOnce(
+                    pollTimeout,
+                    nullptr,
+                    &events,
+                    reinterpret_cast<void**>(&source))) >= 0) {
             if (source != nullptr) {
                 source->process(app, source);
             }
             if (app->destroyRequested != 0) {
                 break;
             }
+            // Block only for the first event when no surface exists. Once an
+            // event is processed, drain the queue without blocking so input
+            // buffers and lifecycle changes are serviced every outer frame.
+            pollTimeout = 0;
         }
 
         if (app->destroyRequested == 0) {
