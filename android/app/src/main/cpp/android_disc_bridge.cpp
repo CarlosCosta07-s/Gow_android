@@ -143,6 +143,27 @@ extern "C" uint64_t gowAndroidCdRootOpenFile(
     return file.handle;
 }
 
+extern "C" bool gowAndroidCdRootStat(
+    const char *path, bool *isDirectory, uint64_t *fileSize) noexcept {
+    if (isDirectory != nullptr) *isDirectory = false;
+    if (fileSize != nullptr) *fileSize = 0u;
+    if (path == nullptr || isDirectory == nullptr || fileSize == nullptr) return false;
+
+    gow::disc::CdRootFile file{};
+    if (g_cdRootVfs.openFile(path, file, nullptr)) {
+        *isDirectory = false;
+        *fileSize = file.size;
+        g_cdRootVfs.closeFile(file.handle);
+        return true;
+    }
+
+    std::vector<gow::disc::CdRootEntry> entries;
+    if (!g_cdRootVfs.listDirectory(path, entries, nullptr)) return false;
+    *isDirectory = true;
+    *fileSize = 0u;
+    return true;
+}
+
 extern "C" bool gowAndroidCdRootReadFile(
     uint64_t handle, uint64_t offset, void *destination,
     size_t requested, size_t *bytesRead) noexcept {
