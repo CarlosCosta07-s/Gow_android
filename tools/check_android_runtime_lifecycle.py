@@ -133,8 +133,8 @@ def main() -> int:
     runtime_bridge_path = project_root / "android/app/src/main/cpp/runtime_link_bridge.cpp"
     require(runtime_bridge_path.is_file(), "Android runtime link bridge is missing.")
     runtime_bridge = runtime_bridge_path.read_text(encoding="utf-8")
-    load_start = runtime_bridge.find("extern \\"C\\" bool gowRuntimeLoadElfAndCheckAot(")
-    load_end = runtime_bridge.find("extern \\"C\\" bool gowRuntimeValidateIopCdvd(", load_start)
+    load_start = runtime_bridge.find('extern "C" bool gowRuntimeLoadElfAndCheckAot(')
+    load_end = runtime_bridge.find('extern "C" bool gowRuntimeValidateIopCdvd(', load_start)
     require(
         load_start >= 0 and load_end > load_start,
         "Guarded private ELF/AOT loader bridge is missing.",
