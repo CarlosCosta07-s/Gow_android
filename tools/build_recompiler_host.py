@@ -90,11 +90,21 @@ def main() -> int:
         action="store_true",
         help="cross-compile only ps2_runtime and ps2_iop for Android arm64-v8a with the pinned NDK",
     )
+    parser.add_argument(
+        "--prepare-android-runtime",
+        action="store_true",
+        help="prepare the pinned, patched Waffle source tree for the Gradle/CMake Android build",
+    )
+    parser.add_argument(
+        "--export-runtime-dir",
+        default=None,
+        help="ignored android/app/build directory where the prepared Waffle source tree is exported",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
     elf: Path | None = None
-    if not (args.build_only or args.android_runtime_only):
+    if not (args.build_only or args.android_runtime_only or args.prepare_android_runtime):
         if not args.elf:
             parser.error("Provide --elf or set GOW_ELF to your own extracted SCUS_973.99 file.")
         elf = Path(args.elf).expanduser().resolve()
@@ -117,7 +127,7 @@ def main() -> int:
 
     funcmap = repo_root / "recompiler/config/funcmap.csv"
     template_path = repo_root / "recompiler/config/recomp.template.toml"
-    if not (args.build_only or args.android_runtime_only) and (not funcmap.is_file() or not template_path.is_file()):
+    if not (args.build_only or args.android_runtime_only or args.prepare_android_runtime) and (not funcmap.is_file() or not template_path.is_file()):
         parser.error("The imported function map or recompilation template is missing.")
 
     sources = work / "sources"
@@ -129,7 +139,9 @@ def main() -> int:
 
     work.mkdir(parents=True, exist_ok=True)
     print(f"Private workspace: {work}")
-    if args.android_runtime_only:
+    if args.prepare_android_runtime:
+        print("Mode: prepare Android runtime source for Gradle/CMake; no game files are read or generated.")
+    elif args.android_runtime_only:
         print("Mode: Android runtime cross-build only; no game files are read or generated.")
     elif args.build_only:
         print("Mode: host-tool/runtime build only; no game files are read or generated.")
@@ -527,6 +539,35 @@ def main() -> int:
             f"CMake 3.21 or newer is required; found {version_line}."
         )
     generator = shutil.which("ninja")
+
+    if args.prepare_android_runtime:
+        default_export = repo_root / "android/app/build/gow-runtime-source"
+        export_dir = (
+            Path(args.export_runtime_dir).expanduser().resolve()
+            if args.export_runtime_dir
+            else default_export
+        )
+        build_root = (repo_root / "android/app/build").resolve()
+        try:
+            export_dir.relative_to(build_root)
+        except ValueError:
+            parser.error("--export-runtime-dir must be inside android/app/build (ignored by Git).")
+        if export_dir == build_root:
+            parser.error("--export-runtime-dir must name a dedicated subdirectory of android/app/build.")
+        if export_dir.exists():
+            shutil.rmtree(export_dir)
+        export_dir.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(
+            recompiler_source,
+            export_dir,
+            ignore=shutil.ignore_patterns(".git", ".gitmodules"),
+        )
+        if not (export_dir / "CMakeLists.txt").is_file():
+            raise RuntimeError("Exported Waffle source tree is missing its root CMakeLists.txt.")
+        print(f"Prepared Waffle source exported to ignored build directory: {export_dir}")
+        print(f"Source commits: PS2Recomp={PS2RECOMP_COMMIT}; KIexster={KIEXTER_COMMIT}")
+        print("Verified: no ELF, ISO, IRX, microcode, or generated game C++ was copied.")
+        return 0
 
     if args.android_runtime_only:
         sdk_root = (
