@@ -77,7 +77,6 @@ public final class MainActivity extends AppCompatActivity {
         Window window = getWindow();
         window.setStatusBarColor(COLOR_BACKGROUND);
         window.setNavigationBarColor(COLOR_BACKGROUND);
-        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         window.getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_FULLSCREEN
                         | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
@@ -149,11 +148,6 @@ public final class MainActivity extends AppCompatActivity {
                 0, dp(47), 1.28f));
         content.addView(actionRow, topMargin(8));
 
-        Button vulkanButton = actionButton("◇   TESTAR APRESENTAÇÃO VULKAN", false);
-        vulkanButton.setOnClickListener(
-                view -> startActivity(new Intent(this, GowGameActivity.class)));
-        content.addView(vulkanButton, topMargin(8));
-
         content.addView(sectionLabel("STATUS"), topMargin(17));
 
         LinearLayout statusRow = new LinearLayout(this);
@@ -169,7 +163,7 @@ public final class MainActivity extends AppCompatActivity {
         content.addView(statusRow, topMargin(8));
 
         TextView footer = text(
-                "GOW_ANDROID  •  ANDROID ARM64  •  VULKAN",
+                "FORGE  •  ANDROID ARM64  •  PORT NATIVO",
                 8, COLOR_MUTED,
                 Typeface.create("sans-serif-medium", Typeface.NORMAL));
         footer.setGravity(Gravity.CENTER);
@@ -410,7 +404,7 @@ public final class MainActivity extends AppCompatActivity {
         card.addView(value, valueParams);
 
         TextView detail = text(
-                "Interface e teste Vulkan disponíveis. Runtime do jogo pendente.",
+                "FORGE já abre em aparelho Android. Runtime nativo do jogo em integração.",
                 9, COLOR_MUTED,
                 Typeface.create("sans-serif", Typeface.NORMAL));
         detail.setLineSpacing(dp(2), 1f);
@@ -540,7 +534,10 @@ public final class MainActivity extends AppCompatActivity {
                 .setTitle("Configurações")
                 .setMessage(
                         "PLATAFORMA\nAndroid / ARM64\n\n"
-                                + "GRÁFICOS\nVulkan (teste de apresentação)\n\n"
+                                + "GRÁFICOS
+Vulkan (renderizador do jogo em desenvolvimento)
+
+"
                                 + "INTERFACE\nFORGE\n\n"
                                 + "VERSÃO\n0.1.0-dev\n\n"
                                 + "As opções de resolução, controles e áudio serão adicionadas "
@@ -555,8 +552,11 @@ public final class MainActivity extends AppCompatActivity {
                 .setMessage(
                         "FORGE é a interface de biblioteca do projeto Gow_android, que busca "
                                 + "construir um port nativo de God of War (2005) para Android.\n\n"
-                                + "A interface, a seleção de disco e o teste Vulkan são etapas "
-                                + "iniciais. O jogo ainda não é executável nesta versão.\n\n"
+                                + "A interface e a seleção de disco são etapas iniciais. O runtime "
+                                + "nativo e o renderizador do jogo ainda estão em desenvolvimento. "
+                                + "A validação gráfica será feita durante a execução do jogo.
+
+"
                                 + "Referências técnicas e créditos: CodeAbhi826, KIexster, "
                                 + "Waffle565, ran-j / PS2Recomp e PCSX2. Consulte "
                                 + "THIRD_PARTY_NOTICES.md no repositório.")
