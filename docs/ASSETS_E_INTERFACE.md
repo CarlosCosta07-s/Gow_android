@@ -1,25 +1,25 @@
-# Identidade visual do launcher
+# FORGE — interface e identidade visual
 
-## Direção de arte
+## Conceito
 
-A interface combina uma organização de biblioteca inspirada em launchers de PC, como a Steam, com uma ambientação original de fantasia grega e guerra antiga: pedra escura, bronze envelhecido, vermelho profundo, tipografia serifada e um emblema geométrico inspirado em símbolos gregos.
+**FORGE** é o nome da interface de biblioteca do projeto Gow_android. Sua organização é inspirada em launchers modernos de jogos, com navegação lateral, área principal dedicada ao título, ações rápidas e cartões de estado.
 
-A identidade visual não utiliza retratos de Kratos, capturas de tela, artes promocionais ou outros materiais visuais extraídos de God of War. O emblema do aplicativo é um vetor original do próprio projeto.
+A direção de arte é minimalista e moderna: superfícies grafite, tipografia sem serifa, espaçamento amplo e vermelho profundo como cor de destaque. A inspiração em God of War I aparece de forma sutil na paleta e no símbolo Ômega, sem reproduzir personagens, capturas, logotipos completos ou artes do jogo.
 
-## Ativos do aplicativo
+## Ícone
 
-- `drawable/ic_launcher_emblem.xml`: emblema vetorial original em vermelho e bronze, usado no ícone adaptativo e como elemento decorativo no launcher.
-- `mipmap-anydpi-v26/ic_launcher.xml`: define o ícone adaptativo Android.
-- `values/colors.xml`: fundo do ícone adaptativo.
-- A interface é construída com views Android, gradientes, bordas e botões nativos; não depende de uma imagem de fundo para funcionar.
+O ícone adaptativo utiliza um **Ômega branco sobre fundo vermelho sólido**. O símbolo é construído como vetor Android original do projeto em `drawable/ic_launcher_emblem.xml`; o fundo adaptativo é definido em `values/colors.xml`.
+
+Não são usados retratos de Kratos, screenshots ou materiais extraídos do jogo.
 
 ## Organização da interface
 
-- Barra lateral com a biblioteca selecionada, configurações, sobre, saída e versão.
-- Página principal com título do jogo, versão, identificação da plataforma e ações rápidas.
-- Ação principal para jogar, ação secundária para selecionar a imagem do disco e teste Vulkan separado.
-- Cartões para o estado da imagem selecionada e o estágio real do port.
-- Layout horizontal com rolagem vertical do conteúdo para acomodar diferentes dimensões de tela.
+- Barra lateral enxuta com marca FORGE, biblioteca, configurações, sobre, versão e saída.
+- Cabeçalho principal com biblioteca e plataforma.
+- Cartão do jogo com título, plataforma original e estado de desenvolvimento.
+- Ações para jogar, selecionar imagem do disco e testar apresentação Vulkan.
+- Cartões para estado da imagem e do runtime.
+- Layout horizontal e conteúdo principal rolável para acomodar telas menores.
 
 ## Comportamento
 
