@@ -48,7 +48,7 @@ A atividade nativa usa AndroidX GameActivity. O código Vulkan atual é apenas u
 4. [PS2Recomp — ran-j](https://github.com/ran-j/PS2Recomp): base de recompilação estática usada nas referências.
 5. [PCSX2](https://github.com/PCSX2/pcsx2): comparação comportamental do hardware PS2, não runtime final.
 
-Esses projetos são referências, não resultados nossos. **Nenhum código de runtime desses ports foi copiado neste estado.** Toda futura integração deverá registrar commit, autoria, licença e modificações em [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+A base CodeAbhi está fixada como submódulo em `third_party/gow-recomp-android`, commit `ea5f61bf61f3faf972a816cf9ba2309b0f9876ef`, sob GPL-3.0. Ela ainda não está ligada ao build do FORGE. KIexster, Waffle565, PS2Recomp e PCSX2 continuam como referências técnicas; qualquer código integrado deverá preservar autoria, licença e modificações em [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Roadmap
 
