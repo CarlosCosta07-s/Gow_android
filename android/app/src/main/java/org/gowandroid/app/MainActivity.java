@@ -78,6 +78,7 @@ public final class MainActivity extends AppCompatActivity {
 
     private static native boolean nativeSetCdRootDirectory(String privateCdRoot);
     private static native String nativeValidateCdRootElf(String relativePath);
+    private static native String nativePrepareRuntimeIoPaths(String bootRelativePath);
     private static native String nativeValidateDiscSource(String bootRelativePath);
 
     static {
@@ -765,21 +766,26 @@ public final class MainActivity extends AppCompatActivity {
             boolean cdRootReady = metadataReady
                     && nativeSetCdRootDirectory(cdRoot.getAbsolutePath());
             String installedBootPath = bootPath;
-            String elfValidation = cdRootReady
+            String runtimePathValidation = cdRootReady
+                    ? nativePrepareRuntimeIoPaths(installedBootPath)
+                    : "O provider cdRoot não conseguiu abrir a pasta privada.";
+            boolean runtimePathValid = runtimePathValidation != null
+                    && runtimePathValidation.startsWith("OK:");
+            String elfValidation = runtimePathValid
                     ? nativeValidateCdRootElf(installedBootPath)
-                    : (metadataReady
-                        ? "O provider cdRoot não conseguiu abrir a pasta privada."
-                        : "A instalação existente não possui o par completo .disc_layout/.disc_meta.");
+                    : "A configuração de IoPaths do PS2Runtime precisa passar antes de validar o ELF.";
             boolean elfValid = elfValidation != null && elfValidation.startsWith("OK:");
             String discValidation = elfValid
                     ? nativeValidateDiscSource(installedBootPath)
                     : "A validação ELF precisa passar antes de abrir o DiscSource.";
             boolean discValid = discValidation != null && discValidation.startsWith("OK:");
-            boolean installationValid = elfValid && discValid;
+            boolean installationValid = runtimePathValid && elfValid && discValid;
             String detail = installationValid
-                    ? "Executável local validado: " + elfValidation.substring(4).trim()
-                            + ". Fonte CD/DVD validada: " + discValidation.substring(4).trim() + "."
-                    : "ELF: " + elfValidation + "\nDiscSource: " + discValidation;
+                    ? "IoPaths do runtime: " + runtimePathValidation.substring(4).trim()
+                            + ". Executável: " + elfValidation.substring(4).trim()
+                            + ". Fonte CD/DVD: " + discValidation.substring(4).trim() + "."
+                    : "IoPaths: " + runtimePathValidation + "\nELF: " + elfValidation
+                            + "\nDiscSource: " + discValidation;
             String runtimeStatus = installationValid
                     ? "A leitura de disco por LSN foi verificada, mas o runtime ainda não executa o boot."
                     : "A instalação precisa ser reparada ou reinstalada antes de ser utilizada.";
@@ -869,19 +875,27 @@ public final class MainActivity extends AppCompatActivity {
                         new File(finalInstallation, "disc").getAbsolutePath())) {
                     failure = "Os arquivos foram publicados, mas o provider cdRoot não conseguiu abrir a pasta privada.";
                 } else {
-                    String elfValidation = nativeValidateCdRootElf(bootPath);
-                    if (elfValidation == null || !elfValidation.startsWith("OK:")) {
-                        failure = "O arquivo de BOOT2 foi copiado, mas falhou na validação ELF local: "
-                                + (elfValidation == null ? "resposta nativa vazia." : elfValidation);
+                    String runtimePathValidation = nativePrepareRuntimeIoPaths(bootPath);
+                    if (runtimePathValidation == null || !runtimePathValidation.startsWith("OK:")) {
+                        failure = "A instalação foi publicada, mas PS2Runtime não aceitou o caminho físico "
+                                + "do cdRoot: " + (runtimePathValidation == null
+                                    ? "resposta nativa vazia." : runtimePathValidation);
                     } else {
-                        String discValidation = nativeValidateDiscSource(bootPath);
-                        if (discValidation == null || !discValidation.startsWith("OK:")) {
-                            failure = "Os arquivos foram extraídos e o ELF é válido, mas a fonte CD/DVD "
-                                    + "do runtime não conseguiu reconstruir o disco: "
-                                    + (discValidation == null ? "resposta nativa vazia." : discValidation);
+                        String elfValidation = nativeValidateCdRootElf(bootPath);
+                        if (elfValidation == null || !elfValidation.startsWith("OK:")) {
+                            failure = "O arquivo de BOOT2 foi copiado, mas falhou na validação ELF local: "
+                                    + (elfValidation == null ? "resposta nativa vazia." : elfValidation);
                         } else {
-                            preparedElfSummary = elfValidation.substring(4).trim()
-                                    + " · " + discValidation.substring(4).trim();
+                            String discValidation = nativeValidateDiscSource(bootPath);
+                            if (discValidation == null || !discValidation.startsWith("OK:")) {
+                                failure = "Os arquivos foram extraídos e o ELF é válido, mas a fonte CD/DVD "
+                                        + "do runtime não conseguiu reconstruir o disco: "
+                                        + (discValidation == null ? "resposta nativa vazia." : discValidation);
+                            } else {
+                                preparedElfSummary = runtimePathValidation.substring(4).trim()
+                                        + " · " + elfValidation.substring(4).trim()
+                                        + " · " + discValidation.substring(4).trim();
+                            }
                         }
                     }
                 }
