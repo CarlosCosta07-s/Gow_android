@@ -6,6 +6,7 @@
 extern "C" {
 
 bool gowAndroidCdRootIsReady() noexcept;
+bool gowAndroidCdRootCopyPath(char *destination, size_t capacity) noexcept;
 
 uint64_t gowAndroidCdRootOpenFile(
     const char *path, uint64_t *fileSize) noexcept;
