@@ -14,6 +14,7 @@
 #include <vulkan/vulkan.h>
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -629,7 +630,9 @@ private:
             else if (draw.topology == gow::android::GsPrimitiveTopology::Lines)
                 pipelineIndex = 1u;
             if (gsPipelines_[pipelineIndex] == VK_NULL_HANDLE ||
-                draw.vertexCount == 0u) continue;
+                draw.vertexCount == 0u ||
+                static_cast<uint64_t>(draw.firstVertex) + draw.vertexCount >
+                    vertices.size()) continue;
 
             const uint32_t targetWidth = std::max(1u, draw.targetWidth);
             const uint32_t targetHeight = std::max(1u, draw.targetHeight);
@@ -1447,7 +1450,7 @@ private:
     VkSemaphore imageAvailable_ = VK_NULL_HANDLE;
     std::vector<VkSemaphore> renderFinished_;
     VkFence frameFence_ = VK_NULL_HANDLE;
-    bool ready_ = false;
+    std::atomic<bool> ready_{false};
 };
 
 VulkanSmokeRenderer gRenderer;
@@ -1675,10 +1678,9 @@ extern "C" void android_main(android_app* app) {
 
     logMessage(ANDROID_LOG_INFO, "Gow_android native shell started");
 
-    // Initialize only the platform-independent EE/IOP/VU core. The Android GS
-    // backend is intentionally null and no Raylib window/audio device is touched.
-    // ELF loading and guest execution remain gated on the Android GS/audio adapters
-    // and private recompilation output.
+    // Initialize the EE/IOP/VU core without Raylib. The experimental Android GS
+    // primitive adapter is attached only after the GameActivity Vulkan surface is ready.
+    // Guest execution remains blocked until full GS, audio, AOT and boot support exist.
     reportRuntimeStatus(
         app, "Preparando o núcleo PS2 (memória, EE, IOP e VU)...", false);
     PS2Runtime *runtime = gowCreatePs2Runtime();
