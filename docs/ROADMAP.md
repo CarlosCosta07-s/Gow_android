@@ -8,6 +8,10 @@ A prioridade é fazer God of War funcionar antes de iniciar otimização fina pa
 
 A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (código nativo/AOT, Vulkan e I/O local), mas tuning de FPS, perfis gráficos, cache/prefetch e ajustes térmicos ficam adiados até existir gameplay funcional e uma linha de base mensurável. Black for Android é a referência para essa etapa posterior, documentada em [ANDROID_LOW_END_OPTIMIZATION.md](ANDROID_LOW_END_OPTIMIZATION.md).
 
+## Fluxo de entrada atual — somente ISO (06/11/2026)
+
+O único dado do jogo fornecido pelo usuário é a ISO original. O comando de desenvolvimento atual é `tools/build_android_game.py --iso <ISO>`: ele prepara os commits fixados, extrai automaticamente ELF/IRX/pacotes/metadados e gera o C++ privado. Os botões de exportação manual de ELF, ZIP AOT e log foram removidos do FORGE. Após uma primeira tentativa de boot, o mesmo comando procura capturas VU1/IOP no Android Debug via ADB e sincroniza os dados diretamente para o workspace privado. ACI e o aparelho ainda precisam validar esse novo caminho com uma ISO real; sem capturas o resultado é apenas um bootstrap estrito.
+
 ## Fase 0 — Fundação e auditoria
 
 - [x] Criar repositório público.
@@ -35,7 +39,7 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Compilar o parser SYSTEM.CNF pela CI (run `42142814087`).
 - [ ] Validar essa leitura com imagens de teste do usuário em aparelho Android.
 - [ ] Diagnosticar permissão, formato e região.
-- [ ] Exportar logs sem dados pessoais ou do jogo.
+- [x] Manter diagnóstico nativo em log privado limitado, sem botão de exportação no FORGE.
 
 **Aceitação:** APK instala e abre em aparelho real, seleciona a imagem do usuário e informa claramente arquivos inválidos ou incompatíveis.
 
@@ -45,8 +49,8 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Adicionar pré-validação da tabela AOT gerada (não vazia, slots/endereço coerentes, sem duplicatas e com entrypoint do ELF registrado); fixtures de aceitação/rejeição passaram na CI host `42270355202`.
 - [x] Fixar PS2Recomp no commit `c5a9d02573410a2085a4b4b831b0b68ba3515440` e integrar/buildar a ferramenta host (run `42159359104`).
 - [x] Preparar o pipeline privado que recebe o ELF NTSC-U sem armazená-lo no repositório; falta executá-lo com o ELF real do usuário.
-- [x] Criar o orquestrador local `tools/build_android_game.py` para validar o ELF NTSC-U privado, executar PS2Recomp, exportar C++ para staging ignorado e compilar APK ARM64; testes de planejamento/privacidade e CLI passam em CI. Execução com o ELF real do usuário ainda pendente.
-- [ ] Gerar C++ usando a configuração específica de `SCUS_973.99` a partir do ELF real do usuário.
+- [x] Adaptar `tools/build_android_game.py` para receber somente a ISO original, extrair automaticamente o ELF NTSC-U por `SYSTEM.CNF`, executar PS2Recomp e compilar APK ARM64; testes ISO/BOOT2 e privacidade adicionados à CI. Execução com ISO real ainda pendente.
+- [ ] Gerar C++ usando a configuração específica de `SCUS_973.99` extraído automaticamente da ISO real do usuário.
 - [ ] Compilar código gerado para `arm64-v8a`; corrigir ABI, MMI/intrinsics e particularidades de ARM64.
 - [ ] Comparar checkpoints/estados e produzir relatório de funções traduzidas, stubs e pendências.
 - [ ] Manter ISO, ELF e C++ gerado fora do repositório público e da CI pública.
@@ -90,9 +94,9 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Encaminhar `cdRoot`/BOOT2 do FORGE à GameActivity, sincronizar a configuração JNI com `android_main()`, resetar BOOT2 entre sessões e chamar a porta ELF/AOT protegida após a inicialização headless; CIs `42250619735` e `42252442268` aprovaram checker, testes host/VFS e APK ARM64. A tabela AOT pública continua vazia; a tentativa de worker só ocorre quando código AOT privado válido e o presenter GS/Vulkan estão presentes.
 - [x] Implementar painel de diagnóstico da inicialização nativa na `GowGameActivity`, com callback JNI, atualização na thread principal e retenção de mensagens precoces; checker e build ARM64 passaram nas CIs `42250619735` e `42252442268`.
 - [x] Confirmar compilação JNI ARM64 com a API real de GameActivity: referência global registrada pela Activity, referência local por callback e liberação por identidade (CI `42246883029` e builds seguintes).
-- [x] Configurar armazenamento privado para capturas VU1/IOP e exportação ZIP pela GameActivity/SAF; APK ARM64 e bateria de testes do pipeline aprovados na CI #380 (artefato shell, sem dados proprietários).
-- [x] Orquestrar no host os modos explícitos `--capture-bootstrap` e `--aot-captures`: preparar Waffle, compilar EE e incorporar C++ VU1/IOP validado em staging Git-ignored. A CI #380 validou fixtures/CLI; execução com o ELF real ainda pendente.
-- [ ] Executar o ciclo de captura/exportação/build no aparelho com a imagem e o ELF NTSC-U do usuário; preservar ZIP/ELF/código gerado fora do Git/CI.
+- [x] Configurar armazenamento privado para capturas VU1/IOP; removida a exportação ZIP pelo usuário. O fluxo atual sincroniza capturas automaticamente via ADB do APK Debug.
+- [x] Orquestrar no host a build ISO-only: preparar Waffle, extrair automaticamente o ELF e compilar EE; quando ADB possui capturas privadas, incorporar C++ VU1/IOP validado em staging Git-ignored. Se ainda não houver capturas, gerar bootstrap estrito.
+- [ ] Executar o ciclo de captura AOT e sincronização automática ADB no aparelho com a ISO NTSC-U; manter todas as capturas e o C++ gerado fora do Git/CI.
 - [ ] Validar visualmente as mensagens de progresso/sucesso/falha em aparelho Android e conferir o Logcat correspondente.
 - [ ] Configurar `PS2Runtime::loadELF()` para o ELF local e o `PS2IopHostAdapter`/`PS2Vfs` para usar o `cdRoot` local da instalação.
 - [x] Criar a ponte `gowRuntimeLoadElfAndCheckAot()`: recusar tabela AOT vazia, resolver BOOT2 dentro do `cdRoot` privado, carregar o ELF quando houver AOT e conferir a função de entrada sem chamar `run()`; testes de caminho privado e CI `42250619735` aprovados. Execução com ELF/AOT real ainda não testada.
@@ -121,7 +125,7 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 ## Fase 5 — VU1/IOP AOT e gameplay
 
 - [x] Importar os geradores KIexter/Waffle de VU1 e IOP para staging.
-- [ ] Capturar/obter localmente os microprogramas VU1 e módulos IRX da cópia do usuário, sem publicá-los.
+- [ ] Capturar no Android os microprogramas VU1 e módulos IRX necessários, sincronizá-los automaticamente por ADB e nunca publicá-los.
 - [x] Implementar geração VU1 parcial estritamente nativa (`--strict-partial`), ignorando blocos que chamariam o motor exato; integrar seis unidades geradas ao target `ps2_runtime` ARM64. A CI testa sintaxe/contrato; nenhuma captura do jogo foi compilada ainda.
 - [ ] Executar `vu1n_gen.py` sobre micro-memórias reais, resolver blocos ausentes por PCs dinâmicos (`vu1n_heads.txt)) e compilar as unidades C++ resultantes para ARM64.
 - [x] Ativar a política estrita `PS2X_VU1_NATIVE_ONLY` no Android: se um microprograma não tiver bloco nativo, a VU1 para com diagnóstico em vez de cair no interpretador. A compilação host/ARM64 foi aprovada em `42274965500`/`42274999877`; isso não comprova cobertura do microcódigo do jogo.
