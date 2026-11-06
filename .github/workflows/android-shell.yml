@@ -118,6 +118,7 @@ jobs:
             "$GOW_RUNTIME_DIR/ps2xIOP/src/emulator/core/iop_kernel.cpp" \
             "$GOW_RUNTIME_DIR/ps2xIOP/src/emulator/core/sound_engine.cpp" \
             "$GOW_RUNTIME_DIR/ps2xIOP/src/emulator/core/memory_card.cpp" \
+            -Wno-error=deprecated-declarations \
             -Iandroid/app/src/main/cpp \
             -I"$GOW_RUNTIME_DIR/ps2xIOP/include" \
             -I"$GOW_RUNTIME_DIR/ps2xIOP/src" \
