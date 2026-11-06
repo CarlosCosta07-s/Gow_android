@@ -1,6 +1,7 @@
 #include "android_runtime_log.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
