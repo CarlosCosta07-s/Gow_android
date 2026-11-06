@@ -335,6 +335,49 @@ extern "C" bool gowRuntimeLoadElfAndCheckAot(
     }
 }
 
+// Starts the already validated static AOT guest on a dedicated Android worker.
+// This is an explicit first-boot diagnostic path; audio output is intentionally
+// silent until an Android audio backend is connected. It never calls run().
+extern "C" bool gowRuntimeStartGuestExecutionAndroid(
+    PS2Runtime *runtime, char *message, size_t capacity) noexcept {
+    if (message != nullptr && capacity != 0u) message[0] = '\\0';
+    if (runtime == nullptr) {
+        writeMessage(message, capacity, "PS2Runtime não foi criado.");
+        return false;
+    }
+    try {
+        if (!runtime->startGuestExecutionAndroid()) {
+            writeMessage(
+                message, capacity,
+                "O worker EE Android não iniciou. Consulte o Logcat GowAndroid para o motivo.");
+            return false;
+        }
+        writeMessage(
+            message, capacity,
+            "OK: worker EE AOT iniciado no Android; saída de áudio permanece silenciosa neste teste inicial.");
+        return true;
+    } catch (const std::exception &exception) {
+        writeMessage(
+            message, capacity,
+            std::string("Falha ao iniciar o worker EE Android: ") + exception.what());
+        return false;
+    } catch (...) {
+        writeMessage(message, capacity,
+                     "Falha desconhecida ao iniciar o worker EE Android.");
+        return false;
+    }
+}
+
+extern "C" bool gowRuntimeGuestExecutionFinishedAndroid(
+    PS2Runtime *runtime) noexcept {
+    if (runtime == nullptr) return true;
+    try {
+        return runtime->isGuestExecutionFinishedAndroid();
+    } catch (...) {
+        return true;
+    }
+}
+
 extern "C" bool gowRuntimeValidateIopCdvd(
     const char *privateRoot, const char *bootRelativePath,
     char *message, size_t capacity) noexcept {
