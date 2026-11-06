@@ -140,6 +140,17 @@ int main() {
         return fail("cdRoot accepted an unsafe path or a directory as a file");
     }
 
+    std::vector<gow::disc::CdRootEntry> repeatedRootEntries;
+    if (!vfs.listDirectory("", repeatedRootEntries, &error) ||
+        repeatedRootEntries.size() != 2u ||
+        repeatedRootEntries[0].name != "DATA" ||
+        repeatedRootEntries[1].name != "ROOT.DAT") {
+        vfs.close();
+        std::filesystem::remove_all(root);
+        std::filesystem::remove(outsideFile);
+        return fail("repeated cdRoot listing did not return the same entries");
+    }
+
     std::filesystem::create_symlink(outsideFile, root / "ESCAPE.BIN", filesystemError);
     if (filesystemError) {
         vfs.close();
