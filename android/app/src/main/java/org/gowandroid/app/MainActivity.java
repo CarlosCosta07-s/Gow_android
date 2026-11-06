@@ -758,10 +758,13 @@ public final class MainActivity extends AppCompatActivity {
             String message = error == null || error.isEmpty()
                     ? "Não foi possível importar os arquivos de boot."
                     : error;
-            discStatus.setText("Falha na importação: " + message);
-            discStatus.setTextColor(0xFFE27676);
+            boolean cancelled = message.startsWith("Importação cancelada");
+            discStatus.setText(cancelled
+                    ? "Importação cancelada; os arquivos temporários foram removidos."
+                    : "Falha na importação: " + message);
+            discStatus.setTextColor(cancelled ? COLOR_MUTED : 0xFFE27676);
             new AlertDialog.Builder(this)
-                    .setTitle("Falha na preparação")
+                    .setTitle(cancelled ? "Importação cancelada" : "Falha na preparação")
                     .setMessage(message)
                     .setPositiveButton("Fechar", null)
                     .show();
