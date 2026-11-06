@@ -165,10 +165,44 @@ def main() -> int:
     ):
         require(required in private_path_code, f"Private BOOT2 path safety rule is missing: {required}")
 
+    for required in (
+        "Java_org_gowandroid_app_GowGameActivity_nativeSetBootRelativePath",
+        "gowRuntimeLoadElfAndCheckAot(",
+        "gBootRelativePath = std::move(candidate)",
+    ):
+        require(required in native_main, f"GameActivity BOOT2 handoff is missing: {required}")
+    require(
+        "gowRuntimeLoadElfAndCheckAot(" in native_main[
+            native_main.find("extern \\"C\\" void android_main"):
+        ],
+        "android_main must invoke the guarded ELF/AOT gate after core initialization.",
+    )
+    require(
+        "runtime->run(" not in native_main,
+        "Android native startup must not execute guest code before GS/audio are ready.",
+    )
+
     require(
         "runtime->run(" not in load_body and "PS2Runtime::run(" not in load_body,
         "Private ELF/AOT validation must never start guest execution.",
     )
+
+    for required in (
+        "EXTRA_PRIVATE_CD_ROOT",
+        "EXTRA_BOOT_RELATIVE_PATH",
+        "nativeSetPrivateDiscRoot(privateCdRoot)",
+        "nativeSetBootRelativePath(bootRelativePath)",
+    ):
+        require(required in activity, f"GameActivity private disc handoff is missing: {required}")
+    main_activity_path = project_root / "android/app/src/main/java/org/gowandroid/app/MainActivity.java"
+    main_activity = main_activity_path.read_text(encoding="utf-8")
+    for required in (
+        "openRuntimeDiagnostics()",
+        "GowGameActivity.EXTRA_PRIVATE_CD_ROOT",
+        "GowGameActivity.EXTRA_BOOT_RELATIVE_PATH",
+        "startActivity(intent)",
+    ):
+        require(required in main_activity, f"FORGE diagnostic launch is missing: {required}")
 
     print("Verified: Android PS2 core initialization is headless, uses a null GS backend,")
     print("and cannot enter Raylib desktop initialization or guest execution.")
