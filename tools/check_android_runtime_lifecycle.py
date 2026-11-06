@@ -287,7 +287,7 @@ def main() -> int:
         "!gGsBackendAttached",
         "!gRenderer.isReady()",
         "gowRuntimeStartGuestExecutionAndroid(",
-        "bool reportAndroidGuestCompletion",
+        "void reportAndroidGuestCompletion(android_app *app)",
         "gowRuntimeGuestExecutionFinishedAndroid(",
         "tryStartAndroidGuestExecution(app)",
     ):
