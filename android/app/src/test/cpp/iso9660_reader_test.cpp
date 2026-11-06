@@ -43,7 +43,8 @@ std::vector<uint8_t> makeRecord(std::string_view name, uint32_t extent,
     return rec;
 }
 
-void addRecord(std::vector<uint8_t> &sector, size_t &cursor,
+template <size_t N>
+void addRecord(std::array<uint8_t, N> &sector, size_t &cursor,
                const std::vector<uint8_t> &record) {
     if (cursor + record.size() > sector.size()) return;
     std::copy(record.begin(), record.end(), sector.begin() + static_cast<std::ptrdiff_t>(cursor));
