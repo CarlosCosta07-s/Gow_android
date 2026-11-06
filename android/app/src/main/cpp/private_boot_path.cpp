@@ -21,7 +21,7 @@ bool normalizeBootPath(std::string_view input,
     }
     if (input.front() == '/' || input.front() == '\\' ||
         input.find(':') != std::string_view::npos ||
-        input.find('\\0') != std::string_view::npos) {
+        input.find('\0') != std::string_view::npos) {
         setError(error, "The BOOT2 path must be relative and cannot contain a device prefix.");
         return false;
     }
@@ -88,7 +88,7 @@ bool resolvePrivateBootElfPath(
     error.clear();
 
     if (privateRoot.empty() || privateRoot.size() > 4095u ||
-        privateRoot.find('\\0') != std::string_view::npos) {
+        privateRoot.find('\0') != std::string_view::npos) {
         setError(error, "The private cdRoot path is empty or invalid.");
         return false;
     }
@@ -99,7 +99,7 @@ bool resolvePrivateBootElfPath(
     try {
         const std::filesystem::path canonicalRoot =
             std::filesystem::weakly_canonical(
-                std::filesystem::u8path(privateRoot));
+                std::filesystem::path(std::string(privateRoot)));
         const std::filesystem::path candidate =
             std::filesystem::weakly_canonical(canonicalRoot / relative);
 
