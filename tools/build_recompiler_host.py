@@ -135,6 +135,7 @@ def main() -> int:
     )
 
     # Strict Android IOP policy: reject missing AOT coverage instead of interpreting IRX instructions.
+    # The patch is checked and compiled in the dedicated ps2_iop host build below.
     android_iop_patch = repo_root / ANDROID_IOP_PATCH
     if not android_iop_patch.is_file():
         raise RuntimeError(f"Required Android IOP policy patch not found: {android_iop_patch}")
