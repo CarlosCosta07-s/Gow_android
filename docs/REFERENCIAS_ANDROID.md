@@ -54,6 +54,13 @@ Black é um jogo de Xbox original: sua recompilação é x86/XBE e suas interfac
 3. Não será criada uma Activity, tela independente ou submenu de configurações do FORGE para remapeamento de botões ou configuração do controle touch.
 4. O overlay de toque é uma camada de jogo durante a partida; abrir suas opções deve levar à página de controles dentro do menu do jogo, não a uma interface Android separada.
 
+### Implementação já preparada no shell
+
+- android_pad_bridge.cpp recebe eventos GameActivity, mapeia códigos Android para bits DualShock 2 e converte eixos para o formato analógico esperado por PSPadBackend.
+- A bridge combina estado físico e canais touch. O overlay ainda será desenhado, mas pode alimentar o mesmo estado sem alterar a interface FORGE.
+- A bridge é usada por PSPadBackend::readState no build Android; o polling Raylib/GLFW fica restrito às plataformas desktop.
+- O destrutor do runtime no perfil Android não consulta o estado de áudio Raylib que o host Android ainda não inicializou.
+
 ### Arquitetura de entrada planejada
 
 - Android GameActivity recebe eventos de gamepad, teclado e toque.
