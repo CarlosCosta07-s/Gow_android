@@ -299,7 +299,7 @@ def generate_native_aot(
                 f"{iop_registry.is_file()}."
             )
         registry_text = iop_registry.read_text(encoding="utf-8")
-        count_match = re.search(r"count\\s*=\\s*(\\d+)\\s*;", registry_text)
+        count_match = re.search(r"count\s*=\s*(\d+)\s*;", registry_text)
         if count_match is None or int(count_match.group(1)) != len(iop_records):
             raise RuntimeError("Generated IOP registry count does not match the captured module list.")
     elif iop_sources or iop_registry.exists():
@@ -336,7 +336,7 @@ def generate_native_aot(
         "iop": iop_records,
         "sources": {
             "vu1": [path.name for path in vu1_sources],
-            "iop": [path.name for path in iop_sources] + [iop_registry.name],
+            "iop": [path.name for path in iop_sources] + ([iop_registry.name] if iop_registry.is_file() else []),
         },
     }
     (output / "native-aot-summary.json").write_text(
