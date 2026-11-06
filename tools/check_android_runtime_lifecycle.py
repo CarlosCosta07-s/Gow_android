@@ -84,6 +84,54 @@ def main() -> int:
         "Guest execution is not guarded in the Android profile.",
     )
 
+    require(
+        "std::thread m_androidGuestThread;" in header
+        and "bool startGuestExecutionAndroid();" in header
+        and "void stopGuestExecutionAndroid() noexcept;" in header,
+        "Android guest worker API or thread ownership state is missing.",
+    )
+    worker_start = runtime.find("bool PS2Runtime::startGuestExecutionAndroid()")
+    worker_end = runtime.find("void PS2Runtime::run()", worker_start)
+    require(
+        worker_start >= 0 and worker_end > worker_start,
+        "Dedicated Android guest worker was not prepared.",
+    )
+    worker_body = runtime[worker_start:worker_end]
+    for required in (
+        "m_coreInitialized",
+        "!m_eeScheduler",
+        "hasFunction(m_cpuContext.pc)",
+        "m_eeScheduler->reset(",
+        "m_eeScheduler->run()",
+        "std::thread([this]()",
+        "m_androidGuestFinished.store(true",
+    ):
+        require(required in worker_body, f"Android guest worker is missing: {required}")
+    for forbidden in (
+        "GenImageColor(",
+        "LoadTextureFromImage(",
+        "BeginDrawing(",
+        "EndDrawing(",
+        "InitWindow(",
+        "CloseWindow(",
+    ):
+        require(forbidden not in worker_body, f"Android guest worker touches Raylib presentation: {forbidden}")
+    stop_start = runtime.find("void PS2Runtime::stopGuestExecutionAndroid()")
+    stop_end = runtime.find("bool PS2Runtime::isGuestExecutionFinishedAndroid()", stop_start)
+    require(
+        stop_start >= 0 and stop_end > stop_start
+        and "requestStop()" in runtime[stop_start:stop_end]
+        and "m_androidGuestThread.join()" in runtime[stop_start:stop_end],
+        "Android guest worker shutdown does not request stop and join its thread.",
+    )
+    require(
+        "stopGuestExecutionAndroid();" in runtime[
+            runtime.find("PS2Runtime::~PS2Runtime()"):
+            runtime.find("ps2x::iop::ModuleLoadResult PS2Runtime::loadIopModule")
+        ],
+        "PS2Runtime destructor does not stop the Android guest worker before destroying subsystems.",
+    )
+
     project_root = Path(__file__).resolve().parents[1]
     native_main_path = project_root / "android/app/src/main/cpp/main.cpp"
     activity_path = project_root / "android/app/src/main/java/org/gowandroid/app/GowGameActivity.java"
@@ -188,6 +236,11 @@ def main() -> int:
     )
 
     require(
+        "startGuestExecutionAndroid(" not in native_main,
+        "Android guest worker must remain opt-in until the GS/audio and boot gates are explicitly connected.",
+    )
+
+    require(
         "runtime->run(" not in load_body and "PS2Runtime::run(" not in load_body,
         "Private ELF/AOT validation must never start guest execution.",
     )
@@ -270,9 +323,9 @@ def main() -> int:
     ):
         require(required in native_main, f"Local GS scene capture path is missing: {required}")
 
-    print("Verified: Android PS2 core initialization is headless, uses a null GS backend,")
-    print("and exposes bounded, on-demand local GS scene captures in Debug.")
-    print("and cannot enter Raylib desktop initialization or guest execution.")
+    print("Verified: Android PS2 core initialization is headless and uses a null GS backend.")
+    print("Verified: a Raylib-free guest worker is prepared but not started by android_main.")
+    print("Verified: GameActivity owns presentation and bounded local GS scene captures.")
     return 0
 
 
