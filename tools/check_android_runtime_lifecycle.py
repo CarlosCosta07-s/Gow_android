@@ -423,14 +423,41 @@ def main() -> int:
     ):
         require(required in prepared_iop_text, f"Prepared IOP CMake AOT source path is missing: {required}")
 
-    for required in (
+    # Game-derived AOT captures are private implementation data. The Android
+    # app must not expose document-picker or manual-export controls for them.
+    for forbidden in (
         'setText("Exportar dados AOT")',
+        'setText("Exportar log")',
         "REQUEST_EXPORT_AOT_CAPTURES",
-        "capture_manifest.txt",
-        "vu1/vu1n_heads.txt",
-        "gow-aot-captures",
+        "REQUEST_EXPORT_LOG",
+        "ACTION_CREATE_DOCUMENT",
+        "ACTION_GET_CONTENT",
     ):
-        require(required in activity, f"Private AOT capture export UI is missing: {required}")
+        require(
+            forbidden not in activity,
+            f"User-facing private game-data export control must stay removed: {forbidden}",
+        )
+
+    game_builder = (project_root / "tools/build_android_game.py").read_text(encoding="utf-8")
+    for required in (
+        "captures_zip = pull_private_aot_captures(",
+        "except NoDeviceCaptures as error:",
+        "continuing with the first strict capture bootstrap",
+        "Captures remain in the app's private files directory",
+    ):
+        require(required in game_builder, f"Automatic private AOT synchronization is missing: {required}")
+
+    capture_sync_path = project_root / "tools/sync_android_aot_captures.py"
+    require(capture_sync_path.is_file(), "Private ADB capture synchronizer is missing.")
+    capture_sync = capture_sync_path.read_text(encoding="utf-8")
+    for required in (
+        "run-as {package_name}",
+        '"exec-out"',
+        "capture_tar_to_zip(",
+        "MAX_ARCHIVE_BYTES",
+        "PurePosixPath",
+    ):
+        require(required in capture_sync, f"Private ADB capture synchronization is missing: {required}")
 
     native_aot_builder = project_root / "tools/build_android_native_aot.py"
     require(native_aot_builder.is_file(), "Private native AOT builder is missing.")
