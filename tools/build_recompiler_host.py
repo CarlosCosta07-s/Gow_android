@@ -291,6 +291,137 @@ def main() -> int:
         "IOP native-only compile definition",
     )
 
+    # Strict VU1 policy: never fall back to the cycle-exact interpreter.
+    vu_core = recompiler_source / "ps2xRuntime/src/lib/vu/ps2_vu1_core.cpp"
+    once_vu = lambda old, new, label: replace_exactly_once(vu_core, old, new, label)
+
+    once_vu(
+        """        bool usedNative = false;
+        for (;;)
+        {
+            if (runNative(ctx))
+                return true;
+            if (!m_native || !m_native->enabled)
+                return usedNative;
+            usedNative = true;
+            if (!stepInterpreted(ctx))
+                return true;
+        }""",
+        """#if !defined(PS2X_VU1_NATIVE_ONLY)
+        bool usedNative = false;
+#endif
+        for (;;)
+        {
+            if (runNative(ctx))
+                return true;
+#if defined(PS2X_VU1_NATIVE_ONLY)
+            uint32_t lower = 0u, upper = 0u;
+            const uint32_t pc = m_state.pc & 0x3FFFu;
+            if (vuCode != nullptr && pc + 8u <= codeSize)
+            {
+                std::memcpy(&lower, vuCode + pc, sizeof(lower));
+                std::memcpy(&upper, vuCode + pc + 4u, sizeof(upper));
+            }
+            std::fprintf(stderr,
+                         "[VU1:native-required] exact-engine fallback blocked: pc=0x%04x lower=0x%08x upper=0x%08x cycle=%llu ebit=%u haltD=%u haltT=%u\\n",
+                         pc, lower, upper, static_cast<unsigned long long>(m_cycle),
+                         m_state.ebit ? 1u : 0u, m_pendingHaltD ? 1u : 0u, m_pendingHaltT ? 1u : 0u);
+            m_stopRequested = true;
+            return true;
+#else
+            if (!m_native || !m_native->enabled)
+                return usedNative;
+            usedNative = true;
+            if (!stepInterpreted(ctx))
+                return true;
+#endif
+        }""",
+        "VU1 native-only run-loop fallback guard",
+    )
+    once_vu(
+        "    if (m_unit == Unit::VU1 && !m_native)\\n        m_native = new NativeState();",
+        "    if (m_unit == Unit::VU1 && !m_native)\\n        m_native = new NativeState();\\n"
+        "#if defined(PS2X_VU1_NATIVE_ONLY)\\n"
+        "    if (m_unit == Unit::VU1 && m_native)\\n        m_native->enabled = true;\\n"
+        "#endif",
+        "force VU1 native dispatch enabled in strict builds",
+    )
+    once_vu(
+        "    if (m_unit == Unit::VU1 && m_native && m_native->enabled && vuData && codeSize == PS2_VU1_CODE_SIZE)\\n"
+        "        VU1NativeAccess::recordReplay(*this, &context, maxCycles);",
+        "#if !defined(PS2X_VU1_NATIVE_ONLY)\\n"
+        "    if (m_unit == Unit::VU1 && m_native && m_native->enabled && vuData && codeSize == PS2_VU1_CODE_SIZE)\\n"
+        "        VU1NativeAccess::recordReplay(*this, &context, maxCycles);\\n"
+        "#endif",
+        "exclude VU1 interpreter record-replay from strict runtime",
+    )
+    once_vu(
+        "    if (m_unit == Unit::VU1 && m_native && m_native->enabled && m_native->verifyLeft != 0u && vuData && codeSize == PS2_VU1_CODE_SIZE)\\n    {",
+        "#if !defined(PS2X_VU1_NATIVE_ONLY)\\n"
+        "    if (m_unit == Unit::VU1 && m_native && m_native->enabled && m_native->verifyLeft != 0u && vuData && codeSize == PS2_VU1_CODE_SIZE)\\n    {",
+        "exclude VU1 interpreter A/B verifier from strict runtime",
+    )
+    once_vu(
+        "        else if (checked % 2000u == 0u)\\n"
+        "            std::fprintf(stderr, \"[vu1n-verify] %u runs checked, %u mismatches\\n\", checked, bad);\\n"
+        "    }\\n"
+        "    if (m_unit == Unit::VU1 && m_native && m_native->enabled && vuData && codeSize == PS2_VU1_CODE_SIZE)\\n"
+        "    {\\n"
+        "        if (!runNativeLoop(context))\\n"
+        "            runExact(context);\\n"
+        "    }\\n"
+        "    else\\n"
+        "        runExact(context);",
+        "        else if (checked % 2000u == 0u)\\n"
+        "            std::fprintf(stderr, \"[vu1n-verify] %u runs checked, %u mismatches\\n\", checked, bad);\\n"
+        "    }\\n"
+        "#endif\\n"
+        "#if defined(PS2X_VU1_NATIVE_ONLY)\\n"
+        "    if (m_unit == Unit::VU1)\\n"
+        "    {\\n"
+        "        if (vuData != nullptr && codeSize == PS2_VU1_CODE_SIZE)\\n"
+        "            runNativeLoop(context);\\n"
+        "        else\\n"
+        "        {\\n"
+        "            std::fprintf(stderr, \"[VU1:native-required] invalid VU1 execution buffer: codeSize=%u data=%p\\n\", codeSize, static_cast<void *>(vuData));\\n"
+        "            m_stopRequested = true;\\n"
+        "        }\\n"
+        "    }\\n"
+        "    else\\n"
+        "        runExact(context);\\n"
+        "#else\\n"
+        "    if (m_unit == Unit::VU1 && m_native && m_native->enabled && vuData && codeSize == PS2_VU1_CODE_SIZE)\\n"
+        "    {\\n"
+        "        if (!runNativeLoop(context))\\n"
+        "            runExact(context);\\n"
+        "    }\\n"
+        "    else\\n"
+        "        runExact(context);\\n"
+        "#endif",
+        "strict VU1 runtime dispatch without interpreter fallback",
+    )
+
+    vu_cmake = recompiler_source / "ps2xRuntime/CMakeLists.txt"
+    replace_exactly_once(
+        vu_cmake,
+        'option(PS2X_ENABLE_IOP_RPC_TRACE "Log unhandled IOP/SIF RPC trace suggestions" ON)\\n',
+        'option(PS2X_ENABLE_IOP_RPC_TRACE "Log unhandled IOP/SIF RPC trace suggestions" ON)\\n'
+        'option(PS2X_VU1_NATIVE_ONLY "Reject VU1 exact-engine fallback when AOT coverage is missing" OFF)\\n'
+        'if(ANDROID)\\n'
+        '    set(PS2X_VU1_NATIVE_ONLY ON CACHE BOOL "" FORCE)\\n'
+        'endif()\\n',
+        "VU1 native-only CMake option",
+    )
+    replace_exactly_once(
+        vu_cmake,
+        "target_compile_definitions(ps2_runtime PRIVATE\\n    PS2X_HAS_FFMPEG=$<BOOL:${PS2X_ENABLE_FFMPEG}>\\n)\\n",
+        "if(PS2X_VU1_NATIVE_ONLY)\\n"
+        "    target_compile_definitions(ps2_runtime PRIVATE PS2X_VU1_NATIVE_ONLY=1)\\n"
+        "endif()\\n\\n"
+        "target_compile_definitions(ps2_runtime PRIVATE\\n    PS2X_HAS_FFMPEG=$<BOOL:${PS2X_ENABLE_FFMPEG}>\\n)\\n",
+        "VU1 native-only compile definition",
+    )
+
     cmake = shutil.which("cmake")
     if not cmake:
         raise RuntimeError("CMake 3.21+ was not found on PATH.")
