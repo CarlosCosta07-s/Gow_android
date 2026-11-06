@@ -1,6 +1,7 @@
 #include "android_gs_vulkan_backend.h"
 
 #include "gs_texture_store.h"
+#include "android_gs_cpu_rasterizer.h"
 #include "runtime/gs/ps2_gs_common.h"
 
 #include <algorithm>
@@ -47,13 +48,21 @@ void AndroidGSVulkanBackend::Reset() {
 }
 
 void AndroidGSVulkanBackend::Submit(const GSPrimitiveBatch &batch) {
-    if (!impl_->initialized || impl_->geometrySink == nullptr) return;
-    GsGpuBatch geometry;
+    if (!impl_->initialized) return;
+
     std::string error;
-    if (!expandGsPrimitiveBatch(batch, geometry, error)) {
+    if (!rasterizeGsBatchToVram(impl_->textureStore, batch, error)) {
         return;
     }
-    impl_->geometrySink(impl_->userData, geometry);
+
+    // The optional sink remains available for geometry diagnostics, but the
+    // default Android GameActivity path presents the VRAM-derived CRTC frame.
+    if (impl_->geometrySink != nullptr) {
+        GsGpuBatch geometry;
+        if (expandGsPrimitiveBatch(batch, geometry, error)) {
+            impl_->geometrySink(impl_->userData, geometry);
+        }
+    }
 }
 
 void AndroidGSVulkanBackend::LoadClut(
@@ -82,10 +91,9 @@ void AndroidGSVulkanBackend::TextureFlush() {}
 void AndroidGSVulkanBackend::Sync(GSSyncReason) {}
 
 PresentationFrame AndroidGSVulkanBackend::Present(
-    const GSPresentationRequest &) {
-    // Rendering is submitted to the Android Vulkan surface. The CPU readback
-    // PresentationFrame path is intentionally empty in this first GS stage.
-    return {};
+    const GSPresentationRequest &request) {
+    if (!impl_->initialized) return {};
+    return presentGsVramCircuit(impl_->textureStore, request);
 }
 
 bool AndroidGSVulkanBackend::ClearFramebuffer(
