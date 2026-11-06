@@ -1245,6 +1245,18 @@ def main() -> int:
                 std::memcpy(&lower, vuCode + pc, sizeof(lower));
                 std::memcpy(&upper, vuCode + pc + 4u, sizeof(upper));
             }
+            // Persist the dynamic block PC so the next native-only build can
+            // add it to vu1n_gen.py's heads list without copying game code to CI.
+            const char *missLog = std::getenv("GOW_VU1N_MISS_LOG");
+            if (missLog != nullptr)
+            {
+                std::FILE *missFile = std::fopen(missLog, "a");
+                if (missFile != nullptr)
+                {
+                    std::fprintf(missFile, "%04x\\n", pc);
+                    std::fclose(missFile);
+                }
+            }
             std::fprintf(stderr,
                          "[VU1:native-required] exact-engine fallback blocked: pc=0x%04x lower=0x%08x upper=0x%08x cycle=%llu ebit=%u haltD=%u haltT=%u",
                          pc, lower, upper, static_cast<unsigned long long>(m_cycle),
