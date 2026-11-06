@@ -84,7 +84,7 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Testar `DiscSource::openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` com ISO sintética de dupla camada e validar a checagem JNI pós-instalação (CI `42225710064`).
 - [ ] Remover o uso residual do provider ISO transitório `gowdisc:/` do caminho normal de gameplay após validar a instalação local completa; não manter um FD da ISO aberto durante a partida.
 - [ ] Testar instalação, cancelamento, falta de espaço, reparo, integridade e validações `IoPaths`/DiscSource/CDVD com ISO do usuário em aparelho Android.
-- [ ] Conectar o dispatcher CDVD ao IOP da sessão real e verificar chamadas originadas pelo jogo; o teste host atual é uma instância isolada.
+- [ ] Exercitar o CDVD já incorporado ao `IopEmulator` na sessão real e registrar chamadas originadas pelo jogo; os probes atuais ainda são sintéticos/isolados.
 - [ ] Ligar código recompilado, overrides de God of War e serviços mínimos de boot.
 - [ ] Resolver CD/DVD, IRX, SIF, DMA e cadeia inicial de execução.
 - [ ] Registrar diagnóstico por etapa, PC/RA e último subsistema confirmado.

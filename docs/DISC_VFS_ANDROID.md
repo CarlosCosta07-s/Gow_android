@@ -92,7 +92,11 @@ O contrato do runtime Waffle/KIexter também inclui `ps2x::iop::DiscSource::open
 
 **[VERIFICADO NO HOST, run `42226830317`]** Um teste compila os fontes reais de `IopCdvd`, `IopMemory` e `IopKernel`, injeta apenas um `IopHost` de fixture e chama `IopCdvd::dispatchImport()`: ordinal 10 (`sceCdSearchFile`) encontra um arquivo aninhado e devolve LSN/tamanho; ordinal 6 (`sceCdRead`) copia setores das duas camadas para a RAM IOP; uma leitura além do fim do disco é recusada.
 
-**[COMPILADO NA CI ANDROID, run `42227233881`]** O FORGE chama `nativeValidateIopCdvd()` após a instalação. A ponte C ABI prepara uma instância isolada do dispatcher CDVD apontada para a raiz privada, procura BOOT2 e lê seu primeiro setor na RAM IOP para conferir a assinatura ELF. O build ARM64 e o APK Debug foram aprovados e publicados. O probe ainda não foi executado em aparelho.
+**[COMPILADO NA CI ANDROID, run `42227233881`]** O FORGE chama `nativeValidateIopCdvd()` após a instalação. A ponte C ABI prepara uma instância isolada do dispatcher CDVD apontada para a raiz privada, procura BOOT2 e lê seu primeiro setor na RAM IOP para conferir a assinatura ELF. O build ARM64 e o APK Debug foram aprovados e publicados. O probe ainda não foi confirmado em aparelho.
+
+**[VERIFICADO NA CI, run `42232085986`]** `tools/run_ps2_vfs_cdroot_smoke.py` compila o `ps2_vfs.cpp` Android efetivamente preparado, junto de `CdRootVfs`, `ps2_rom_device.cpp` e `ps2_path.cpp`. Com uma instalação sintética, verifica `cdrom0:` open/read/seek, leitura aleatória, `stat` de arquivo e diretório, recusa de escrita/traversal e fechamento do descriptor. O mesmo run aprovou a compilação do APK Debug ARM64 e publicou os artefatos.
+
+**[AUDITORIA DA REVISÃO WAFFLE FIXADA]** `IopEmulator::Impl` já possui uma instância real de `IopCdvd` e despacha imports da biblioteca `cdvdman` para `IopCdvd::dispatchImport()`. O `PS2IopHostAdapter` entrega `IoPaths.cdRoot` como `HostPathKind::CdRoot`, e o CDVD abre `DiscSource::openExtracted()` a partir dessa raiz. Portanto, a conexão interna entre o IOP do runtime e o serviço CDVD já existe na base; falta exercitá-la durante uma sessão iniciada no Android, não recriar um segundo dispatcher.
 
 **[NÃO IMPLEMENTADO]** As verificações anteriores não inicializam `PS2Runtime`, não chamam `loadELF()`/`run()` e não exercitam o dispatcher CDVD que pertence a uma sessão real. O runtime base ainda depende da inicialização host Raylib para gráficos/áudio; a Activity Android não está conectada a um runner PS2 jogável. Nenhuma ISO real, ELF real ou sequência de boot foi testada nesta etapa.
 
@@ -100,10 +104,10 @@ A auditoria do contrato de referência e o formato dos metadados estão em [DISC
 
 ## 6. Próximas etapas
 
-1. Validar em aparelho a instalação e os probes `IoPaths`/DiscSource/CDVD com a ISO do usuário, sem compartilhar a imagem ou os dados extraídos.
+1. Confirmar em aparelho o resultado integral dos probes `IoPaths`/DiscSource/CDVD com a ISO do usuário, sem compartilhar a imagem ou os dados extraídos.
 2. Adicionar verificação de integridade persistente e recuperação/reinstalação por serial/revisão.
 3. Disponibilizar os IRX no layout esperado e instrumentar os caminhos de arquivo e CDVD usados durante o boot.
-4. Conectar o serviço CDVD ao IOP vivo do runtime e verificar chamadas `sceCdRead` originadas pelo código do jogo; os fixtures atuais exercitam o dispatcher em instância isolada.
+4. Iniciar uma sessão real do runtime e confirmar chamadas `sceCdRead` originadas pelo código do jogo; o dispatcher `IopCdvd` já é chamado pelo `IopEmulator`, mas ainda não há execução de guest.
 5. Adaptar a inicialização do PS2Runtime para GameActivity, separando GS, áudio e serviços que hoje dependem de Raylib.
 6. Gerar/compilar o C++ privado do ELF e ligar `loadELF()` ao runner Android.
 7. Integrar GS/Vulkan e apresentar a primeira imagem real.

@@ -31,7 +31,7 @@
 
 **[VERIFICADO NO HOST E NA CI ANDROID, runs `42218565639` e `42225710064`] Gerador e integração de metadados:** fixtures ISO sintéticas verificam o conteúdo de `.disc_layout`, os registros de `.disc_meta` (LSN little-endian + setor original), arquivos ausentes/tamanho errado/symlink, layout divergente e limpeza de temporários. O instalador mede o espaço, permite cancelamento durante análise/geração e publica os dois metadados dentro do staging antes do rename final. O teste de integração compila a implementação real de `ps2x::iop::DiscSource` do Waffle e valida `openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` numa ISO sintética de dupla camada.
 
-**Próxima prioridade:** validar em aparelho a instalação e executar o probe CDVD com a ISO do usuário. Depois, integrar o serviço CDVD ao IOP/runtime vivo, exercitar chamadas originadas pelo jogo e disponibilizar/carregar os módulos IRX necessários. Nenhuma ISO, ELF, IRX ou arquivo extraído deve ser enviado ao GitHub.
+**Evidência do aparelho (06/11/2026):** as capturas enviadas mostram a extração ISO9660 concluída, `.disc_layout`/`.disc_meta` publicados e os caminhos `IoPaths`/ELF reconhecidos pelo FORGE. Isso confirma a instalação nessa execução, mas não comprova boot ou gameplay. **Nova verificação automatizada:** a CI `42232085986` passou pelo smoke sintético do `PS2Vfs` real via provider `cdRoot` Android e publicou APK Debug ARM64. **Próxima prioridade:** conferir o resultado completo de `nativeValidateIopCdvd()` no aparelho e iniciar a integração do ciclo de vida do runtime Android. Nenhuma ISO, ELF, IRX ou arquivo extraído deve ser enviado ao GitHub.
 
 ## [COMPILADO, NÃO TESTADO EM APARELHO] Refinamento do launcher, novo ícone, hora e bateria
 
@@ -58,7 +58,7 @@
 - Fixtures sintéticas do ELF cobrem um executável válido, magic inválido e entry point fora de `PT_LOAD`. O teste valida também a busca local case-insensitive com sufixo ISO `;1`.
 - A primeira implementação compartilhou acidentalmente o offset do descritor raiz via `dup()`. Foi corrigida usando `openat(rootFd, ".", ...)` para gerar descrição de arquivo independente por operação.
 - A CI Android run `42187116530` concluiu os testes host, compilou o APK Debug ARM64 e publicou o artefato. A validação foi feita com ELF sintético; nenhum executável real de God of War foi usado.
-- O provider `CdRootVfs` continua atendendo operações por caminho. O JNI valida a classe real `DiscSource` e contém o novo probe CDVD/IOP; o teste host atravessa `IopCdvd::dispatchImport` com uma instância isolada e armazenamento sintético. Ainda não há teste com dados reais nem execução do IOP que pertence a uma sessão de gameplay.
+- O provider `CdRootVfs` continua atendendo operações por caminho. O teste `tools/run_ps2_vfs_cdroot_smoke.py`, aprovado na CI `42232085986`, compila o `ps2_vfs.cpp` efetivamente preparado da revisão Waffle e valida abertura/leitura/seek/stat/fechamento por `cdrom0:` contra o provider Android com dados sintéticos. A auditoria da revisão Waffle também confirma que `IopEmulator` já instancia `IopCdvd` e encaminha imports `cdvdman` para `dispatchImport`; `PS2IopHostAdapter` fornece `IoPaths.cdRoot` a esse serviço. O que falta é executar esse caminho pelo IOP de uma sessão real do runtime no Android. Não há gameplay.
 
 
 ## [VERIFICADO] Shell FORGE e instalação privada do disco
@@ -160,7 +160,7 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle/KIext
 
 ## Próximos bloqueios reais — ordem de prioridade
 
-1. Criar um smoke test em nível do PS2 VFS que abra, leia, faça seek e feche arquivos via `gowcdroot:/` usando fixtures sintéticas; a compilação host/Android do patch já foi verificada.
+1. [x] Executar smoke test do `PS2Vfs` via provider `cdRoot` Android: abertura, leitura, seek, stat, rejeição de escrita/traversal e fechamento com fixture sintética (CI `42232085986`).
 2. Implementar e validar um manifesto completo de God of War com base na árvore real da revisão do usuário e nos acessos de boot; não adivinhar caminhos.
 3. Preparar o ELF em caminho privado, executar PS2Recomp e compilar o C++ gerado para ARM64, sem enviar conteúdo proprietário ao Git/CI.
 4. Ligar o lifecycle do PS2Runtime à GameActivity, chamar o loader e estruturar diagnóstico de cada fase de boot.
