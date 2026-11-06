@@ -37,6 +37,10 @@ extern "C" bool gowInitializePs2RuntimeCoreHeadless(
 extern "C" bool gowRuntimeLoadElfAndCheckAot(
     PS2Runtime *runtime, const char *bootRelativePath,
     char *message, size_t capacity) noexcept;
+extern "C" bool gowRuntimeStartGuestExecutionAndroid(
+    PS2Runtime *runtime, char *message, size_t capacity) noexcept;
+extern "C" bool gowRuntimeGuestExecutionFinishedAndroid(
+    PS2Runtime *runtime) noexcept;
 extern "C" void gowAndroidDiscCloseImage() noexcept;
 
 namespace {
@@ -57,6 +61,10 @@ std::string gBootRelativePath;
 bool gBootPathConfigurationReceived = false;
 PS2Runtime *gActiveRuntime = nullptr;
 bool gGsBackendAttached = false;
+bool gPrivateAotElfReady = false;
+bool gGuestExecutionStartAttempted = false;
+bool gGuestExecutionStarted = false;
+bool gGuestExecutionFinishReported = false;
 std::atomic<bool> gGsUnsupportedStateWarned{false};
 std::atomic<bool> gGsRenderTargetWarned{false};
 bool gGsSceneCaptureAttempted = false;
@@ -1493,7 +1501,7 @@ bool attachAndroidGsBackend() {
         gActiveRuntime->gs().setRasterBackend(std::move(backend));
         gGsBackendAttached = true;
         logMessage(ANDROID_LOG_INFO,
-            "Android GS Vulkan primitive backend attached (untextured bring-up stage)");
+            "Android GS CPU rasterizer + Vulkan frame presenter attached for first-boot diagnostics");
         return true;
     } catch (const std::exception &exception) {
         __android_log_print(
@@ -1504,6 +1512,53 @@ bool attachAndroidGsBackend() {
             "Could not attach Android GS backend: unknown exception");
     }
     return false;
+}
+
+bool tryStartAndroidGuestExecution(android_app *app) {
+    if (gGuestExecutionStarted || gGuestExecutionStartAttempted ||
+        gActiveRuntime == nullptr || !gPrivateAotElfReady ||
+        !gGsBackendAttached || !gRenderer.isReady()) {
+        return false;
+    }
+
+    // The EE worker is started only after the private ELF passed the AOT
+    // entry-point gate and the Android GS/CRTC-to-Vulkan presentation path
+    // is attached. Audio output is intentionally silent for this first-boot
+    // diagnostic; the IOP audio queue is bounded and drops stale samples.
+    gGuestExecutionStartAttempted = true;
+    std::array<char, 512> message{};
+    if (!gowRuntimeStartGuestExecutionAndroid(
+            gActiveRuntime, message.data(), message.size())) {
+        const char *detail = message[0] == '\0'
+            ? "O worker EE Android não iniciou. Consulte o Logcat GowAndroid."
+            : message.data();
+        reportRuntimeStatus(app, detail, true);
+        logMessage(ANDROID_LOG_ERROR, detail);
+        return false;
+    }
+
+    gGuestExecutionStarted = true;
+    reportRuntimeStatus(
+        app,
+        "Tentativa de boot AOT iniciada no Android. O primeiro teste é silencioso; acompanhe o Logcat GowAndroid para o estágio do jogo.",
+        false);
+    logMessage(
+        ANDROID_LOG_INFO,
+        "Android AOT guest worker started after private ELF and GS/Vulkan gates passed");
+    return true;
+}
+
+void reportAndroidGuestCompletion(android_app *app) {
+    if (!gGuestExecutionStarted || gGuestExecutionFinishReported ||
+        !gowRuntimeGuestExecutionFinishedAndroid(gActiveRuntime)) {
+        return;
+    }
+    gGuestExecutionFinishReported = true;
+    reportRuntimeStatus(
+        app,
+        "A execução AOT do guest foi encerrada. Consulte o Logcat GowAndroid para o último PC e o motivo; nenhuma cena real foi aprovada automaticamente.",
+        true);
+    logMessage(ANDROID_LOG_WARN, "Android AOT guest worker finished; inspect the last guest PC and subsystem diagnostics");
 }
 
 void detachAndroidGsBackend() {
@@ -1712,6 +1767,10 @@ extern "C" void android_main(android_app* app) {
     android_app_set_motion_event_filter(app, nullptr);
 
     logMessage(ANDROID_LOG_INFO, "Gow_android native shell started");
+    gPrivateAotElfReady = false;
+    gGuestExecutionStartAttempted = false;
+    gGuestExecutionStarted = false;
+    gGuestExecutionFinishReported = false;
 
     // Initialize the EE/IOP/VU core without Raylib. The experimental Android GS
     // primitive adapter is attached only after the GameActivity Vulkan surface is ready.
@@ -1740,6 +1799,7 @@ extern "C" void android_main(android_app* app) {
                 const bool elfReady = gowRuntimeLoadElfAndCheckAot(
                     runtime, bootPath.c_str(),
                     loadMessage.data(), loadMessage.size());
+                gPrivateAotElfReady = elfReady;
                 __android_log_print(
                     elfReady ? ANDROID_LOG_INFO : ANDROID_LOG_WARN,
                     kTag, "PS2Runtime ELF/AOT gate: %s",
@@ -1815,6 +1875,8 @@ extern "C" void android_main(android_app* app) {
 #if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
         if (gRenderer.isReady()) {
             if (runtime != nullptr) {
+                (void)tryStartAndroidGuestExecution(app);
+                reportAndroidGuestCompletion(app);
                 std::vector<uint8_t> framePixels;
                 uint32_t frameWidth = 0u;
                 uint32_t frameHeight = 0u;
