@@ -152,3 +152,23 @@ Há outro bloqueio: ps2_vu1_core.cpp implementa VU1Interpreter, enquanto o CMake
 - O runner Waffle usa sua própria integração NativeActivity/Raylib. O aplicativo atual usa AndroidX GameActivity; preservar a Activity e a interface FORGE existentes, adaptando a ponte de runtime em vez de substituir o launcher por esse runner.
 
 **Consequência:** não vamos importar ou compilar o alvo ps2_runtime integralmente como está. A próxima integração precisa de uma lista CMake própria para Android que inclua somente os serviços portáveis aprovados, exclua o grupo de intérpretes de diagnóstico e impeça fallback interpretado de EE/VU1/IOP no caminho do jogo.
+
+
+### Auditoria do CMake IOP na revisão de referência
+
+O alvo ps2_iop em ps2xIOP/CMakeLists.txt compila, entre outros, iop_emulator.cpp, core/iop_cpu.cpp, core/iop_kernel.cpp, core/iop_memory.cpp e serviços/imports para módulos IRX. Também acrescenta a saída AOT de iopn_gen.py em src/native quando ela existe; quando não existe, adiciona iop_native_none.cpp.
+
+Consequência para o produto final:
+
+- A presença de iopn_*.cpp não prova cobertura completa dos IRX necessários.
+- O alvo upstream mantém o núcleo de CPU IOP e caminho interpretado. Não podemos compilar o alvo inteiro e dizer que o jogo roda sem interpretação.
+- A build final precisa de uma variante nativa em que módulos IOP usados tenham registro AOT validado e a ausência de módulo compilado seja erro explícito, não fallback para iop_cpu.
+- Serviços de sistema como CDVD, IOMAN, heap, interrupt, timer, VBlank, SIF/RPC e libsd precisam ser preservados ou implementados nativamente; não são, por si só, interpretação do código de módulos do jogo.
+
+### Configuração upstream que não é a integração Android
+
+No commit Waffle de referência, ps2xRuntime cria ps2EntryRunner como SHARED em Android e liga Raylib, log e android. Isso é um runner NativeActivity com host Raylib, não a integração existente do FORGE/AndroidX GameActivity. A nossa aplicação manterá sua Activity e chamará uma API de runtime própria.
+
+O mesmo CMake inclui gs_gl.cpp/gs_hw_backend.cpp, ps2_audio_device.cpp e ps2_pad_rumble_win.cpp na lista do runtime geral. Esses elementos exigem seleção condicional/substituição no target Android. O backend gráfico não pode depender de gs_gl; a saída de áudio não pode depender da saída Raylib/miniaudio de desktop; e a vibração Windows deve ser substituída pelo adaptador Android.
+
+A biblioteca portátil de vídeo libmpeg2 é vendorizada no runtime e o CMake a usa por padrão, sem exigir FFmpeg. É um candidato de reaproveitamento para FMVs, condicionado à licença COPYING e à validação ARM64. Não é necessário adicionar FFmpeg ao APK nesta fase.
