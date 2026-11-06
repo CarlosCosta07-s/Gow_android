@@ -95,7 +95,7 @@ def validate_ps2_elf(path: Path) -> Ps2ElfInfo:
         if len(header) != elf32_header_size:
             raise ValueError("Could not read the complete ELF32 header.")
 
-        if header[0:4] != b"\\x7fELF":
+        if header[0:4] != b"\x7fELF":
             raise ValueError("Invalid ELF magic.")
         if header[4] != 1:
             raise ValueError("Unsupported ELF class; expected 32-bit ELF.")
