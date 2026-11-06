@@ -16,6 +16,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <mutex>
 #include <jni.h>
 
 class PS2Runtime;
@@ -34,14 +35,24 @@ void logMessage(int priority, const char* message) {
     __android_log_write(priority, kTag, message);
 }
 
+std::mutex gActivityReferenceMutex;
+JavaVM *gActivityVm = nullptr;
+jobject gActivityReference = nullptr;
+
 void reportRuntimeStatus(android_app *app, const char *message, bool failed) {
-    if (app == nullptr || app->activity == nullptr ||
-        app->activity->vm == nullptr || app->activity->clazz == nullptr ||
-        message == nullptr) {
+    if (app == nullptr || message == nullptr) {
         return;
     }
 
-    JavaVM *vm = app->activity->vm;
+    JavaVM *vm = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(gActivityReferenceMutex);
+        vm = gActivityVm;
+    }
+    if (vm == nullptr) {
+        return;
+    }
+
     JNIEnv *env = nullptr;
     bool attachedHere = false;
     const jint envResult = vm->GetEnv(
@@ -59,7 +70,25 @@ void reportRuntimeStatus(android_app *app, const char *message, bool failed) {
         return;
     }
 
-    jclass activityClass = env->GetObjectClass(app->activity->clazz);
+    jobject activity = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(gActivityReferenceMutex);
+        if (gActivityReference != nullptr) {
+            activity = env->NewLocalRef(gActivityReference);
+        }
+    }
+
+    if (activity == nullptr) {
+        if (env->ExceptionCheck() == JNI_TRUE) {
+            env->ExceptionClear();
+        }
+        if (attachedHere) {
+            vm->DetachCurrentThread();
+        }
+        return;
+    }
+
+    jclass activityClass = env->GetObjectClass(activity);
     jmethodID callback = activityClass == nullptr ? nullptr :
         env->GetMethodID(activityClass, "onNativeRuntimeStatus",
                          "(Ljava/lang/String;Z)V");
@@ -68,7 +97,7 @@ void reportRuntimeStatus(android_app *app, const char *message, bool failed) {
 
     if (callback != nullptr && javaMessage != nullptr) {
         env->CallVoidMethod(
-            app->activity->clazz, callback, javaMessage,
+            activity, callback, javaMessage,
             static_cast<jboolean>(failed ? JNI_TRUE : JNI_FALSE));
     }
 
@@ -85,6 +114,7 @@ void reportRuntimeStatus(android_app *app, const char *message, bool failed) {
     if (activityClass != nullptr) {
         env->DeleteLocalRef(activityClass);
     }
+    env->DeleteLocalRef(activity);
     if (attachedHere) {
         vm->DetachCurrentThread();
     }
@@ -892,6 +922,57 @@ void handleAppCommand(android_app* app, int32_t command) {
 }
 
 } // namespace
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_gowandroid_app_GowGameActivity_nativeSetActivityReference(
+    JNIEnv *env, jclass, jobject activity) noexcept {
+    if (env == nullptr || activity == nullptr) {
+        return;
+    }
+
+    JavaVM *vm = nullptr;
+    if (env->GetJavaVM(&vm) != JNI_OK || vm == nullptr) {
+        return;
+    }
+
+    jobject newReference = env->NewGlobalRef(activity);
+    if (newReference == nullptr) {
+        if (env->ExceptionCheck() == JNI_TRUE) {
+            env->ExceptionClear();
+        }
+        return;
+    }
+
+    jobject previousReference = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(gActivityReferenceMutex);
+        previousReference = gActivityReference;
+        gActivityReference = newReference;
+        gActivityVm = vm;
+    }
+    if (previousReference != nullptr) {
+        env->DeleteGlobalRef(previousReference);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_gowandroid_app_GowGameActivity_nativeClearActivityReference(
+    JNIEnv *env, jclass) noexcept {
+    if (env == nullptr) {
+        return;
+    }
+
+    jobject previousReference = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(gActivityReferenceMutex);
+        previousReference = gActivityReference;
+        gActivityReference = nullptr;
+        gActivityVm = nullptr;
+    }
+    if (previousReference != nullptr) {
+        env->DeleteGlobalRef(previousReference);
+    }
+}
 
 extern "C" void android_main(android_app* app) {
     if (app == nullptr) {
