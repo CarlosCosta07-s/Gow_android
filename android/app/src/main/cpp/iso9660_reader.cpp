@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <sys/stat.h>
@@ -68,10 +69,33 @@ bool decodeDirectoryRecord(const uint8_t *record, size_t recordLength,
     return true;
 }
 
-bool validExtent(uint32_t extent, uint32_t size, uint64_t imageSize) noexcept {
-    const uint64_t start = static_cast<uint64_t>(extent) * kIsoSectorSize;
+bool validExtent(uint32_t baseLsn, uint32_t extent, uint32_t size,
+                 uint32_t volumeSectors, uint64_t imageSize) noexcept {
+    const uint64_t relativeStart = extent;
+    const uint64_t sectors =
+        (static_cast<uint64_t>(size) + kIsoSectorSize - 1u) / kIsoSectorSize;
+    if (relativeStart > volumeSectors ||
+        sectors > static_cast<uint64_t>(volumeSectors) - relativeStart) {
+        return false;
+    }
+    const uint64_t absoluteLsn = static_cast<uint64_t>(baseLsn) + relativeStart;
+    if (absoluteLsn > std::numeric_limits<uint32_t>::max() ||
+        absoluteLsn > std::numeric_limits<uint64_t>::max() / kIsoSectorSize) {
+        return false;
+    }
+    const uint64_t start = absoluteLsn * kIsoSectorSize;
     if (start > imageSize) return false;
     return static_cast<uint64_t>(size) <= imageSize - start;
+}
+
+bool safeIsoIdentifier(std::string_view value) noexcept {
+    if (value.empty()) return false;
+    for (const unsigned char ch : value) {
+        if (ch < 0x20u || ch == 0x7fu || ch == '/' || ch == '\\' || ch == ':') {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace
@@ -83,7 +107,11 @@ Iso9660Reader::~Iso9660Reader() {
 Iso9660Reader::Iso9660Reader(Iso9660Reader &&other) noexcept
     : descriptor_(std::exchange(other.descriptor_, -1)),
       imageSize_(std::exchange(other.imageSize_, 0u)),
-      root_(std::exchange(other.root_, Directory{})) {
+      sectorCount_(std::exchange(other.sectorCount_, 0u)),
+      layer1Start_(std::exchange(other.layer1Start_, 0u)),
+      root_(std::exchange(other.root_, Directory{})),
+      volumes_(std::move(other.volumes_)) {
+    other.volumes_.clear();
 }
 
 Iso9660Reader &Iso9660Reader::operator=(Iso9660Reader &&other) noexcept {
@@ -91,7 +119,11 @@ Iso9660Reader &Iso9660Reader::operator=(Iso9660Reader &&other) noexcept {
         close();
         descriptor_ = std::exchange(other.descriptor_, -1);
         imageSize_ = std::exchange(other.imageSize_, 0u);
+        sectorCount_ = std::exchange(other.sectorCount_, 0u);
+        layer1Start_ = std::exchange(other.layer1Start_, 0u);
         root_ = std::exchange(other.root_, Directory{});
+        volumes_ = std::move(other.volumes_);
+        other.volumes_.clear();
     }
     return *this;
 }
@@ -106,7 +138,10 @@ void Iso9660Reader::close() noexcept {
         descriptor_ = -1;
     }
     imageSize_ = 0u;
+    sectorCount_ = 0u;
+    layer1Start_ = 0u;
     root_ = {};
+    volumes_.clear();
 }
 
 bool Iso9660Reader::openDescriptor(int descriptor, std::string *error) {
@@ -140,6 +175,13 @@ bool Iso9660Reader::openDescriptor(int descriptor, std::string *error) {
 
     descriptor_ = copy;
     imageSize_ = size;
+    const uint64_t sectors64 = size / kIsoSectorSize;
+    if (sectors64 > std::numeric_limits<uint32_t>::max()) {
+        close();
+        setError(error, "The ISO image exceeds the supported 32-bit PS2 LSN range.");
+        return false;
+    }
+    sectorCount_ = static_cast<uint32_t>(sectors64);
 
     std::array<uint8_t, kIsoSectorSize> pvd{};
     if (!readAt(kPrimaryVolumeDescriptorSector * kIsoSectorSize,
@@ -157,27 +199,93 @@ bool Iso9660Reader::openDescriptor(int descriptor, std::string *error) {
         return false;
     }
 
-    uint32_t rootExtent = 0u;
-    uint32_t rootSize = 0u;
-    uint8_t rootFlags = 0u;
-    const uint8_t rootRecordLength = pvd[156u];
-    if (rootRecordLength < kDirectoryRecordMinimum ||
-        static_cast<size_t>(156u + rootRecordLength) > pvd.size() ||
-        !decodeDirectoryRecord(pvd.data() + 156u, rootRecordLength,
-                               rootExtent, rootSize, rootFlags, error) ||
-        (rootFlags & kDirectoryFlag) == 0u ||
-        (rootFlags & kMultiExtentFlag) != 0u ||
-        rootSize == 0u || rootSize > kMaxDirectorySize ||
-        !validExtent(rootExtent, rootSize, imageSize_)) {
+    const uint32_t layer0Le = readU32Le(pvd.data() + 80u);
+    const uint32_t layer0Be = readU32Be(pvd.data() + 84u);
+    if (layer0Le != layer0Be ||
+        layer0Le <= kPrimaryVolumeDescriptorSector ||
+        layer0Le > sectorCount_) {
         close();
-        if (error && error->empty()) {
-            *error = "The ISO9660 root directory record is invalid.";
-        }
+        setError(error, "The ISO9660 volume-space size is invalid or inconsistent.");
         return false;
     }
 
-    root_.byteOffset = static_cast<uint64_t>(rootExtent) * kIsoSectorSize;
-    root_.size = rootSize;
+    auto decodeRoot = [&](const std::array<uint8_t, kIsoSectorSize> &descriptor,
+                          uint32_t baseLsn, uint32_t volumeSectors,
+                          Directory &root) -> bool {
+        uint32_t rootExtent = 0u;
+        uint32_t rootSize = 0u;
+        uint8_t rootFlags = 0u;
+        const uint8_t rootRecordLength = descriptor[156u];
+        if (rootRecordLength < kDirectoryRecordMinimum ||
+            static_cast<size_t>(156u + rootRecordLength) > descriptor.size() ||
+            !decodeDirectoryRecord(descriptor.data() + 156u, rootRecordLength,
+                                   rootExtent, rootSize, rootFlags, error) ||
+            (rootFlags & kDirectoryFlag) == 0u ||
+            (rootFlags & kMultiExtentFlag) != 0u ||
+            rootSize == 0u || rootSize > kMaxDirectorySize ||
+            !validExtent(baseLsn, rootExtent, rootSize,
+                         volumeSectors, imageSize_)) {
+            if (error && error->empty()) {
+                *error = "The ISO9660 root directory record is invalid.";
+            }
+            return false;
+        }
+        const uint64_t absoluteLsn = static_cast<uint64_t>(baseLsn) + rootExtent;
+        root.byteOffset = absoluteLsn * kIsoSectorSize;
+        root.size = rootSize;
+        root.baseLsn = baseLsn;
+        root.volumeSectors = volumeSectors;
+        return true;
+    };
+
+    Volume layer0{};
+    layer0.baseLsn = 0u;
+    layer0.sectorCount = layer0Le;
+    if (!decodeRoot(pvd, layer0.baseLsn, layer0.sectorCount, layer0.root)) {
+        close();
+        return false;
+    }
+    volumes_.push_back(layer0);
+    root_ = layer0.root;
+
+    // The runtime's DVD model checks for a second PVD at physical LSN=layer0
+    // sectors. Layer-1 extents are relative to layer0Sectors - 16.
+    std::array<uint8_t, kIsoSectorSize> layer1Descriptor{};
+    const uint64_t layer1PvdOffset =
+        static_cast<uint64_t>(layer0Le) * kIsoSectorSize;
+    if (layer0Le < sectorCount_ &&
+        readAt(layer1PvdOffset, layer1Descriptor.data(), layer1Descriptor.size()) &&
+        layer1Descriptor[0] == 1u &&
+        std::memcmp(layer1Descriptor.data() + 1u, "CD001", 5u) == 0 &&
+        layer1Descriptor[6] == 1u) {
+        if (layer0Le < kPrimaryVolumeDescriptorSector) {
+            close();
+            setError(error, "The dual-layer ISO reports an invalid layer boundary.");
+            return false;
+        }
+        const uint32_t layer1Le = readU32Le(layer1Descriptor.data() + 80u);
+        const uint32_t layer1Be = readU32Be(layer1Descriptor.data() + 84u);
+        const uint32_t layer1Base =
+            layer0Le - static_cast<uint32_t>(kPrimaryVolumeDescriptorSector);
+        if (layer1Le != layer1Be ||
+            layer1Le <= kPrimaryVolumeDescriptorSector ||
+            static_cast<uint64_t>(layer1Base) + layer1Le > sectorCount_) {
+            close();
+            setError(error, "The second ISO9660 volume has an invalid volume-space size.");
+            return false;
+        }
+        Volume layer1{};
+        layer1.baseLsn = layer1Base;
+        layer1.sectorCount = layer1Le;
+        if (!decodeRoot(layer1Descriptor, layer1.baseLsn,
+                        layer1.sectorCount, layer1.root)) {
+            close();
+            return false;
+        }
+        layer1Start_ = layer1Base;
+        volumes_.push_back(layer1);
+    }
+
     return true;
 }
 
@@ -278,16 +386,21 @@ bool Iso9660Reader::readDirectoryEntries(
         const bool special = identifierLength == 1u &&
                              (recordBuffer[33u] == 0u || recordBuffer[33u] == 1u);
         if (!special) {
-            if (!validExtent(extent, size, imageSize_)) {
-                setError(error, "An ISO9660 entry points outside the image.");
+            if (!validExtent(directory.baseLsn, extent, size,
+                             directory.volumeSectors, imageSize_)) {
+                setError(error, "An ISO9660 entry points outside its volume or image.");
                 return false;
             }
 
             const std::string_view identifier(
                 reinterpret_cast<const char *>(recordBuffer.data() + 33u),
                 identifierLength);
+            if (!safeIsoIdentifier(identifier)) {
+                setError(error, "An ISO9660 entry contains an unsafe identifier.");
+                return false;
+            }
             const std::string name = normalizeIdentifier(identifier);
-            if (name.empty()) {
+            if (name.empty() || name == "." || name == "..") {
                 setError(error, "An ISO9660 entry has an empty normalized name.");
                 return false;
             }
@@ -321,7 +434,14 @@ bool Iso9660Reader::readDirectoryEntries(
 
                 IsoDirectoryEntry entry;
                 entry.name = name;
-                entry.file.byteOffset = static_cast<uint64_t>(extent) * kIsoSectorSize;
+                const uint64_t absoluteLsn =
+                    static_cast<uint64_t>(directory.baseLsn) + extent;
+                if (absoluteLsn > std::numeric_limits<uint32_t>::max()) {
+                    setError(error, "An ISO9660 entry exceeds the supported 32-bit LSN range.");
+                    return false;
+                }
+                entry.file.lsn = static_cast<uint32_t>(absoluteLsn);
+                entry.file.byteOffset = absoluteLsn * kIsoSectorSize;
                 entry.file.size = size;
                 entry.isDirectory = isDirectory;
                 entry.multiExtent = multiExtent;
@@ -485,6 +605,122 @@ bool Iso9660Reader::lookupFile(std::string_view path, IsoFile &file,
 
     setError(error, "The ISO path does not identify a file.");
     return false;
+}
+
+bool Iso9660Reader::scanDiscLayout(IsoDiscLayout &layout,
+                                   std::string *error) const {
+    layout = {};
+    if (descriptor_ < 0 || volumes_.empty() || sectorCount_ == 0u) {
+        setError(error, "No supported ISO9660 volume is open.");
+        return false;
+    }
+
+    constexpr size_t kMaxFiles = 65536u;
+    constexpr unsigned int kMaxDepth = 32u;
+    std::unordered_set<std::string> paths;
+    std::unordered_set<std::string> visitedDirectories;
+    std::vector<IsoDiscFile> files;
+
+    auto walkDirectory = [&](auto &&self, const Directory &directory,
+                             const std::string &parent,
+                             unsigned int depth) -> bool {
+        if (depth > kMaxDepth) {
+            setError(error, "The ISO9660 directory tree exceeds the supported depth.");
+            return false;
+        }
+        const std::string directoryKey =
+            std::to_string(directory.baseLsn) + ":" +
+            std::to_string(directory.byteOffset) + ":" +
+            std::to_string(directory.size);
+        if (!visitedDirectories.emplace(directoryKey).second) {
+            setError(error, "The ISO9660 directory tree contains a cycle or duplicate directory extent.");
+            return false;
+        }
+
+        std::vector<IsoDirectoryEntry> entries;
+        if (!readDirectoryEntries(directory, entries, error)) return false;
+        for (const auto &entry : entries) {
+            if (entry.multiExtent) {
+                setError(error, "Multi-extent ISO9660 files/directories are not supported by the disc-layout installer.");
+                return false;
+            }
+            if (!safeIsoIdentifier(entry.name)) {
+                setError(error, "The ISO9660 directory contains an unsafe normalized name.");
+                return false;
+            }
+            const std::string path = parent.empty()
+                ? entry.name
+                : parent + "/" + entry.name;
+            if (path.size() > 1024u) {
+                setError(error, "An ISO9660 path exceeds the supported path length.");
+                return false;
+            }
+
+            if (entry.isDirectory) {
+                Directory child{};
+                child.byteOffset = entry.file.byteOffset;
+                child.size = entry.file.size;
+                child.baseLsn = directory.baseLsn;
+                child.volumeSectors = directory.volumeSectors;
+                if (!self(self, child, path, depth + 1u)) return false;
+                continue;
+            }
+
+            if (files.size() >= kMaxFiles ||
+                entry.file.size > std::numeric_limits<uint32_t>::max()) {
+                setError(error, "The ISO9660 file count or individual file size exceeds the supported limit.");
+                return false;
+            }
+            std::string key = path;
+            for (char &ch : key) {
+                ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            }
+            if (!paths.emplace(key).second) {
+                setError(error, "The ISO9660 contains duplicate paths across directories or layers.");
+                return false;
+            }
+            files.push_back({path, entry.file.lsn,
+                             static_cast<uint32_t>(entry.file.size)});
+        }
+        return true;
+    };
+
+    for (const Volume &volume : volumes_) {
+        if (!walkDirectory(walkDirectory, volume.root, {}, 0u)) return false;
+    }
+
+    std::sort(files.begin(), files.end(),
+        [](const IsoDiscFile &left, const IsoDiscFile &right) {
+            return left.lsn < right.lsn;
+        });
+    uint64_t previousEnd = 0u;
+    for (const IsoDiscFile &file : files) {
+        const uint64_t sectors =
+            (static_cast<uint64_t>(file.size) + kIsoSectorSize - 1u) / kIsoSectorSize;
+        if (sectors != 0u && file.lsn < previousEnd) {
+            setError(error, "The ISO9660 file extents overlap; a deterministic disc layout cannot be generated.");
+            return false;
+        }
+        previousEnd = std::max(previousEnd, static_cast<uint64_t>(file.lsn) + sectors);
+    }
+
+    layout.sectorCount = sectorCount_;
+    layout.layer1Start = layer1Start_;
+    layout.files.swap(files);
+    return true;
+}
+
+bool Iso9660Reader::readSectors(uint32_t lsn, uint32_t count,
+                                void *destination) const {
+    if (count == 0u) return true;
+    if (destination == nullptr ||
+        static_cast<uint64_t>(lsn) + count > sectorCount_) {
+        return false;
+    }
+    const uint64_t offset = static_cast<uint64_t>(lsn) * kIsoSectorSize;
+    const uint64_t byteCount = static_cast<uint64_t>(count) * kIsoSectorSize;
+    if (byteCount > std::numeric_limits<size_t>::max()) return false;
+    return readAt(offset, destination, static_cast<size_t>(byteCount));
 }
 
 bool Iso9660Reader::readFile(const IsoFile &file, uint64_t offset,
