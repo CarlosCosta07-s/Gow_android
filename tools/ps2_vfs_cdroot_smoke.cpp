@@ -44,6 +44,25 @@ extern "C" uint64_t gowAndroidCdRootOpenFile(
     return file.handle;
 }
 
+extern "C" bool gowAndroidCdRootStat(
+    const char *path, bool *isDirectory, uint64_t *fileSize) noexcept {
+    if (isDirectory != nullptr) *isDirectory = false;
+    if (fileSize != nullptr) *fileSize = 0u;
+    if (path == nullptr || isDirectory == nullptr || fileSize == nullptr) return false;
+
+    gow::disc::CdRootFile file{};
+    if (g_cdRoot.openFile(path, file, nullptr)) {
+        *fileSize = file.size;
+        g_cdRoot.closeFile(file.handle);
+        return true;
+    }
+
+    std::vector<gow::disc::CdRootEntry> entries;
+    if (!g_cdRoot.listDirectory(path, entries, nullptr)) return false;
+    *isDirectory = true;
+    return true;
+}
+
 extern "C" bool gowAndroidCdRootReadFile(
     uint64_t handle, uint64_t offset, void *destination,
     size_t requested, size_t *bytesRead) noexcept {
@@ -132,6 +151,23 @@ int main() {
         g_cdRoot.close();
         std::filesystem::remove_all(root);
         return fail("PS2Vfs stat did not resolve the cdRoot file metadata");
+    }
+
+    PS2VfsStat directoryStat{};
+    if (!vfs.stat("cdrom0:/DATA", mounts, rom, directoryStat) ||
+        !directoryStat.directory || !directoryStat.readOnly || directoryStat.size != 0u) {
+        vfs.close(descriptor);
+        g_cdRoot.close();
+        std::filesystem::remove_all(root);
+        return fail("PS2Vfs stat did not recognize a private cdRoot directory");
+    }
+
+    PS2VfsStat missingStat{};
+    if (vfs.stat("cdrom0:/DATA/MISSING.BIN", mounts, rom, missingStat)) {
+        vfs.close(descriptor);
+        g_cdRoot.close();
+        std::filesystem::remove_all(root);
+        return fail("PS2Vfs stat accepted a missing private cdRoot path");
     }
 
     if (vfs.open("cdrom0:/DATA/BOOT.BIN;1", PS2_FIO_O_WRONLY, mounts, rom) >= 0) {
