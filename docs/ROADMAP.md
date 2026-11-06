@@ -23,6 +23,7 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - [x] Adicionar tela inicial e seletor SAF para a imagem do usuário.
 - [x] Solicitar permissão persistente de leitura e validar o descritor primário ISO9660 do setor 16.
 - [x] Implementar no launcher a leitura de SYSTEM.CNF e a identificação inicial de SCUS_973.99/SCES_531.33.
+- [x] Implementar leitor nativo ISO9660 com busca de arquivos por caminho e leitura aleatória por descritor; teste de imagem sintética na CI. A ponte do leitor para o VFS IOP permanece pendente.
 - [x] Compilar o parser SYSTEM.CNF pela CI (run `42142814087`).
 - [ ] Validar essa leitura com imagens de teste do usuário em aparelho Android.
 - [ ] Diagnosticar permissão, formato e região.
