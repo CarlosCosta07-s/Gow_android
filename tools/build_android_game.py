@@ -416,13 +416,9 @@ def main() -> int:
         default=None,
         help=argparse.SUPPRESS,
     )
-    build_mode = parser.add_mutually_exclusive_group()
-    build_mode.add_argument(
-        "--capture-bootstrap",
-        action="store_true",
-        help="explicitly build the first strict AOT capture APK (the default when no capture set is supplied)",
-    )
-    build_mode.add_argument(
+    # Private ADB synchronization supplies this archive automatically. The
+    # hidden option remains only for internal tests and offline maintainer use.
+    parser.add_argument(
         "--aot-captures",
         help=argparse.SUPPRESS,
     )
