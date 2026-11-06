@@ -509,6 +509,18 @@ def main() -> int:
         "strict VU1 runtime dispatch without interpreter fallback",
     )
 
+    # Empty shell-only symbols keep the Android shell linkable before the private
+    # game ELF has been recompiled. Disable this source when generated game code is linked.
+    placeholder_source = recompiler_source / "ps2xRuntime/src/lib/android_recompiled_table_placeholder.cpp"
+    placeholder_source.write_text(
+        '#include "ps2_runtime.h"\n\n'
+        'extern const uint32_t g_ps2RecompiledFunctionTableBase = 0u;\n'
+        'extern const uint32_t g_ps2RecompiledFunctionTableEnd = 0u;\n'
+        'extern const uint32_t g_ps2RecompiledFunctionTableSlotCount = 0u;\n'
+        'PS2Runtime::RecompiledFunction g_ps2RecompiledFunctionTable[1] = {};\n',
+        encoding="utf-8",
+    )
+
     vu_cmake = recompiler_source / "ps2xRuntime/CMakeLists.txt"
     replace_exactly_once(
         vu_cmake,
