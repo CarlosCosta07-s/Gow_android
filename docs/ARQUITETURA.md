@@ -33,18 +33,18 @@ O código executável inicial do projeto está em:
 - `android/app/src/main/res/drawable-nodpi/ic_launcher_foreground.webp`: arte original do ícone do projeto.
 - `android/app/src/main/java/org/gowandroid/app/GowGameActivity.java`: Activity baseada em AndroidX GameActivity.
 - `android/app/src/main/cpp/main.cpp`: ciclo nativo GameActivity, dispatch de eventos de entrada e construção/destruição controlada do runtime.
-- `android/app/src/main/cpp/android_pad_bridge.cpp`: conversão atômica de eventos Android em estado de controle DualShock 2.
+- `android/app/src/main/cpp/android_pad_bridge.cpp`: conversão atômica de buffers GameActivity em estado de controle DualShock 2.
 - `.github/workflows/android-shell.yml`: build de APK Debug ARM64.
 
-O código nativo inicial em `main.cpp` ainda contém um bring-up Vulkan de clear/present. Embora compile na CI, o mantenedor observou que iniciar esse teste separado fecha o aplicativo no aparelho. Por decisão de escopo, o botão foi removido; esse teste não será tratado como critério de progresso nem como prova de compatibilidade gráfica. A atividade nativa foi ligada ao construtor/destrutor do PS2Runtime para um smoke controlado. No perfil Android, o destrutor não consulta o estado do dispositivo de áudio Raylib, pois GameActivity ainda não inicializou áudio desktop. initialize(), loadELF() e run() continuam bloqueados até existirem adaptadores Android de gráficos/áudio/VFS e código estático privado do jogo. A validação Vulkan acontecerá por meio do GS e de frames reais do jogo.
+O renderer Vulkan de clear/present foi mantido apenas como diagnóstico opcional e agora fica desativado por padrão (`GOW_ANDROID_ENABLE_VULKAN_SMOKE=OFF`). Ele não é o GS do PS2 e não será usado como prova de compatibilidade. O construtor/destrutor de `PS2Runtime` está ligado ao loop nativo GameActivity como teste de ciclo de vida; `initialize()`, `loadELF()` e `run()` continuam bloqueados até os adaptadores Android de GS/apresentação, áudio e VFS estarem prontos e existir C++ gerado a partir do ELF privado. A auditoria do backend gráfico está em [GS/Vulkan Android](GS_VULKAN_ANDROID.md).
 
-A interface FORGE e o seletor SAF/ISO9660 estão implementados. O parser de `SYSTEM.CNF` e a identificação inicial de `SCUS_973.99`/`SCES_531.33` foram compilados com sucesso pela CI no run `42142814087`; ainda aguardam validação com imagens de teste em aparelho. Não há frontend GS, código recompilado do jogo ou runtime de God of War integrado.
+A interface FORGE e o seletor SAF/ISO9660 estão implementados. O parser de `SYSTEM.CNF` e a identificação inicial de `SCUS_973.99`/`SCES_531.33` foram compilados pela CI; ainda aguardam validação com imagens de teste em aparelho. O runtime estático Waffle/KIexster agora é compilado e ligado ao alvo `android-game`; o loop GameActivity cria/destrói `PS2Runtime`, sem iniciar o runtime nem executar instruções do jogo. Não há ELF recompilado, VFS ligado ao disco, GS Vulkan Android ou gameplay.
 
 ## Camadas futuras do port
 
 ### Entrada física e estado virtual de DualShock 2
 
-O shell recebe eventos por android_app::onInputEvent. A ponte android_pad_bridge.cpp converte botões, eixos e gatilhos dos controles Android para o pacote analógico ativo-baixo consumido por PSPadBackend. O perfil inicial implementa porta 0/slot 0, deadzone/sensibilidade/inversão por configuração e uma API para o overlay touch alimentar o mesmo estado. Ao perder foco ou pausar, o estado é limpo para evitar botões presos.
+O shell consome `android_input_buffer` pelos helpers de GameActivity (`android_app_swap_input_buffers`, `android_app_clear_key_events` e `android_app_clear_motion_events`), não por `android_app::onInputEvent`. `GameActivityKeyEvent` e `GameActivityMotionEvent` são convertidos pela `android_pad_bridge.cpp` para o pacote analógico ativo-baixo consumido por `PSPadBackend`. O perfil inicial implementa porta 0/slot 0, deadzone/sensibilidade/inversão por configuração e uma API para o overlay touch alimentar o mesmo estado. Ao perder foco ou pausar, o estado é limpo para evitar botões presos. A CI compila esta integração; ainda falta validação com gamepads físicos reais.
 
 **Limite desta etapa:** a ponte de entrada está ligada ao backend Android, mas ainda não existe camada visual de touch nem página de configuração dentro do menu de God of War. A API de configuração existe para a futura página de opções; não há UI no FORGE para remapeamento.
 
@@ -186,14 +186,16 @@ Os diretórios de runtime/recompilação serão criados quando houver implementa
 
 ## Pipeline executável de geração host
 
-O script tools/build_recompiler_host.py prepara o PS2Recomp na revisão fixada pelo KIexster, aplica o patch-base do runtime e compila somente a ferramenta host ps2_recomp. O ELF e os arquivos C++ produzidos permanecem em uma pasta privada fora do repositório. O Android NDK será usado em uma etapa separada para compilar o código gerado e o runtime adaptado.
+O script `tools/build_recompiler_host.py` prepara o PS2Recomp na revisão fixada pelo KIexster, aplica os patches de runtime e compila a ferramenta host `ps2_recomp`. Quando o usuário fornecer seu próprio ELF, a saída C++ pode ser exportada para `android/app/build/gow-generated-game`, diretório ignorado pelo Git. O CMake Android detecta recursivamente as fontes geradas e as adiciona a `android-game`, substituindo a tabela vazia de shell quando os arquivos de registro completos estiverem presentes. A geração e a compilação efetivas ainda não foram executadas com o ELF privado do usuário.
 
-O procedimento, dependências, versões fixadas e a triagem dos patches estão documentados em [PIPELINE_RECOMPILADOR.md](PIPELINE_RECOMPILADOR.md). A seleção lógica dos módulos do runtime está em [BASE_KIEXTER.md](BASE_KIEXTER.md). A execução 42150329023 compilou os três alvos host com as verificações de fontes/defines. A execução 42152175783 compilou o runtime Waffle estático para arm64-v8a com NDK 30.0.16248370/API 28 e também produziu o APK Debug FORGE. O runner NativeActivity upstream foi excluído. O runtime ainda não está ligado ao alvo android-game nem à GowGameActivity; isso será feito em etapa própria, juntamente com a ponte JNI e o VFS do disco.
+O procedimento, dependências, versões fixadas e a triagem dos patches estão documentados em [PIPELINE_RECOMPILADOR.md](PIPELINE_RECOMPILADOR.md). A seleção lógica dos módulos do runtime está em [BASE_KIEXTER.md](BASE_KIEXTER.md), e o contrato GS está em [GS/Vulkan Android](GS_VULKAN_ANDROID.md). As execuções Android `42159359100` e `42159363088` compilaram o alvo `android-game` com o runtime Waffle estático ligado; a execução host `42159359104` aprovou a compilação das ferramentas. O loop GameActivity constrói/destrói o objeto `PS2Runtime`, mas não chama `initialize()`, `loadELF()` ou `run()`. O VFS do disco, o GS/Vulkan e a compilação do C++ gerado pelo ELF privado continuam pendentes.
 
 
 ### Revisão Waffle fixada para integração
 
-A seleção do runtime usa como referência o commit Waffle 49ca62c1d20b4659c61df6286c54e86edf411012, apontado pela documentação do KIexter para o patch-base de runtime. Não devemos misturar fontes de snapshots posteriores da branch runtime sem revalidar os contratos.
+A seleção do runtime usa como referência o commit Waffle `49ca62c1d20b4659c61df6286c54e86edf411012`, apontado pela documentação do KIexter para o patch-base de runtime. Não devemos misturar fontes de snapshots posteriores da branch runtime sem revalidar os contratos.
+
+O alvo Android próprio já inclui e liga a biblioteca estática `ps2_runtime` e exclui o runner NativeActivity/Raylib. O loop GameActivity faz apenas construção/destruição do objeto. O alvo ainda usa o frontend GS Waffle cujo backend padrão é OpenGL; a camada de apresentação desktop depende de Raylib. O Android precisa de um backend `GSRasterBackend` Vulkan e presenter próprios antes de chamar `PS2Runtime::initialize()`.
 
 A revisão também deixa explícitos dois requisitos adicionais: ps2xIOP combina módulos IRX gerados por AOT com um núcleo CPU IOP interpretado, e o runner Android upstream ainda depende da organização Raylib/NativeActivity. A integração FORGE vai precisar de um alvo Android próprio, sem o runner de desktop e sem os fallbacks de CPU.
 
