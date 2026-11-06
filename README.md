@@ -40,23 +40,25 @@ O launcher mantém as ações de seleção de disco e início do jogo. A ação 
 
 A atividade nativa usa AndroidX GameActivity. O código Vulkan atual é apenas um bring-up experimental de surface/swapchain e não é o renderizador Graphics Synthesizer do PS2. Como o teste isolado encerrou o aplicativo no aparelho do mantenedor, ele foi removido do launcher e não será usado como critério de progresso. A validação gráfica será feita com o backend GS integrado e a primeira imagem real do jogo. Ainda não há execução do código de God of War nem APK jogável.
 
-## Referências técnicas
+## Referências de engenharia
 
-1. [God of War: Recomp — CodeAbhi826](https://github.com/CodeAbhi826/God-Of-War-Recomp): referência para Android ARM64, SAF, ISO9660 e NDK. O projeto original informa que seu renderer GS Android ainda não apresenta frames e que não há release jogável.
-2. [god-of-war-recomp — KIexster](https://github.com/KIexster/god-of-war-recomp): mapa de funções, configuração e progresso desktop de recompilação/gameplay.
-3. [God-Of-War-Native-Port — Waffle565](https://github.com/Waffle565/God-Of-War-Native-Port): referência para subsistemas GS/OpenGL, VU1, IOP, DMA, áudio e saves no PC.
-4. [PS2Recomp — ran-j](https://github.com/ran-j/PS2Recomp): base de recompilação estática usada nas referências.
-5. [PCSX2](https://github.com/PCSX2/pcsx2): comparação comportamental do hardware PS2, não runtime final.
+1. [Black para Android — RanggaCasper](https://github.com/RanggaCasper/Black-Android): referência de arquitetura para recompilação estática x86 → C++/ARM64, renderer Vulkan, camada Android, controles touch, giroscópio e gamepad.
+2. [Budokai Tenkaichi 3 para Android — Dragon Rage](https://github.com/dfdx047/Tenkaichi3DecompAndroid): referência PS2/ARM64 para separar launcher e engine, validar a imagem do usuário, organizar dados locais, portar o motor gráfico e testar em GPUs móveis Snapdragon e Mali.
+3. [God of War: Recomp — CodeAbhi826](https://github.com/CodeAbhi826/God-Of-War-Recomp): leitura de documentação sobre fluxo Android/ARM64, boot da imagem e os subsistemas específicos do PS2.
+4. [god-of-war-recomp — KIexster](https://github.com/KIexster/god-of-war-recomp) e [God-Of-War-Native-Port — Waffle565](https://github.com/Waffle565/God-Of-War-Native-Port): material de estudo sobre comportamento do jogo, GS, VU1, IOP, DMA, áudio e saves no desktop.
+5. [PS2Recomp](https://github.com/ran-j/PS2Recomp) e [PCSX2](https://github.com/PCSX2/pcsx2): documentação e comportamento de referência para pesquisa do hardware; não serão usados como runtime ou fonte de código.
 
-A base CodeAbhi está fixada como submódulo em `third_party/gow-recomp-android`, commit `ea5f61bf61f3faf972a816cf9ba2309b0f9876ef`, sob GPL-3.0. Ela ainda não está ligada ao build do FORGE. KIexster, Waffle565, PS2Recomp e PCSX2 continuam como referências técnicas; qualquer código integrado deverá preservar autoria, licença e modificações em [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+**Política de implementação:** esses projetos são referências de engenharia, não dependências. Não vamos copiar, importar ou vincular código de seus launchers, recompiladores, runtimes, renderizadores, intérpretes, shaders ou hooks. O código do FORGE, do recompilador MIPS R5900, do runtime de serviços PS2 e do backend GS/Vulkan será desenvolvido neste repositório. Cada comportamento será implementado e validado por testes próprios com uma imagem fornecida pelo usuário.
+
+
 
 ## Roadmap
 
-1. Integrar o runtime de recompilação estática e os subsistemas PS2 para Android ARM64, preservando o FORGE.
-2. Completar a identificação da imagem e da revisão do jogo por SYSTEM.CNF.
-3. Integrar o código recompilado ao runtime e estabelecer o fluxo de boot.
-4. Desenvolver o backend GS/Vulkan Android e apresentar a primeira imagem real do jogo.
-5. Substituir qualquer execução interpretada de VU1 por geração/compilação antecipada de microprogramas nativos.
+1. Concluir a identificação da imagem e da revisão do jogo por SYSTEM.CNF.
+2. Especificar e implementar nosso próprio recompilador estático MIPS R5900 → C++/ARM64.
+3. Desenvolver o runtime nativo próprio para EE, VU0/VU1, IOP, DMA, SIF, VIF e GIF, sem caminho de interpretação do jogo.
+4. Desenvolver o frontend GS e o backend Vulkan próprios para Android.
+5. Chegar ao boot e à primeira imagem real, com diagnóstico por etapa.
 6. Completar controles, áudio, FMVs, saves, validar gameplay e otimizar para GPUs móveis.
 
 Veja o [roadmap detalhado](docs/ROADMAP.md).
