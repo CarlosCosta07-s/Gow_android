@@ -145,10 +145,26 @@ def main() -> int:
         "runtime->loadELF(candidate.string())",
         "runtime->cpu().pc",
         "runtime->hasFunction(entryPoint)",
-        "std::filesystem::weakly_canonical",
+        "gow::disc::resolvePrivateBootElfPath",
         "guest execution ainda bloqueada",
     ):
         require(required in load_body, f"Private ELF/AOT loader gate is missing: {required}")
+    private_path_source = project_root / "android/app/src/main/cpp/private_boot_path.cpp"
+    private_path_test = project_root / "android/app/src/test/cpp/private_boot_path_test.cpp"
+    require(
+        private_path_source.is_file() and private_path_test.is_file(),
+        "Private BOOT2 path resolver or its host test is missing.",
+    )
+    private_path_code = private_path_source.read_text(encoding="utf-8")
+    for required in (
+        "input.front() == '/'",
+        "component == \"..\"",
+        "isStrictChildPath",
+        "std::filesystem::is_regular_file(candidate",
+        "weakly_canonical",
+    ):
+        require(required in private_path_code, f"Private BOOT2 path safety rule is missing: {required}")
+
     require(
         "runtime->run(" not in load_body and "PS2Runtime::run(" not in load_body,
         "Private ELF/AOT validation must never start guest execution.",
