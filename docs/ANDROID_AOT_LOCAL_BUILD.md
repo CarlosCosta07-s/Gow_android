@@ -107,7 +107,7 @@ python3 tools/build_android_game.py \
   --work-dir "/tmp/gowport"
 ```
 
-Instale esse APK no aparelho que contém a instalação privada, abra **FORGE → Verificar runtime** e deixe a tentativa de boot prosseguir até atingir um primeiro módulo ou bloco VU1 sem AOT. O runtime deve parar com diagnóstico. Enquanto inicializa os subsistemas, ele guarda em `files/gow-aot-captures/vu1/` as micro-memórias de 16 KiB e em `files/gow-aot-captures/iop/` os módulos IRX relocados, junto com `modules.txt` (base, tamanho e hash FNV-1a).
+Instale esse APK no aparelho que contém a instalação privada, abra **FORGE → Verificar runtime** e deixe a tentativa de boot prosseguir até atingir um primeiro módulo ou bloco VU1 sem AOT. O runtime deve parar com diagnóstico. Enquanto inicializa os subsistemas, ele guarda em `files/gow-aot-captures/vu1/` as micro-memórias de 16 KiB e os PCs de blocos não encontrados em `vu1n_heads.txt`; em `files/gow-aot-captures/iop/` ele salva os módulos IRX relocados e `modules.txt` (base, tamanho e hash FNV-1a).
 
 Na tela Debug, toque em **Exportar dados AOT** e salve `gow-aot-captures.zip` num local acessível ao computador de build. O ZIP é dado derivado do disco do usuário: mantenha-o privado e não o envie para GitHub, CI, issues ou releases.
 
@@ -129,7 +129,7 @@ python3 tools/build_android_game.py \
   --work-dir "/tmp/gowport"
 ```
 
-Repita o ciclo com o novo APK quando ele parar num módulo/microprograma ainda não capturado. O gerador VU1 em modo `--strict-partial` **omite** blocos que exigiriam callouts ao motor exato; o runtime nunca os interpreta. Uma captura VU1 nova pode acrescentar blocos nativos; um IRX novo acrescenta uma unidade nativa ao registro. O arquivo `native-aot-summary.json` relata a cobertura vista. `full_native_aot=true` significa que os dados VU1/IOP presentes no ZIP foram gerados sem lacunas conhecidas naquele material; **não** comprova cobertura de todos os microprogramas ou módulos que o jogo poderá carregar mais adiante.
+Repita o ciclo com o novo APK quando ele parar num módulo/microprograma ainda não capturado. O ZIP inclui `vu1n_heads.txt`; o host combina esses PCs dinâmicos com as entradas estáticas e os microprogramas. O gerador VU1 em modo `--strict-partial` **omite** blocos que exigiriam callouts ao motor exato; o runtime nunca os interpreta. Uma captura VU1 nova ou um PC dinâmico pode acrescentar blocos nativos; um IRX novo acrescenta uma unidade nativa ao registro. O arquivo `native-aot-summary.json` relata a cobertura vista. `full_native_aot=true` significa que os dados VU1/IOP presentes no ZIP foram gerados sem lacunas conhecidas naquele material; **não** comprova cobertura de todos os microprogramas ou módulos que o jogo poderá carregar mais adiante.
 
 ## Saídas locais
 
