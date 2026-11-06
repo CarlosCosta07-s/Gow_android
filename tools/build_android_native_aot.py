@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Generate private VU1 and IOP native C++ from an Android AOT capture archive.
+"""Generate private VU1 and IOP native C++ from Android-private AOT captures.
 
-The archive is exported by GowGameActivity from the user's own installation.
-Inputs and generated files must stay outside tracked source; generated C++ is
-staged only under android/app/build, which is Git-ignored.
+The capture archive is synchronized automatically over ADB by
+sync_android_aot_captures.py. No user-facing export is involved. Inputs and
+generated files stay outside tracked source; generated C++ is staged only
+under android/app/build, which is Git-ignored.
 """
 
 from __future__ import annotations
