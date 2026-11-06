@@ -23,6 +23,11 @@ int fail(const char *message) {
     return 1;
 }
 
+void closeIgnoringFailure(PS2Vfs &vfs, int32_t descriptor) {
+    const int32_t result = vfs.close(descriptor);
+    (void)result;
+}
+
 bool writeFixture(const std::filesystem::path &path,
                   const std::vector<uint8_t> &bytes) {
     std::ofstream stream(path, std::ios::binary);
@@ -121,14 +126,14 @@ int main() {
             static_cast<int64_t>(firstRead.size()) ||
         firstRead[0] != payload[0] || firstRead[1] != payload[1] ||
         firstRead[2] != payload[2] || firstRead[3] != payload[3]) {
-        vfs.close(descriptor);
+        closeIgnoringFailure(vfs, descriptor);
         g_cdRoot.close();
         std::filesystem::remove_all(root);
         return fail("PS2Vfs sequential read returned incorrect bytes");
     }
 
     if (vfs.seek(descriptor, 5, SEEK_SET) != 5) {
-        vfs.close(descriptor);
+        closeIgnoringFailure(vfs, descriptor);
         g_cdRoot.close();
         std::filesystem::remove_all(root);
         return fail("PS2Vfs seek did not move to the requested file offset");
@@ -138,7 +143,7 @@ int main() {
     if (vfs.read(descriptor, secondRead.data(), secondRead.size()) !=
             static_cast<int64_t>(secondRead.size()) ||
         secondRead[0] != payload[5] || secondRead[1] != payload[6]) {
-        vfs.close(descriptor);
+        closeIgnoringFailure(vfs, descriptor);
         g_cdRoot.close();
         std::filesystem::remove_all(root);
         return fail("PS2Vfs random-access read returned incorrect bytes");
@@ -147,7 +152,7 @@ int main() {
     PS2VfsStat stat{};
     if (!vfs.stat("cdrom0:/DATA/BOOT.BIN;1", mounts, rom, stat) ||
         stat.directory || !stat.readOnly || stat.size != payload.size()) {
-        vfs.close(descriptor);
+        closeIgnoringFailure(vfs, descriptor);
         g_cdRoot.close();
         std::filesystem::remove_all(root);
         return fail("PS2Vfs stat did not resolve the cdRoot file metadata");
@@ -156,7 +161,7 @@ int main() {
     PS2VfsStat directoryStat{};
     if (!vfs.stat("cdrom0:/DATA", mounts, rom, directoryStat) ||
         !directoryStat.directory || !directoryStat.readOnly || directoryStat.size != 0u) {
-        vfs.close(descriptor);
+        closeIgnoringFailure(vfs, descriptor);
         g_cdRoot.close();
         std::filesystem::remove_all(root);
         return fail("PS2Vfs stat did not recognize a private cdRoot directory");
@@ -164,21 +169,21 @@ int main() {
 
     PS2VfsStat missingStat{};
     if (vfs.stat("cdrom0:/DATA/MISSING.BIN", mounts, rom, missingStat)) {
-        vfs.close(descriptor);
+        closeIgnoringFailure(vfs, descriptor);
         g_cdRoot.close();
         std::filesystem::remove_all(root);
         return fail("PS2Vfs stat accepted a missing private cdRoot path");
     }
 
     if (vfs.open("cdrom0:/DATA/BOOT.BIN;1", PS2_FIO_O_WRONLY, mounts, rom) >= 0) {
-        vfs.close(descriptor);
+        closeIgnoringFailure(vfs, descriptor);
         g_cdRoot.close();
         std::filesystem::remove_all(root);
         return fail("PS2Vfs allowed write access to the read-only cdRoot provider");
     }
 
     if (vfs.open("cdrom0:/../outside.bin", PS2_FIO_O_RDONLY, mounts, rom) >= 0) {
-        vfs.close(descriptor);
+        closeIgnoringFailure(vfs, descriptor);
         g_cdRoot.close();
         std::filesystem::remove_all(root);
         return fail("PS2Vfs accepted a traversal path through cdRoot");
