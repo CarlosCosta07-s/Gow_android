@@ -2,7 +2,7 @@
 
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
-> Estado atual: shell Android ARM64 com interface FORGE, ícone vetorial Ômega branco sobre vermelho e seleção SAF/ISO9660. O mantenedor confirmou a abertura do app em um aparelho Android. O runtime do jogo ainda não está integrado e não há versão jogável.
+> Estado atual: shell Android ARM64 com FORGE, seleção SAF/ISO9660 e runtime Waffle/KIexter estático ligado ao alvo nativo. O loop GameActivity constrói/destrói o objeto `PS2Runtime`, mas ainda não inicia o jogo. Não há C++ recompilado do ELF do usuário, VFS do disco, backend GS/Vulkan Android ou versão jogável.
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml) [![Host recompiler](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml)
 
@@ -42,13 +42,13 @@ O launcher mantém as ações de seleção de disco e início do jogo. A ação 
 
 ## Estado do código nativo
 
-A atividade nativa usa AndroidX GameActivity. O código Vulkan atual é apenas um bring-up experimental de surface/swapchain e não é o renderizador Graphics Synthesizer do PS2. Como o teste isolado encerrou o aplicativo no aparelho do mantenedor, ele foi removido do launcher e não será usado como critério de progresso. A validação gráfica será feita com o backend GS integrado e a primeira imagem real do jogo. Ainda não há execução do código de God of War nem APK jogável.
+A atividade nativa usa AndroidX GameActivity. O alvo `android-game` liga o runtime Waffle/KIexter e faz um smoke de construção/destruição de `PS2Runtime`, sem chamar `initialize()`, `loadELF()` ou `run()`. O renderer Vulkan de clear/present está disponível apenas como diagnóstico opcional (`GOW_ANDROID_ENABLE_VULKAN_SMOKE=OFF` por padrão) e não é o Graphics Synthesizer do PS2. O backend GS atual da base é OpenGL e a apresentação desktop depende de Raylib; a substituição por GS/Vulkan e presenter Android está documentada em [GS/Vulkan Android](docs/GS_VULKAN_ANDROID.md). Ainda não há execução do código de God of War nem APK jogável.
 
 ## Base do port e referências de engenharia
 
-A base principal do código específico de God of War será [KIexster/god-of-war-recomp](https://github.com/KIexster/god-of-war-recomp), commit `a226151feb6ed22937e42be485aaf28a83acd166`. Já trouxemos o mapa de 6.414 funções, o template de recompilação, os overrides do jogo e os geradores AOT de VU1/IOP. Os arquivos importados estão separados e ainda não foram conectados ao build Android.
+A base principal do código específico de God of War é [KIexster/god-of-war-recomp](https://github.com/KIexster/god-of-war-recomp), commit `a226151feb6ed22937e42be485aaf28a83acd166`. Já trouxemos o mapa de 6.414 funções, o template de recompilação, os overrides do jogo e os geradores AOT de VU1/IOP. O mapa/template e as ferramentas/overrides permanecem em staging e não constituem código executável recompilado do jogo.
 
-A CI já compilou `ps2_recomp`, `ps2_iop` e `ps2_runtime` no host com os perfis estritos IOP/VU1 ([42150329023](https://github.com/CarlosCosta07-s/Gow_android/actions/runs/42150329023)). O runtime Waffle completo também passou pelo build cruzado Android `arm64-v8a` com NDK `30.0.16248370` e API 28; o mesmo workflow compilou o APK Debug FORGE ([42152175783](https://github.com/CarlosCosta07-s/Gow_android/actions/runs/42152175783)). A CI confirmou que o alvo estrito não inclui `iop_cpu.cpp` nem as fontes diferenciais PCSX2 e que `PS2X_VU1_NATIVE_ONLY=1` foi aplicado. O runner NativeActivity do Waffle foi excluído. Ainda falta ligar a biblioteca estática ao `android-game`, criar a ponte JNI para `GowGameActivity`, processar o ELF privado e validar IRX/microcódigo reais; não há gameplay.
+A CI já compilou `ps2_recomp`, `ps2_iop` e `ps2_runtime` no host com os perfis estritos IOP/VU1 ([42150329023](https://github.com/CarlosCosta07-s/Gow_android/actions/runs/42150329023)). O runtime Waffle/KIexter foi preparado para NDK ARM64 e agora é ligado ao alvo `android-game`; os workflows Android `42159359100` e `42159363088` passaram. O host recompiler/tool-check também passou em `42159359104`. A tabela de funções recompiladas do APK continua vazia até o usuário gerar o C++ com seu próprio ELF e exportá-lo para `android/app/build/gow-generated-game`. O pipeline CMake encontra essas fontes recursivamente e substitui o scaffold vazio quando a tabela real existir; ainda não foi testado com um ELF de jogo. O runner NativeActivity upstream foi excluído, e o loop GameActivity não inicia a execução guest. Não há gameplay.
 
 O port do KIexster utiliza o runtime de [Waffle565/God-Of-War-Native-Port](https://github.com/Waffle565/God-Of-War-Native-Port) e o [PS2Recomp](https://github.com/ran-j/PS2Recomp). Vamos selecionar as partes portáveis do runtime e dos serviços do jogo. O runner desktop, a camada Raylib/Windows, o backend OpenGL e os dispositivos de entrada/áudio de PC não serão transplantados diretamente.
 
@@ -100,6 +100,7 @@ A licença GPL-3.0 deste repositório cobre somente o código que seus autores p
 - [Arquitetura técnica](docs/ARQUITETURA.md)
 - [Base KIexter: arquivos, origem e adaptação Android](docs/BASE_KIEXTER.md)
 - [Pipeline host do recompilador](docs/PIPELINE_RECOMPILADOR.md)
+- [Auditoria do GS e plano de backend Vulkan Android](docs/GS_VULKAN_ANDROID.md)
 - [Roadmap e critérios de conclusão](docs/ROADMAP.md)
 - [Auditoria das referências](docs/REFERENCIAS.md)
 - [Créditos e avisos de terceiros](THIRD_PARTY_NOTICES.md)
