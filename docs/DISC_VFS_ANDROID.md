@@ -14,7 +14,7 @@ O módulo `android/app/src/main/cpp/iso9660_reader.h/.cpp` implementa leitura al
 - Lê intervalos por offset, inclusive atravessando limites de setor.
 - Valida limites da imagem, registros, tamanho de diretórios e componentes de caminho; rejeita traversal, diretório usado como arquivo e extents fora da imagem.
 
-O componente tem fixture ISO sintética e teste host. Ele será reaproveitado como **fonte do instalador BT3**. O suporte atual a lookup/leitura aleatória não equivale, sozinho, a um instalador completo: ainda precisamos de enumeração segura da árvore e extração com progresso.
+O componente tem fixture ISO sintética e testes host. Ele é a **fonte do instalador seletivo**. A implementação inclui enumeração imediata de diretórios e leitura de arquivos por offset; a extração de boot inicial está documentada em [IMPORTACAO_ISO.md](IMPORTACAO_ISO.md).
 
 ## 2. Limitações atuais
 
@@ -56,31 +56,41 @@ O identificador do cache deve considerar título, serial/revisão, versão do in
 - Prefetch assíncrono só será adicionado para padrões de leitura identificados por profiling. Não vamos presumir que mais cache sempre melhora aparelhos com pouca RAM.
 - O primeiro objetivo é remover SAF/ISO do caminho crítico de leitura durante o jogo. Isso melhora a previsibilidade do I/O, mas não garante, sozinho, maior FPS.
 
-## 4. Código de leitura híbrida já existente — etapa de transição
+## 4. Provider local `cdRoot` implementado
 
-A implementação anterior preparou um caminho híbrido para leitura direta da ISO. Na revisão documentada, ele inclui:
+O módulo `android/app/src/main/cpp/cdroot_vfs.h/.cpp` fornece leitura somente de arquivos regulares dentro de uma raiz privada do aplicativo:
 
-- `android_disc_bridge.cpp`, com uma instância de `Iso9660Reader` e operações C ABI para abrir, consultar tamanho, ler e fechar arquivos;
-- entrada JNI `GowGameActivity.nativeSetDiscFileDescriptor(int)`, que duplica o FD recebido;
-- patch privado no `PS2IopHostAdapter`/`PS2Vfs` para rotear caminhos `gowdisc:/` ao provider ISO.
+- `openRoot()` fixa o descritor da pasta privada, sem seguir symlink no componente final;
+- `listDirectory()` cria fluxos de diretório independentes e limita a listagem a 65.536 entradas;
+- `openFile()` usa `openat` e `O_NOFOLLOW`, rejeita caminhos absolutos, vazios, traversal e componentes inválidos;
+- `readFile()` faz leitura aleatória por `pread`, com handles explícitos e comportamento de EOF testado;
+- a API C ABI está em `android_cdroot_bridge.h`, e a ponte JNI `MainActivity.nativeSetCdRootDirectory()` abre a pasta preparada.
 
-A CI comprovou a compilação dessa ponte e do runtime privado:
-- Android [run 42161298942](https://github.com/CarlosCosta07-s/Gow_android/actions/runs/42161298942), commit `836da9a80a19d04b8b934da0481655ea167bb8e3): testes host DualShock 2/ISO, preparação do runtime privado, `assembleDebug` e publicação do APK ARM64.
-- Host [run 42161298950](https://github.com/CarlosCosta07-s/Gow_android/actions/runs/42161298950): `py_compile`, CLI e compilação de `ps2_recomp` + runtime Waffle estrito.
+Os testes `cdroot_vfs_test.cpp` cobrem raiz e subdiretórios, listagens repetidas, leituras parciais/EOF, handles fechados, traversal, nomes inválidos e symlinks. O erro encontrado na listagem repetida foi corrigido: a raiz agora é aberta com `openat(rootFd, ".", ...)`, evitando compartilhar o offset de diretório do descritor persistente.
 
-**O que isso comprova:** os componentes híbridos compilaram nos ambientes descritos. **O que não comprova:** importação BT3 completa, teste com ISO real, extração completa dos arquivos de God of War, boot ou gameplay.
+## 5. Provider local preparado na integração Waffle
 
-Com a decisão BT3, a ponte de leitura direta da ISO passa a ser uma base transitória e/ou ferramenta do importador. O caminho final de jogo deverá usar arquivos locais e um `cdRoot` privado. Não vamos manter duas estratégias ativas no caminho normal sem uma razão medida.
+O script `tools/build_recompiler_host.py` foi alterado para que a árvore Waffle/KIexter preparada para Android use o prefixo `gowcdroot:/` no PS2 VFS e no adaptador IOP. As chamadas passam a ser:
 
-## 5. Próximas etapas
+- `gowAndroidCdRootOpenFile`;
+- `gowAndroidCdRootReadFile`;
+- `gowAndroidCdRootCloseFile`;
+- `gowAndroidCdRootIsReady`.
 
-1. Completar a enumeração de diretórios ISO9660 e criar testes sintéticos para árvores, arquivos grandes, nomes e erros.
-2. Definir o manifesto de instalação de God of War por revisão, baseado na estrutura real da imagem e no rastreamento dos acessos necessários.
-3. Implementar estimativa de espaço, extração em staging, progresso, cancelamento, verificação e promoção atômica.
-4. Preparar o ELF original no caminho privado que `PS2Runtime::loadELF()` espera; o loader atual usa `std::ifstream`.
-5. Configurar o VFS para a pasta instalada e substituir o caminho `gowdisc:/` de runtime quando a leitura local estiver validada.
-6. Medir leituras, memória, tempos de carregamento e frame time em aparelhos de referência; só então definir tamanho de cache e prefetch.
-7. Validar instalação, reparo, interrupção, falta de espaço e inicialização com uma ISO do usuário em aparelho real.
+O runtime define `paths.cdRoot` para `gowcdroot:/` quando o provider privado está aberto. O código antigo de patch que roteava `gowdisc:/` para o leitor ISO foi substituído nessa preparação. O bridge ISO continua presente como leitor/importador, mas deixa de ser o provider previsto para gameplay.
+
+**Limite:** o patch só modifica o runtime privado em `android/app/build/gow-runtime-source` durante a preparação. Isso ainda não significa que o PS2Runtime está sendo iniciado pela Activity nem que os serviços do jogo estejam abrindo arquivos pelo VFS durante um boot real. A execução e a CI precisam validar que as âncoras do patch ainda correspondem à revisão fixada.
+
+## 6. Próximas etapas
+
+1. Validar a preparação e compilação Waffle com o provider `gowcdroot:/` e com o novo VFS incluído.
+2. Ligar o lifecycle do `PS2Runtime` à GameActivity e definir a ordem correta entre montagem de `cdRoot`, carregamento do ELF e inicialização dos serviços PS2.
+3. Derivar o manifesto completo de God of War a partir da árvore real da ISO e de rastreamento de boot/runtime; não presumir caminhos.
+4. Preparar o ELF privado no caminho usado por `PS2Runtime::loadELF()` e executar a geração C++ com PS2Recomp no workspace privado.
+5. Gerar e integrar cobertura AOT de VU1/IRX para os módulos realmente usados, sem fallback interpretado.
+6. Integrar GS/Vulkan e o presenter Android para alcançar a primeira imagem.
+7. Validar instalação, reparo, cancelamento, falta de espaço, boot, menu e primeiro combate com imagem do usuário em aparelho real.
+8. Medir I/O, memória, frame time e temperatura antes de ajustar cache/prefetch ou resolução.
 
 ## 6. Privacidade e integridade
 
