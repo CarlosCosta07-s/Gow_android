@@ -12,7 +12,7 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:isGame="true"
-        android:label="God of War — Android"
+        android:label="FORGE"
         android:supportsRtl="true"
         android:theme="@style/Theme.GowAndroid">
 
