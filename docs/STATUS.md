@@ -239,3 +239,12 @@ O painel informa explicitamente que o jogo ainda não iniciou quando o núcleo h
 **Limite essencial:** o caminho está atrás de `GOW_ANDROID_ENABLE_VULKAN_SMOKE=ON`, que continua OFF por padrão. É somente um consumidor de `PresentationFrame`, não um `GSRasterBackend` de gameplay. O `GSNullBackend` ainda é o backend em uso, não são emitidos triângulos/texels GS e o clear-only permanece como fallback. Nenhum frame real de God of War foi apresentado.
 
 **Próxima etapa real do GS:** implementar e ligar um `GSRasterBackend` Android que preserve VRAM/PSM, transferências, CLUT, depth, alpha test, DATE, blending, rasterização de primitivas e composição de DISPLAY/PMODE; só então a ponte de apresentação pode receber pixels do jogo.
+## Pipeline Vulkan GS experimental — CIs 251–257
+
+**[IMPLEMENTADO; COMPILAÇÃO ARM64 APROVADA]** O adaptador `AndroidGSVulkanBackend` pode ser anexado ao `GS` quando a surface Vulkan da `GowGameActivity` está pronta. O caminho Debug substitui o `GSNullBackend` por uma implementação experimental que reutiliza a `GSTextureStore` para VRAM/transferências, converte `GSPrimitiveBatch` para vértices GPU e enfileira esses lotes de forma thread-safe. A surface cria pipelines Vulkan separados para pontos, linhas e triângulos/sprites e usa viewport/scissor por lote. Ao perder a janela, o backend é destacado e a fila é limpa.
+
+**[VERIFICADO NA CI]** Runs `42258381042` (251), `42258466963` (252), `42258475240` (253), `42258481466` (254), `42258614346` (255), `42258720349` (256) e `42258945494` (257) aprovaram progressivamente a compilação Android ARM64, a opção Debug ligada, a proteção da fila, o reset da surface e a checagem estrutural do pipeline. Run 257 publicou `gow-android-arm64-shell`, artefato ID `13524346408`, válido até 13/11/2026.
+
+**Limitações explícitas:** o pipeline desenha cor sólida diretamente na surface Android, não em render targets GS por FBP/PSM. Texturas/CLUT não são amostradas; depth, alpha test, DATE, blending PS2, PABE, FBA, fog, dithering, masks avançadas e composição de DISPLAY/PMODE ainda não são rasterizados. A CI não executou a aplicação numa GPU física. `PS2Runtime::run()` continua bloqueado e a tabela AOT pública permanece vazia.
+
+**[EM VALIDAÇÃO HOST; AINDA NÃO APROVADO]** Runs `42259346530`/`42259354011` adicionaram um teste sintético de VRAM e transferência contra `GSTextureStore` e `ps2_gs_memory.cpp`. Não marque esse teste como aprovado até uma execução terminar com sucesso.
