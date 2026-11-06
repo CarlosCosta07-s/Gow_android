@@ -29,7 +29,7 @@
 
 ## [VERIFICADO] Provider local cdRoot
 
-- `CdRootVfs` abre a raiz privada e executa listagem/leitura somente de arquivos regulares; usa `openat`/`O_NOFOLLOW` para bloquear symlinks e traversal e `pread` para leitura aleatória.
+- `CdRootVfs` abre a raiz privada e executa listagem/leitura somente de arquivos regulares; usa `openat`/`O_NOFOLLOW` para bloquear symlinks e traversal e `pread` para leitura aleatória. A resolução de nomes segue ISO9660 (maiúsculas/minúsculas indiferentes e sufixo `;versão` opcional), rejeitando colisões após normalização.
 - A enumeração é limitada a 65.536 entradas; paths têm limites de tamanho, componente e profundidade. Handles podem ser abertos, lidos por offset e fechados.
 - O teste sintético `cdroot_vfs_test.cpp` cobre raiz/subdiretórios, listagem repetida, leitura parcial/EOF, handles fechados, nomes/traversal inválidos e symlinks.
 - A primeira implementação compartilhou acidentalmente o offset do descritor raiz via `dup()`. Foi corrigida usando `openat(rootFd, ".", ...)` para gerar descrição de arquivo independente por operação.
