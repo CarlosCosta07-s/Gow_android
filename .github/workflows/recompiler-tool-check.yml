@@ -94,5 +94,10 @@ jobs:
           print("VU1 strict gate correctly rejected an AOT block with an exact-engine callout.")
           PY
 
+      - name: Install desktop runtime build dependencies for strict VU1 compile check
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+
       - name: Build pinned host recompiler without game files
         run: python tools/build_recompiler_host.py --build-only --work-dir /tmp/gowport
