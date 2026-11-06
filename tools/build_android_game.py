@@ -57,16 +57,16 @@ def create_build_plan(
 
     if not elf.is_file():
         raise ValueError(f"PS2 ELF file was not found: {elf}")
+    if _is_within(elf, root):
+        raise ValueError(
+            "Keep the user's ELF outside the public repository. "
+            "Choose a private local path such as C:/gowport/input/SCUS_973.99."
+        )
     if elf.name.upper() != "SCUS_973.99":
         raise ValueError(
             "This Android AOT profile is currently pinned to the NTSC-U "
             "SCUS_973.99 executable. PAL SCES_531.33 needs its own function map "
             "and recompilation template before it can be built safely."
-        )
-    if _is_within(elf, root):
-        raise ValueError(
-            "Keep the user's ELF outside the public repository. "
-            "Choose a private local path such as C:/gowport/input/SCUS_973.99."
         )
     if _is_within(work, root):
         raise ValueError(
