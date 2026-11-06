@@ -83,13 +83,18 @@ def main() -> int:
     parser.add_argument(
         "--build-only",
         action="store_true",
-        help="build the pinned host recompiler without requiring or reading a game ELF",
+        help="build the pinned host tools/runtime on Linux without requiring or reading a game ELF",
+    )
+    parser.add_argument(
+        "--android-runtime-only",
+        action="store_true",
+        help="cross-compile only ps2_runtime and ps2_iop for Android arm64-v8a with the pinned NDK",
     )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
     elf: Path | None = None
-    if not args.build_only:
+    if not (args.build_only or args.android_runtime_only):
         if not args.elf:
             parser.error("Provide --elf or set GOW_ELF to your own extracted SCUS_973.99 file.")
         elf = Path(args.elf).expanduser().resolve()
@@ -124,11 +129,13 @@ def main() -> int:
 
     work.mkdir(parents=True, exist_ok=True)
     print(f"Private workspace: {work}")
-    if args.build_only:
-        print("Mode: host-tool build only; no game files are read or generated.")
+    if args.android_runtime_only:
+        print("Mode: Android runtime cross-build only; no game files are read or generated.")
+    elif args.build_only:
+        print("Mode: host-tool/runtime build only; no game files are read or generated.")
     else:
         print("Target profile: God of War PS2 NTSC-U / SCUS_973.99")
-    print("This stage runs on the host; it does not build or modify the Android APK.")
+    print("This stage uses private upstream worktrees and does not modify the Android APK.")
 
     checkout_pinned_repo(KIEXTER_URL, KIEXTER_COMMIT, kiexter_source)
     checkout_pinned_repo(PS2RECOMP_URL, PS2RECOMP_COMMIT, recompiler_source)
@@ -497,6 +504,98 @@ def main() -> int:
             f"CMake 3.21 or newer is required; found {version_line}."
         )
     generator = shutil.which("ninja")
+
+    if args.android_runtime_only:
+        sdk_root = (
+            os.environ.get("ANDROID_SDK_ROOT")
+            or os.environ.get("ANDROID_HOME")
+        )
+        ndk_version = os.environ.get("GOW_ANDROID_NDK_VERSION", "30.0.16248370")
+        ndk_root = (
+            os.environ.get("ANDROID_NDK_HOME")
+            or os.environ.get("ANDROID_NDK_ROOT")
+            or (str(Path(sdk_root) / "ndk" / ndk_version) if sdk_root else None)
+        )
+        if not ndk_root:
+            raise RuntimeError(
+                "Android SDK/NDK not found. Set ANDROID_SDK_ROOT or ANDROID_NDK_HOME."
+            )
+        toolchain = Path(ndk_root) / "build/cmake/android.toolchain.cmake"
+        if not toolchain.is_file():
+            raise RuntimeError(f"Android NDK CMake toolchain not found: {toolchain}")
+
+        android_build_dir = work / "build-android-arm64-strict"
+        android_configure = [
+            cmake,
+            "-S", str(recompiler_source),
+            "-B", str(android_build_dir),
+            f"-DCMAKE_TOOLCHAIN_FILE={toolchain}",
+            "-DANDROID_ABI=arm64-v8a",
+            "-DANDROID_PLATFORM=android-28",
+            "-DANDROID_STL=c++_shared",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DPS2X_BUILD_RECOMP=OFF",
+            "-DPS2X_BUILD_RUNTIME=ON",
+            "-DPS2X_BUILD_ANALYZER=OFF",
+            "-DPS2X_BUILD_TEST=OFF",
+            "-DPS2X_BUILD_STUDIO=OFF",
+            "-DPS2X_IOP_NATIVE_ONLY=ON",
+            "-DPS2X_VU1_NATIVE_ONLY=ON",
+            "-DPS2X_ENABLE_FFMPEG=OFF",
+            "-DPS2X_ENABLE_DEBUG_UI=OFF",
+            "-DPS2X_ENABLE_RUNNER_UNITY_BUILD=OFF",
+            "-DPS2X_ENABLE_RUNNER_PCH=OFF",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        ]
+        if generator:
+            android_configure.extend(["-G", "Ninja"])
+        run(android_configure)
+        # Build only the static runtime library. The upstream NativeActivity/Raylib
+        # runner is intentionally not built or linked into FORGE/GameActivity.
+        run([
+            cmake, "--build", str(android_build_dir),
+            "--target", "ps2_runtime", "--parallel",
+        ])
+
+        android_compile_db = android_build_dir / "compile_commands.json"
+        if not android_compile_db.is_file():
+            raise RuntimeError("CMake did not emit the Android runtime compile database.")
+        android_entries = json.loads(android_compile_db.read_text(encoding="utf-8"))
+        def normalized_source(entry: dict[str, object]) -> str:
+            return str(entry.get("file", "")).replace("\\\\", "/")
+
+        vu_android_entries = [
+            entry for entry in android_entries
+            if Path(normalized_source(entry)).name == "ps2_vu1_core.cpp"
+        ]
+        if (
+            len(vu_android_entries) != 1
+            or "PS2X_VU1_NATIVE_ONLY=1" not in str(vu_android_entries[0].get("command", ""))
+        ):
+            raise RuntimeError(
+                "Android VU1 core was not compiled exactly once with PS2X_VU1_NATIVE_ONLY=1."
+            )
+        iop_android_entries = [
+            entry for entry in android_entries
+            if Path(normalized_source(entry)).name == "iop_cpu.cpp"
+        ]
+        if iop_android_entries:
+            raise RuntimeError("Android strict runtime unexpectedly compiled iop_cpu.cpp.")
+        diagnostic_android_entries = [
+            entry for entry in android_entries
+            if "/ee_ref/" in normalized_source(entry)
+            or "/vu_pcsx2/" in normalized_source(entry)
+            or Path(normalized_source(entry)).name == "ee_watch.cpp"
+        ]
+        if diagnostic_android_entries:
+            raise RuntimeError(
+                "Android strict runtime unexpectedly compiled PCSX2 diagnostic sources: "
+                + ", ".join(normalized_source(entry) for entry in diagnostic_android_entries)
+            )
+        print("Verified: Android arm64-v8a runtime compiled with strict IOP/VU1 policies.")
+        print("Verified: Android target excludes iop_cpu.cpp and PCSX2 diagnostic interpreters.")
+        print("Verified: only static ps2_runtime and dependencies were built; NativeActivity runner was not built.")
+        return 0
 
     configure = [
         cmake,
