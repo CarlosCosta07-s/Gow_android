@@ -91,7 +91,7 @@ class AndroidNativeAotCaptureTests(unittest.TestCase):
     def test_zip_capture_archive_extracts_expected_private_layout(self) -> None:
         module = b"\x00\x00\x00\x00"
         (self.capture / "vu1/vu1_001.bin").write_bytes(bytes(VU1_MICRO_MEMORY_BYTES))
-        (self.capture / "vu1/vu1n_heads.txt").write_text("0010\\n0020\\n", encoding="ascii")
+        (self.capture / "vu1/vu1n_heads.txt").write_text("0010\n0020\n", encoding="ascii")
         (self.capture / "iop/mod_a.bin").write_bytes(module)
         digest = fnv1a64(module)
         (self.capture / "iop/modules.txt").write_text(
@@ -113,7 +113,7 @@ class AndroidNativeAotCaptureTests(unittest.TestCase):
         self.assertEqual(validate_vu1_capture_directory(vu1_dir)[0].name, "vu1_001.bin")
         self.assertEqual(
             (vu1_dir / "vu1n_heads.txt").read_text(encoding="ascii"),
-            "0010\\n0020\\n",
+            "0010\n0020\n",
         )
         self.assertTrue((iop_dir / "modules.txt").is_file())
         self.assertEqual((iop_dir / "mod_a.bin").read_bytes(), module)
