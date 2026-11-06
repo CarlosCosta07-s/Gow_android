@@ -34,13 +34,16 @@ def checkout_pinned_repo(url: str, commit: str, destination: Path) -> None:
         run(["git", "remote", "set-url", "origin", url], cwd=destination)
     else:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        run(["git", "clone", "--no-checkout", url, str(destination)])
+        destination.mkdir()
+        run(["git", "init"], cwd=destination)
+        run(["git", "remote", "add", "origin", url], cwd=destination)
 
     run(["git", "fetch", "--depth", "1", "origin", commit], cwd=destination)
     run(["git", "checkout", "--detach", "FETCH_HEAD"], cwd=destination)
     run(["git", "reset", "--hard", "FETCH_HEAD"], cwd=destination)
     run(["git", "clean", "-fdx"], cwd=destination)
-    run(["git", "submodule", "update", "--init", "--recursive"], cwd=destination)
+    if (destination / ".gitmodules").is_file():
+        run(["git", "submodule", "update", "--init", "--recursive"], cwd=destination)
 
 
 def toml_path(path: Path) -> str:
