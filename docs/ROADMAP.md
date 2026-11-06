@@ -69,7 +69,7 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [ ] Implementar importador BT3 no FORGE: validação da ISO/revisão, estimativa de espaço, progresso e cancelamento.
 - [ ] Definir manifesto de instalação específico de God of War com base na árvore real e no rastreamento dos acessos de boot; não copiar a lista de arquivos do Dragon Rage por suposição.
 - [ ] Extrair ELF, arquivos de boot e dados necessários para staging privado, preservando archives grandes nos formatos originais.
-- [ ] Verificar tamanhos/hashes disponíveis e publicar a instalação atomicamente; limpar ou retomar staging incompleto sem marcar instalação parcial como pronta.
+- [x] Gerar `.gow_disc_integrity` na instalação privada com SHA-256 incremental de cada arquivo ISO extraído e hashes de `.disc_layout`/`.disc_meta`; publicar o manifesto junto com a instalação atômica. Verificação segura com `openat`/`O_NOFOLLOW` e fixtures de corrupção, arquivo ausente e symlink aprovadas na CI `42237906079`.
 - [ ] Configurar `PS2Runtime::loadELF()` para o ELF local e o `PS2IopHostAdapter`/`PS2Vfs` para usar o `cdRoot` local da instalação.
 - [x] Manter `IoPaths.cdRoot` como o caminho físico da instalação privada; encaminhar `cdrom0:` no PS2 VFS antes de normalizar caminhos virtuais. A CI `42225710064` compilou o patch e verificou a configuração estática de `IoPaths` pelo JNI; o uso em boot/CDVD real ainda está pendente.
 - [x] Implementar descoberta da segunda camada do DVD e enumeração recursiva de diretórios/extents nas duas camadas; fixtures ISO sintéticas cobrem extents em ambas as camadas.
@@ -84,7 +84,7 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Testar `DiscSource::openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` com ISO sintética de dupla camada e validar a checagem JNI pós-instalação (CI `42225710064`).
 - [ ] Remover o uso residual do provider ISO transitório `gowdisc:/` do caminho normal de gameplay após validar a instalação local completa; não manter um FD da ISO aberto durante a partida.
 - [x] Implementar verificação da instalação existente e fluxo de reinstalação explicitamente confirmado; fechar o `cdRoot` e remover apenas a pasta privada da revisão selecionada usando `openat`/`O_NOFOLLOW`. Testes sintéticos de symlinks, traversal e preservação de diretórios irmãos aprovados na CI `42235192717`.
-- [ ] Exercitar no aparelho a instalação, cancelamento, falta de espaço, reparo, integridade e validações `IoPaths`/DiscSource/CDVD com a ISO do usuário.
+- [ ] Exercitar no aparelho a instalação, cancelamento, falta de espaço, reparo e verificação SHA-256, além das validações `IoPaths`/DiscSource/CDVD com a ISO do usuário.
 - [ ] Exercitar o CDVD já incorporado ao `IopEmulator` na sessão real e registrar chamadas originadas pelo jogo; os probes atuais ainda são sintéticos/isolados.
 - [ ] Ligar código recompilado, overrides de God of War e serviços mínimos de boot.
 - [ ] Resolver CD/DVD, IRX, SIF, DMA e cadeia inicial de execução.

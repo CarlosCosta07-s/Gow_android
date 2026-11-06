@@ -40,10 +40,10 @@ Esta primeira versão não é uma extração seletiva otimizada. O manifesto é 
 2. **Planejar espaço:** enumerar os arquivos que pertencem ao manifesto de instalação, calcular o tamanho necessário e conferir o espaço disponível antes de começar.
 3. **Extrair para staging:** copiar em blocos para uma pasta temporária privada, mantendo nomes, diretórios e arquivos de dados originais. O ELF deve ficar no caminho local esperado pelo loader.
 4. **Preservar arquivos grandes:** manter pacotes/arquivos de dados em seus formatos originais. Não expandir archives em milhares de arquivos pequenos nem carregar todo o conteúdo para a RAM.
-5. **Verificar:** conferir tamanho e, quando houver hash de referência confiável, hash dos arquivos copiados. Um manifesto incompleto ou um erro de leitura impede a publicação da instalação.
+5. **Verificar:** calcular SHA-256 incremental de cada arquivo ISO enquanto é copiado. Depois da criação de `.disc_layout` e `.disc_meta`, calcular também seus hashes e gravar `.gow_disc_integrity`. O manifesto é sincronizado antes da publicação; um erro impede a instalação atômica.
 6. **Publicar atomicamente:** somente depois da extração e validação, promover a pasta temporária para a pasta versionada da instalação. Cancelamentos não podem deixar uma instalação parcial marcada como pronta.
 7. **Executar localmente:** configurar o VFS/CD root para a pasta instalada. A sessão não deve precisar manter um descritor da ISO aberto.
-8. **Reparar/reinstalar:** se arquivos locais estiverem ausentes ou corrompidos, solicitar a ISO novamente e refazer a validação antes de reparar.
+8. **Reparar/reinstalar:** verificar `.gow_disc_integrity` quando uma instalação existente for revalidada. Se o manifesto ou qualquer arquivo estiver ausente, alterado ou substituído por symlink, solicitar a ISO novamente e refazer a validação antes de oferecer a reinstalação confirmada.
 
 O identificador da instalação usa o serial/região reconhecidos para não misturar os dois alvos suportados. A validação atual confere a presença do par de metadados e o ELF local; ainda falta um manifesto/hash de integridade persistente para detectar corrupção ou substituição de arquivos após a instalação.
 
@@ -98,6 +98,8 @@ O contrato do runtime Waffle/KIexter também inclui `ps2x::iop::DiscSource::open
 
 **[AUDITORIA DA REVISÃO WAFFLE FIXADA]** `IopEmulator::Impl` já possui uma instância real de `IopCdvd` e despacha imports da biblioteca `cdvdman` para `IopCdvd::dispatchImport()`. O `PS2IopHostAdapter` entrega `IoPaths.cdRoot` como `HostPathKind::CdRoot`, e o CDVD abre `DiscSource::openExtracted()` a partir dessa raiz. Portanto, a conexão interna entre o IOP do runtime e o serviço CDVD já existe na base; falta exercitá-la durante uma sessão iniciada no Android, não recriar um segundo dispatcher.
 
+**[VERIFICADO NA CI, run `42237906079`] Integridade SHA-256:** o instalador hashia cada arquivo ISO durante a cópia, hashia `.disc_layout` e `.disc_meta` depois da geração e grava `.gow_disc_integrity` na raiz do `cdRoot` antes da publicação atômica. `verifyIsoDiscIntegrity()` lê e valida caminhos seguros sem seguir symlinks, confere tamanho e SHA-256 em blocos de 64 KiB. JNI/`MainActivity` executa essa checagem após instalação nova e antes de aceitar instalação existente; uma falha bloqueia o uso e oferece reparo confirmado. Fixtures host verificam vetor conhecido, sucesso, corrupção de mesmo tamanho, arquivo ausente e symlink. A CI `42237906079` passou nos testes host e VFS, compilou o APK ARM64 e publicou os artefatos. O comportamento e o custo em armazenamento Android real ainda não foram medidos.
+
 **[VERIFICADO NA CI, run `42235192717`] Reparo da instalação:** quando a validação de uma instalação existente falha, o FORGE oferece uma reinstalação com confirmação explícita. A imagem é reaberta e sua identidade é comparada antes de remover a pasta anterior. O JNI fecha o provider `cdRoot` e chama `removeIsoDiscInstallation()`, que aceita somente um componente de nome seguro no diretório privado `installations`, rejeita um caminho final que seja symlink e remove conteúdo por descritores de diretório com `openat`/`O_NOFOLLOW`. Os testes sintéticos confirmam que symlinks internos são removidos sem seguir o destino, caminhos com traversal são recusados e arquivos irmãos permanecem intactos. A CI passou pelos testes host, compilou o APK Debug ARM64 e publicou o artefato. O uso da tela de reparo ainda precisa ser testado em aparelho.
 
 **[NÃO IMPLEMENTADO]** As verificações anteriores não inicializam `PS2Runtime`, não chamam `loadELF()`/`run()` e não exercitam o dispatcher CDVD que pertence a uma sessão real. O runtime base ainda depende da inicialização host Raylib para gráficos/áudio; a Activity Android não está conectada a um runner PS2 jogável. Nenhuma ISO real, ELF real ou sequência de boot foi testada nesta etapa.
@@ -107,7 +109,7 @@ A auditoria do contrato de referência e o formato dos metadados estão em [DISC
 ## 6. Próximas etapas
 
 1. Confirmar em aparelho o resultado integral dos probes `IoPaths`/DiscSource/CDVD com a ISO do usuário, sem compartilhar a imagem ou os dados extraídos.
-2. Adicionar manifesto de integridade persistente com hashes para detectar corrupção parcial antes de oferecer recuperação/reinstalação por serial/revisão.
+2. Medir em aparelho o tempo e o I/O da verificação SHA-256 integral; se necessário, adicionar cache de verificação com invalidação segura sem deixar de detectar corrupção.
 3. Disponibilizar os IRX no layout esperado e instrumentar os caminhos de arquivo e CDVD usados durante o boot.
 4. Iniciar uma sessão real do runtime e confirmar chamadas `sceCdRead` originadas pelo código do jogo; o dispatcher `IopCdvd` já é chamado pelo `IopEmulator`, mas ainda não há execução de guest.
 5. Adaptar a inicialização do PS2Runtime para GameActivity, separando GS, áudio e serviços que hoje dependem de Raylib.
