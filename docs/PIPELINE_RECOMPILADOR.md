@@ -1,6 +1,6 @@
 # Pipeline do recompilador — host privado
 
-**Objetivo desta etapa:** transformar o ELF NTSC-U fornecido pelo usuário em C++ com a revisão do PS2Recomp usada pelo KIexster. Esta ferramenta é executada no computador de desenvolvimento; não é incorporada ao APK e não roda durante a partida.
+**Objetivo desta etapa:** compilar a ferramenta host PS2Recomp, verificar a compilação do núcleo IOP com fallback interpretado bloqueado e, quando o usuário fornecer seu ELF NTSC-U, gerar C++ em uma pasta privada. O recompilador host não é incorporado ao APK e não roda durante a partida.
 
 ## Separação de builds
 
@@ -43,15 +43,15 @@ Ou defina GOW_ELF e GOW_PRIVATE_WORKDIR no ambiente. O diretório de trabalho pr
 Por segurança, o script:
 
 1. baixa/atualiza cópias de trabalho do KIexter e do PS2Recomp nos commits fixados;
-2. aplica somente o patch-base ps2recomp-waffle-runtime.patch, em uma cópia descartável/privada do PS2Recomp;
-3. configura CMake para gerar apenas ps2_recomp no host;
-4. copia o ELF e o mapa para a pasta privada;
-5. preenche @ELF@, @MAP@ e @OUT@ no template;
-6. gera os arquivos .cpp na pasta privada generated.
+2. aplica o patch-base ps2recomp-waffle-runtime.patch, em uma cópia privada do PS2Recomp;
+3. aplica transformações ancoradas no código Waffle para ativar PS2X_IOP_NATIVE_ONLY: se um IRX não tiver bloco AOT, o IOP registra PC/RA e interrompe aquela execução em vez de chamar o interpretador de instruções;
+4. configura e compila apenas ps2_recomp no host;
+5. configura ps2xIOP em um build separado e compila a biblioteca estática ps2_iop com PS2X_IOP_NATIVE_ONLY=ON;
+6. no modo --elf, copia o ELF e o mapa para a pasta privada, preenche @ELF@, @MAP@ e @OUT@ no template e gera os arquivos .cpp na pasta privada generated.
 
 O script limpa alterações locais dentro das duas cópias Git privadas antes de reaplicar a revisão fixada. Não coloque arquivos próprios dentro de sources/PS2Recomp ou sources/KIexster.
 
-A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. O resultado da execução 42146201136 foi consultado: os passos de sintaxe, CLI e build do recompilador terminaram com sucesso. A execução não recebeu material do jogo.
+A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. A execução 42147331364 compilou com sucesso ps2_recomp e a biblioteca ps2_iop com a política nativa estrita. O build IOP usou iop_native_none.cpp, sem módulos IRX reais: isso valida a compilação da trava, não sua cobertura com arquivos de jogo.
 
 ## Dependências do host
 
@@ -72,7 +72,7 @@ O alvo ps2xRecomp também declara um include privado para ps2xRuntime/include. P
 ## O que esta etapa não faz
 
 - Não lê nem extrai a ISO.
-- Não gera nem compila os módulos IRX/IOP.
+- Não gera nem compila os módulos IRX do jogo (compila somente o núcleo de serviços ps2_iop e o bloqueio de fallback).
 - Não captura nem gera microprogramas VU1.
 - Não compila o C++ produzido para ARM64.
 - Não conecta o runtime à GowGameActivity.
@@ -80,6 +80,14 @@ O alvo ps2xRecomp também declara um include privado para ps2xRuntime/include. P
 - Não prova boot ou gameplay.
 
 O primeiro resultado esperado é apenas um conjunto não vazio de arquivos C++ gerados em generated/. Para marcar esta etapa como verificada, ainda será necessário executar o script com o ELF correto e registrar o resultado sem publicar o ELF, o código gerado ou logs que contenham dados privados.
+
+
+
+## Gate de cobertura para VU1
+
+O gerador port/kiexter/tools/vu1n_gen.py possui a opção --strict. Ao receber capturas privadas de microcódigo, ele enumera os blocos descobertos e falha se não houver imagens válidas, se nenhum bloco for gerado ou se qualquer bloco descoberto não tiver tradução nativa. Isso é deliberadamente conservador: pode exigir ampliar o gerador ou registrar novas entradas em vu1n_heads.txt antes que o pacote seja aceito.
+
+A CI usa uma imagem sintética vazia de 16 KiB para verificar somente que --strict rejeita uma cobertura nula. Esse teste não valida microcódigo do God of War. A geração real deve ocorrer no computador do usuário, com dumps privados; os .cpp gerados permanecem fora do Git e da CI pública. O runtime VU1 também precisará de uma trava equivalente para rejeitar misses em tempo de execução, e a build Android deverá compilar/linkar os blocos gerados no target correto.
 
 ## Seleção inicial dos patches KIexster
 
