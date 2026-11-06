@@ -3,6 +3,8 @@
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include "android_pad_bridge.h"
 #include "android_cdroot_bridge.h"
+#include "android_frame_scaler.h"
+#include "ps2_runtime.h"
 
 #include <android/log.h>
 #include <android/native_window.h>
@@ -18,6 +20,7 @@
 #include <string_view>
 #include <vector>
 #include <mutex>
+#include <utility>
 #include <jni.h>
 
 class PS2Runtime;
@@ -184,6 +187,7 @@ public:
 
         if (device_ != VK_NULL_HANDLE) {
             vkDeviceWaitIdle(device_);
+            destroyUploadBuffer();
             destroySwapchainResources();
 
             if (imageAvailable_ != VK_NULL_HANDLE) {
@@ -219,6 +223,27 @@ public:
         return ready_;
     }
 
+    void submitFrame(
+        std::vector<uint8_t> rgbaPixels,
+        uint32_t width,
+        uint32_t height) {
+        if (width == 0u || height == 0u) {
+            return;
+        }
+        const uint64_t required =
+            static_cast<uint64_t>(width) * height * 4ull;
+        if (required > rgbaPixels.size() ||
+            required > 16ull * 1024ull * 1024ull * 4ull) {
+            logMessage(ANDROID_LOG_WARN,
+                "Rejected invalid or oversized GS presentation frame");
+            return;
+        }
+        pendingFramePixels_ = std::move(rgbaPixels);
+        pendingFrameWidth_ = width;
+        pendingFrameHeight_ = height;
+        hasPendingFrame_ = true;
+    }
+
     void drawFrame() {
         if (!ready_ || device_ == VK_NULL_HANDLE) {
             return;
@@ -251,7 +276,9 @@ public:
         }
 
         if (imageIndex >= commandBuffers_.size() ||
-            imageIndex >= renderFinished_.size()) {
+            imageIndex >= renderFinished_.size() ||
+            imageIndex >= swapchainImages_.size() ||
+            imageIndex >= swapchainLayouts_.size()) {
             logMessage(ANDROID_LOG_ERROR, "Swapchain returned an invalid image index");
             ready_ = false;
             return;
@@ -276,26 +303,33 @@ public:
             return;
         }
 
-        // This clear-only pass proves that an Android surface, swapchain image,
-        // graphics queue and presentation queue are connected. It is not the
-        // PlayStation 2 Graphics Synthesizer renderer.
-        VkClearValue clearValue{};
-        clearValue.color = {{0.025f, 0.018f, 0.035f, 1.0f}};
+        bool uploadedFrame = false;
+        if (hasPendingFrame_ && frameUploadSupported_) {
+            uploadedFrame = uploadFrameToSwapchain(
+                commandBuffers_[imageIndex], imageIndex);
+        }
 
-        VkRenderPassBeginInfo renderPassInfo{
-            VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-        renderPassInfo.renderPass = renderPass_;
-        renderPassInfo.framebuffer = framebuffers_[imageIndex];
-        renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = swapchainExtent_;
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearValue;
+        if (!uploadedFrame) {
+            // This clear-only pass remains a bring-up diagnostic, not a GS renderer.
+            VkClearValue clearValue{};
+            clearValue.color = {{0.025f, 0.018f, 0.035f, 1.0f}};
 
-        vkCmdBeginRenderPass(
-            commandBuffers_[imageIndex],
-            &renderPassInfo,
-            VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdEndRenderPass(commandBuffers_[imageIndex]);
+            VkRenderPassBeginInfo renderPassInfo{
+                VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+            renderPassInfo.renderPass = renderPass_;
+            renderPassInfo.framebuffer = framebuffers_[imageIndex];
+            renderPassInfo.renderArea.offset = {0, 0};
+            renderPassInfo.renderArea.extent = swapchainExtent_;
+            renderPassInfo.clearValueCount = 1;
+            renderPassInfo.pClearValues = &clearValue;
+
+            vkCmdBeginRenderPass(
+                commandBuffers_[imageIndex],
+                &renderPassInfo,
+                VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdEndRenderPass(commandBuffers_[imageIndex]);
+            swapchainLayouts_[imageIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        }
 
         if (!isSuccess(
                 vkEndCommandBuffer(commandBuffers_[imageIndex]),
@@ -304,8 +338,9 @@ public:
             return;
         }
 
-        const VkPipelineStageFlags waitStage =
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        const VkPipelineStageFlags waitStage = uploadedFrame
+            ? VK_PIPELINE_STAGE_TRANSFER_BIT
+            : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
         VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
         submitInfo.waitSemaphoreCount = 1;
@@ -359,6 +394,198 @@ public:
     }
 
 private:
+    void destroyUploadBuffer() {
+        if (device_ == VK_NULL_HANDLE) return;
+        if (uploadMapped_ != nullptr && uploadMemory_ != VK_NULL_HANDLE) {
+            vkUnmapMemory(device_, uploadMemory_);
+            uploadMapped_ = nullptr;
+        }
+        if (uploadBuffer_ != VK_NULL_HANDLE) {
+            vkDestroyBuffer(device_, uploadBuffer_, nullptr);
+            uploadBuffer_ = VK_NULL_HANDLE;
+        }
+        if (uploadMemory_ != VK_NULL_HANDLE) {
+            vkFreeMemory(device_, uploadMemory_, nullptr);
+            uploadMemory_ = VK_NULL_HANDLE;
+        }
+        uploadBufferCapacity_ = 0u;
+        uploadMemoryFlags_ = 0u;
+    }
+
+    bool ensureUploadBuffer(VkDeviceSize requiredBytes) {
+        if (uploadBuffer_ != VK_NULL_HANDLE &&
+            uploadBufferCapacity_ >= requiredBytes &&
+            uploadMapped_ != nullptr) {
+            return true;
+        }
+        destroyUploadBuffer();
+
+        VkBufferCreateInfo bufferInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        bufferInfo.size = requiredBytes;
+        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        if (!isSuccess(
+                vkCreateBuffer(device_, &bufferInfo, nullptr, &uploadBuffer_),
+                "vkCreateBuffer(GS frame upload)")) {
+            destroyUploadBuffer();
+            return false;
+        }
+
+        VkMemoryRequirements requirements{};
+        vkGetBufferMemoryRequirements(device_, uploadBuffer_, &requirements);
+        VkPhysicalDeviceMemoryProperties memoryProperties{};
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &memoryProperties);
+
+        uint32_t selectedType = UINT32_MAX;
+        VkMemoryPropertyFlags selectedFlags = 0u;
+        for (uint32_t i = 0u; i < memoryProperties.memoryTypeCount; ++i) {
+            if ((requirements.memoryTypeBits & (1u << i)) == 0u) continue;
+            const VkMemoryPropertyFlags flags =
+                memoryProperties.memoryTypes[i].propertyFlags;
+            if ((flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0u) continue;
+            if (selectedType == UINT32_MAX ||
+                (flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0u) {
+                selectedType = i;
+                selectedFlags = flags;
+                if ((flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0u) break;
+            }
+        }
+        if (selectedType == UINT32_MAX) {
+            logMessage(ANDROID_LOG_ERROR,
+                "No host-visible Vulkan memory type is available for GS frame upload");
+            destroyUploadBuffer();
+            return false;
+        }
+
+        VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        allocation.allocationSize = requirements.size;
+        allocation.memoryTypeIndex = selectedType;
+        if (!isSuccess(
+                vkAllocateMemory(device_, &allocation, nullptr, &uploadMemory_),
+                "vkAllocateMemory(GS frame upload)")) {
+            destroyUploadBuffer();
+            return false;
+        }
+        if (!isSuccess(
+                vkBindBufferMemory(device_, uploadBuffer_, uploadMemory_, 0u),
+                "vkBindBufferMemory(GS frame upload)")) {
+            destroyUploadBuffer();
+            return false;
+        }
+        if (!isSuccess(
+                vkMapMemory(
+                    device_, uploadMemory_, 0u, VK_WHOLE_SIZE, 0u,
+                    &uploadMapped_),
+                "vkMapMemory(GS frame upload)")) {
+            destroyUploadBuffer();
+            return false;
+        }
+
+        uploadBufferCapacity_ = requiredBytes;
+        uploadMemoryFlags_ = selectedFlags;
+        return true;
+    }
+
+    bool uploadFrameToSwapchain(
+        VkCommandBuffer commandBuffer,
+        uint32_t imageIndex) {
+        if (!frameUploadSupported_) return false;
+
+        std::string scaleError;
+        if (!gow::android::scaleRgbaToFit(
+                pendingFramePixels_.data(),
+                pendingFramePixels_.size(),
+                pendingFrameWidth_,
+                pendingFrameHeight_,
+                swapchainExtent_.width,
+                swapchainExtent_.height,
+                uploadPixels_,
+                scaleError)) {
+            __android_log_print(
+                ANDROID_LOG_WARN, kTag,
+                "GS frame upload rejected: %s", scaleError.c_str());
+            return false;
+        }
+        if (swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM) {
+            gow::android::convertRgbaToBgraInPlace(uploadPixels_);
+        }
+
+        const VkDeviceSize requiredBytes =
+            static_cast<VkDeviceSize>(uploadPixels_.size());
+        if (!ensureUploadBuffer(requiredBytes)) return false;
+        std::memcpy(uploadMapped_, uploadPixels_.data(), uploadPixels_.size());
+
+        if ((uploadMemoryFlags_ & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u) {
+            VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+            range.memory = uploadMemory_;
+            range.offset = 0u;
+            range.size = VK_WHOLE_SIZE;
+            if (!isSuccess(
+                    vkFlushMappedMemoryRanges(device_, 1u, &range),
+                    "vkFlushMappedMemoryRanges(GS frame upload)")) {
+                return false;
+            }
+        }
+
+        VkImageMemoryBarrier toTransfer{
+            VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        toTransfer.srcAccessMask = 0u;
+        toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        toTransfer.oldLayout = swapchainLayouts_[imageIndex];
+        toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toTransfer.image = swapchainImages_[imageIndex];
+        toTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        toTransfer.subresourceRange.baseMipLevel = 0u;
+        toTransfer.subresourceRange.levelCount = 1u;
+        toTransfer.subresourceRange.baseArrayLayer = 0u;
+        toTransfer.subresourceRange.layerCount = 1u;
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0u, 0u, nullptr, 0u, nullptr, 1u, &toTransfer);
+
+        VkBufferImageCopy copyRegion{};
+        copyRegion.bufferOffset = 0u;
+        copyRegion.bufferRowLength = 0u;
+        copyRegion.bufferImageHeight = 0u;
+        copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.imageSubresource.mipLevel = 0u;
+        copyRegion.imageSubresource.baseArrayLayer = 0u;
+        copyRegion.imageSubresource.layerCount = 1u;
+        copyRegion.imageOffset = {0, 0, 0};
+        copyRegion.imageExtent = {
+            swapchainExtent_.width, swapchainExtent_.height, 1u};
+        vkCmdCopyBufferToImage(
+            commandBuffer,
+            uploadBuffer_,
+            swapchainImages_[imageIndex],
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1u,
+            &copyRegion);
+
+        VkImageMemoryBarrier toPresent{
+            VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        toPresent.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        toPresent.dstAccessMask = 0u;
+        toPresent.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toPresent.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        toPresent.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toPresent.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toPresent.image = swapchainImages_[imageIndex];
+        toPresent.subresourceRange = toTransfer.subresourceRange;
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            0u, 0u, nullptr, 0u, nullptr, 1u, &toPresent);
+
+        swapchainLayouts_[imageIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        return true;
+    }
+
     bool createInstance() {
         const std::array<const char*, 2> extensions = {
             VK_KHR_SURFACE_EXTENSION_NAME,
@@ -615,7 +842,19 @@ private:
         swapchainInfo.imageColorSpace = selectedFormat.colorSpace;
         swapchainInfo.imageExtent = extent;
         swapchainInfo.imageArrayLayers = 1;
+        const bool rgbaCompatible =
+            selectedFormat.format == VK_FORMAT_R8G8B8A8_UNORM ||
+            selectedFormat.format == VK_FORMAT_B8G8R8A8_UNORM;
+        frameUploadSupported_ = rgbaCompatible &&
+            (capabilities.supportedUsageFlags &
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT) != 0u;
         swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        if (frameUploadSupported_) {
+            swapchainInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        } else {
+            logMessage(ANDROID_LOG_WARN,
+                "Vulkan surface does not support RGBA transfer upload; frame presenter remains disabled");
+        }
         const std::array<uint32_t, 2> queueIndices = {
             queueFamilies_.graphics, queueFamilies_.present
         };
@@ -648,6 +887,8 @@ private:
         }
 
         swapchainImages_.resize(actualImageCount);
+        swapchainLayouts_.assign(
+            actualImageCount, VK_IMAGE_LAYOUT_UNDEFINED);
         if (!isSuccess(
                 vkGetSwapchainImagesKHR(
                     device_, swapchain_, &actualImageCount,
@@ -836,6 +1077,8 @@ private:
         }
         imageViews_.clear();
         swapchainImages_.clear();
+        swapchainLayouts_.clear();
+        frameUploadSupported_ = false;
 
         if (swapchain_ != VK_NULL_HANDLE) {
             vkDestroySwapchainKHR(device_, swapchain_, nullptr);
@@ -856,7 +1099,19 @@ private:
     VkFormat swapchainFormat_ = VK_FORMAT_UNDEFINED;
     VkExtent2D swapchainExtent_{};
     std::vector<VkImage> swapchainImages_;
+    std::vector<VkImageLayout> swapchainLayouts_;
     std::vector<VkImageView> imageViews_;
+    VkBuffer uploadBuffer_ = VK_NULL_HANDLE;
+    VkDeviceMemory uploadMemory_ = VK_NULL_HANDLE;
+    void *uploadMapped_ = nullptr;
+    VkDeviceSize uploadBufferCapacity_ = 0u;
+    VkMemoryPropertyFlags uploadMemoryFlags_ = 0u;
+    std::vector<uint8_t> pendingFramePixels_;
+    std::vector<uint8_t> uploadPixels_;
+    uint32_t pendingFrameWidth_ = 0u;
+    uint32_t pendingFrameHeight_ = 0u;
+    bool hasPendingFrame_ = false;
+    bool frameUploadSupported_ = false;
     VkRenderPass renderPass_ = VK_NULL_HANDLE;
     std::vector<VkFramebuffer> framebuffers_;
     VkCommandPool commandPool_ = VK_NULL_HANDLE;
@@ -1151,6 +1406,16 @@ extern "C" void android_main(android_app* app) {
 
 #if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
         if (gRenderer.isReady()) {
+            if (runtime != nullptr) {
+                std::vector<uint8_t> framePixels;
+                uint32_t frameWidth = 0u;
+                uint32_t frameHeight = 0u;
+                if (runtime->gs().copyLatchedHostPresentationFrame(
+                        framePixels, frameWidth, frameHeight)) {
+                    gRenderer.submitFrame(
+                        std::move(framePixels), frameWidth, frameHeight);
+                }
+            }
             gRenderer.drawFrame();
         }
 #endif
