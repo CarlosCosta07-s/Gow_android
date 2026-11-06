@@ -2,7 +2,7 @@
 
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
-> Estado atual: shell Android com interface FORGE, ícone vetorial Ômega branco sobre vermelho, seleção SAF/ISO9660 e teste Vulkan. O jogo ainda não está integrado ou jogável.
+> Estado atual: shell Android ARM64 com interface FORGE, ícone vetorial Ômega branco sobre vermelho e seleção SAF/ISO9660. O mantenedor confirmou a abertura do app em um aparelho Android. O runtime do jogo ainda não está integrado e não há versão jogável.
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml)
 
@@ -34,13 +34,11 @@ O ícone adaptativo é um **Ômega branco sobre fundo vermelho sólido**, desenh
 
 A tela inicial permite selecionar uma imagem pelo Storage Access Framework, manter a permissão quando o provedor Android permite e validar o descritor primário ISO9660 no setor 16. Essa verificação **não identifica o serial nem confirma que o arquivo é God of War**; a leitura de `SYSTEM.CNF` e a identificação da revisão ainda serão implementadas. A imagem não é copiada para o aplicativo nem enviada ao GitHub.
 
-O botão de teste Vulkan abre a atividade nativa separadamente; ele não inicia o jogo.
+O launcher mantém as ações de seleção de disco e início do jogo. A ação **JOGAR** ainda não inicia uma sessão: o runtime nativo precisa ser integrado primeiro. O teste Vulkan isolado foi retirado da interface após encerrar o aplicativo no aparelho do mantenedor; a validação gráfica será feita com o renderizador GS e o próprio jogo.
 
-## Primeiro marco implementado
+## Estado do código nativo
 
-O aplicativo nativo usa GameActivity e inicializa Vulkan a partir da janela Android. O código cria surface, seleciona um dispositivo e filas compatíveis, cria swapchain e render pass, limpa uma imagem e a apresenta na tela. Também trata encerramento da janela e recriação do swapchain.
-
-Isso é um **smoke test de apresentação**, não o renderer do PS2. Ainda não executa código de God of War, não possui GS, não possui controles de jogo e não é um APK jogável.
+A atividade nativa usa AndroidX GameActivity. O código Vulkan atual é apenas um bring-up experimental de surface/swapchain e não é o renderizador Graphics Synthesizer do PS2. Como o teste isolado encerrou o aplicativo no aparelho do mantenedor, ele foi removido do launcher e não será usado como critério de progresso. A validação gráfica será feita com o backend GS integrado e a primeira imagem real do jogo. Ainda não há execução do código de God of War nem APK jogável.
 
 ## Referências técnicas
 
@@ -54,12 +52,12 @@ Esses projetos são referências, não resultados nossos. **Nenhum código de ru
 
 ## Roadmap
 
-1. Confirmar build e testar shell Vulkan em dispositivo físico.
-2. Implementar seleção SAF e validação de ISO/revisão.
-3. Integrar recompilação estática e runtime ARM64.
-4. Integrar frontend GS e chegar à primeira imagem real do jogo.
-5. Completar VU1, IOP, controles, áudio, FMVs e saves.
-6. Validar gameplay e otimizar para GPUs móveis.
+1. Integrar o runtime de recompilação estática e os subsistemas PS2 para Android ARM64, preservando o FORGE.
+2. Completar a identificação da imagem e da revisão do jogo por SYSTEM.CNF.
+3. Integrar o código recompilado ao runtime e estabelecer o fluxo de boot.
+4. Desenvolver o backend GS/Vulkan Android e apresentar a primeira imagem real do jogo.
+5. Substituir qualquer execução interpretada de VU1 por geração/compilação antecipada de microprogramas nativos.
+6. Completar controles, áudio, FMVs, saves, validar gameplay e otimizar para GPUs móveis.
 
 Veja o [roadmap detalhado](docs/ROADMAP.md).
 
