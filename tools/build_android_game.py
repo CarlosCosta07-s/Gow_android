@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""Build a local Android APK containing AOT generated from the user's own PS2 ELF.
+"""Build a local Android ARM64 APK from the user's original PS2 ISO.
 
-The ELF, generated C++ and host recompiler workspace stay outside tracked source:
-- source ELF: supplied by the user, outside this repository;
-- host work tree: outside this repository;
-- generated C++: android/app/build/gow-generated-game (Git-ignored);
-- resulting APK: android/app/build/outputs/apk/debug/app-debug.apk.
-
-This command never uploads or commits game-derived data.
+The ISO is the only game input. SYSTEM.CNF, the NTSC-U ELF, IRX modules and disc
+layout are extracted automatically into a private host workspace. Generated
+C++ stays under Git-ignored android/app/build, and later VU1/IOP captures are
+synchronized from the Android app's private files over ADB. Nothing game-derived
+is uploaded or committed.
 """
 
 from __future__ import annotations
