@@ -4,6 +4,15 @@
 **Branch de desenvolvimento:** `main`  
 **Objetivo:** port nativo de God of War (PS2, 2005) para Android ARM64, usando recompilação estática e runtime de serviços PS2 nativo; não é um emulador.
 
+## [DECISÃO ARQUITETURAL] Instalação BT3
+
+- O fluxo final escolhido é a extração seletiva para o armazenamento privado do aplicativo, inspirado no instalador BT3 do Dragon Rage.
+- A ISO será fonte de importação; o runtime deverá ler do `cdRoot` local depois que a instalação estiver validada.
+- Arquivos/pacotes de dados grandes serão preservados nos formatos originais. Não haverá preload de toda a instalação na RAM.
+- O manifesto de God of War ainda precisa ser derivado da árvore real da imagem e do rastreamento de boot. Os caminhos do Dragon Rage não serão presumidos.
+- O leitor ISO e a ponte híbrida já compilada serão reaproveitados onde fizer sentido, mas o provider que mantém a ISO aberta durante o jogo é transitório e não define a arquitetura final.
+- O objetivo de desempenho em aparelhos modestos será avaliado por frame time, 1% low, memória, I/O e temperatura em hardware real. A instalação BT3, isoladamente, não comprova aumento de FPS.
+
 ## [VERIFICADO] Shell FORGE
 
 - O aplicativo FORGE foi aberto em pelo menos um aparelho Android real, conforme relato do mantenedor.
@@ -101,9 +110,11 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 
 ## Próximos bloqueios reais
 
-1. Passar o descritor SAF selecionado pelo MainActivity para GowGameActivity sem abrir uma tela de jogo vazia antes do runtime estar pronto.
-2. Validar o provider ISO com imagem NTSC-U legítima no aparelho e rastrear arquivos que o IOP solicita no boot.
-3. Implementar cache privado do ELF e arquivos pequenos realmente necessários, após rastreamento.
+1. Completar a enumeração ISO9660 e definir o manifesto BT3 específico da revisão NTSC-U suportada.
+2. Implementar a extração privada com estimativa de espaço, staging, progresso, cancelamento, integridade e publicação atômica.
+3. Apontar o loader ELF e o VFS para a instalação local; substituir o provider híbrido de FD no caminho normal de execução.
+4. Validar a instalação e o acesso local com uma ISO do usuário em aparelho real; nenhum teste desse tipo foi declarado ainda.
+5. Medir I/O, frame time, memória e temperatura em aparelhos modestos antes de dimensionar cache e prefetch.
 4. Fornecer o ELF privado ao PS2Recomp, gerar C++ e ligar a tabela real para ARM64.
 5. Implementar o GS/Vulkan Android e presenter, substituindo OpenGL/Raylib desktop.
 6. Substituir a saída de áudio desktop por adaptador Android.
