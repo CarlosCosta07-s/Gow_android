@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "android/**"
+      - "port/kiexter/vu1/ps2_vu1_neon_compat.h"
       - ".github/workflows/android-shell.yml"
 
 permissions:
