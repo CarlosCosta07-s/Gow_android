@@ -422,15 +422,15 @@ def main() -> int:
     )
 
 
-    # On Android, cdrom0: resolves through the SAF-owned ISO descriptor rather
+    # On Android, cdrom0: resolves through the private cdRoot VFS rather
     # than a copied host directory. The app bridge exposes random-access file handles.
     iop_host_header = recompiler_source / "ps2xRuntime/src/lib/ps2_iop_host.h"
     replace_exactly_once(
         iop_host_header,
         "        uint64_t size = 0u;\n",
         "        uint64_t size = 0u;\n"
-        "        uint64_t androidDiscHandle = 0u;\n",
-        "add an Android ISO handle to the IOP host-file record",
+        "        uint64_t androidCdRootHandle = 0u;\n",
+        "add an Android cdRoot handle to the IOP host-file record",
     )
 
     iop_host_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_iop_host.cpp"
@@ -439,11 +439,11 @@ def main() -> int:
         '#include "ps2_iop_host.h"\n',
         '#include "ps2_iop_host.h"\n'
         '#if defined(__ANDROID__)\n'
-        'extern "C" uint64_t gowAndroidDiscOpenFile(const char *path, uint64_t *fileSize) noexcept;\n'
-        'extern "C" bool gowAndroidDiscReadFile(uint64_t handle, uint64_t offset, void *destination, size_t requested, size_t *bytesRead) noexcept;\n'
-        'extern "C" void gowAndroidDiscCloseFile(uint64_t handle) noexcept;\n'
+        'extern "C" uint64_t gowAndroidCdRootOpenFile(const char *path, uint64_t *fileSize) noexcept;\n'
+        'extern "C" bool gowAndroidCdRootReadFile(uint64_t handle, uint64_t offset, void *destination, size_t requested, size_t *bytesRead) noexcept;\n'
+        'extern "C" void gowAndroidCdRootCloseFile(uint64_t handle) noexcept;\n'
         '#endif\n',
-        "declare the Android SAF ISO handle bridge in the IOP adapter",
+        "declare the Android private cdRoot handle bridge in the IOP adapter",
     )
     replace_exactly_once(
         iop_host_cpp,
@@ -456,10 +456,10 @@ def main() -> int:
         "            std::fclose(file.stream);\n"
         "        }\n"
         "#if defined(__ANDROID__)\n"
-        "        if (file.androidDiscHandle != 0u)\n"
-        "            gowAndroidDiscCloseFile(file.androidDiscHandle);\n"
+        "        if (file.androidCdRootHandle != 0u)\n"
+        "            gowAndroidCdRootCloseFile(file.androidCdRootHandle);\n"
         "#endif",
-        "close native ISO handles when the IOP host adapter is destroyed",
+        "close native cdRoot handles when the IOP host adapter is destroyed",
     )
     replace_exactly_once(
         iop_host_cpp,
@@ -475,19 +475,19 @@ def main() -> int:
         "        return 0u;\n"
         "    }\n"
         "#if defined(__ANDROID__)\n"
-        "    constexpr std::string_view discPrefix{\"gowdisc:/\"};\n"
-        "    if (path.size() >= discPrefix.size() && path.substr(0u, discPrefix.size()) == discPrefix)\n"
+        "    constexpr std::string_view cdRootPrefix{\"gowcdroot:/\"};\n"
+        "    if (path.size() >= cdRootPrefix.size() && path.substr(0u, cdRootPrefix.size()) == cdRootPrefix)\n"
         "    {\n"
-        "        const std::string relativePath(path.substr(discPrefix.size()));\n"
+        "        const std::string relativePath(path.substr(cdRootPrefix.size()));\n"
         "        uint64_t fileSize = 0u;\n"
-        "        const uint64_t discHandle = gowAndroidDiscOpenFile(relativePath.c_str(), &fileSize);\n"
-        "        if (discHandle == 0u)\n"
+        "        const uint64_t cdRootHandle = gowAndroidCdRootOpenFile(relativePath.c_str(), &fileSize);\n"
+        "        if (cdRootHandle == 0u)\n"
         "            return 0u;\n"
         "        std::lock_guard<std::mutex> lock(m_hostFileMutex);\n"
         "        uint64_t handle = m_nextHostFileHandle++;\n"
         "        if (handle == 0u)\n"
         "            handle = m_nextHostFileHandle++;\n"
-        "        m_hostFiles.emplace(handle, HostFile{nullptr, fileSize, discHandle});\n"
+        "        m_hostFiles.emplace(handle, HostFile{nullptr, fileSize, cdRootHandle});\n"
         "        return handle;\n"
         "    }\n"
         "#endif\n\n"
@@ -502,12 +502,12 @@ def main() -> int:
         "    }\n"
         "    size = it->second.size;",
         "    if (it == m_hostFiles.end() ||\n"
-        "        (!it->second.stream && it->second.androidDiscHandle == 0u))\n"
+        "        (!it->second.stream && it->second.androidCdRootHandle == 0u))\n"
         "    {\n"
         "        return false;\n"
         "    }\n"
         "    size = it->second.size;",
-        "report sizes for Android ISO-backed IOP handles",
+        "report sizes for Android cdRoot-backed IOP handles",
     )
     replace_exactly_once(
         iop_host_cpp,
@@ -521,13 +521,13 @@ def main() -> int:
         "        return false;\n"
         "    }\n"
         "#if defined(__ANDROID__)\n"
-        "    if (it->second.androidDiscHandle != 0u)\n"
-        "        return gowAndroidDiscReadFile(it->second.androidDiscHandle, offset, destination, size, &bytesRead);\n"
+        "    if (it->second.androidCdRootHandle != 0u)\n"
+        "        return gowAndroidCdRootReadFile(it->second.androidCdRootHandle, offset, destination, size, &bytesRead);\n"
         "#endif\n"
         "    if (!it->second.stream)\n"
         "        return false;\n\n"
         "#if defined(_WIN32)",
-        "read IOP file requests directly from Android ISO extents",
+        "read IOP file requests directly from private cdRoot files",
     )
     replace_exactly_once(
         iop_host_cpp,
@@ -547,7 +547,7 @@ def main() -> int:
         "        std::fclose(stream);\n"
         "    }",
         "    std::FILE *stream = nullptr;\n"
-        "    uint64_t discHandle = 0u;\n"
+        "    uint64_t cdRootHandle = 0u;\n"
         "    {\n"
         "        std::lock_guard<std::mutex> lock(m_hostFileMutex);\n"
         "        const auto it = m_hostFiles.find(handle);\n"
@@ -556,7 +556,7 @@ def main() -> int:
         "            return;\n"
         "        }\n"
         "        stream = it->second.stream;\n"
-        "        discHandle = it->second.androidDiscHandle;\n"
+        "        cdRootHandle = it->second.androidCdRootHandle;\n"
         "        m_hostFiles.erase(it);\n"
         "    }\n"
         "    if (stream)\n"
@@ -564,8 +564,8 @@ def main() -> int:
         "        std::fclose(stream);\n"
         "    }\n"
         "#if defined(__ANDROID__)\n"
-        "    if (discHandle != 0u)\n"
-        "        gowAndroidDiscCloseFile(discHandle);\n"
+        "    if (cdRootHandle != 0u)\n"
+        "        gowAndroidCdRootCloseFile(cdRootHandle);\n"
         "#endif",
         "release IOP file handles through the matching host or Android disc backend",
     )
@@ -577,27 +577,27 @@ def main() -> int:
         '#include "runtime/ps2_rom_device.h"\n',
         '#include "runtime/ps2_rom_device.h"\n'
         '#if defined(__ANDROID__)\n'
-        'extern "C" uint64_t gowAndroidDiscOpenFile(const char *path, uint64_t *fileSize) noexcept;\n'
-        'extern "C" bool gowAndroidDiscReadFile(uint64_t handle, uint64_t offset, void *destination, size_t requested, size_t *bytesRead) noexcept;\n'
-        'extern "C" void gowAndroidDiscCloseFile(uint64_t handle) noexcept;\n'
+        'extern "C" uint64_t gowAndroidCdRootOpenFile(const char *path, uint64_t *fileSize) noexcept;\n'
+        'extern "C" bool gowAndroidCdRootReadFile(uint64_t handle, uint64_t offset, void *destination, size_t requested, size_t *bytesRead) noexcept;\n'
+        'extern "C" void gowAndroidCdRootCloseFile(uint64_t handle) noexcept;\n'
         '#endif\n',
-        "declare the Android ISO provider for the PS2 VFS",
+        "declare the Android cdRoot provider for the PS2 VFS",
     )
     replace_exactly_once(
         vfs_cpp,
         "namespace\n{\n    class HostOpenFile final : public IPS2OpenFile",
         "namespace\n{\n"
         "#if defined(__ANDROID__)\n"
-        "    class AndroidDiscOpenFile final : public IPS2OpenFile\n"
+        "    class AndroidCdRootOpenFile final : public IPS2OpenFile\n"
         "    {\n"
         "    public:\n"
-        "        AndroidDiscOpenFile(uint64_t handle, uint64_t size) : m_handle(handle), m_size(size) {}\n"
-        "        ~AndroidDiscOpenFile() override { if (m_handle != 0u) gowAndroidDiscCloseFile(m_handle); }\n"
+        "        AndroidCdRootOpenFile(uint64_t handle, uint64_t size) : m_handle(handle), m_size(size) {}\n"
+        "        ~AndroidCdRootOpenFile() override { if (m_handle != 0u) gowAndroidCdRootCloseFile(m_handle); }\n"
         "        int64_t read(void *destination, size_t size) override\n"
         "        {\n"
         "            if ((!destination && size != 0u) || m_handle == 0u) return -1;\n"
         "            size_t bytesRead = 0u;\n"
-        "            if (!gowAndroidDiscReadFile(m_handle, m_position, destination, size, &bytesRead)) return -1;\n"
+        "            if (!gowAndroidCdRootReadFile(m_handle, m_position, destination, size, &bytesRead)) return -1;\n"
         "            m_position += bytesRead;\n"
         "            return static_cast<int64_t>(bytesRead);\n"
         "        }\n"
@@ -622,7 +622,7 @@ def main() -> int:
         "    };\n"
         "#endif\n\n"
         "    class HostOpenFile final : public IPS2OpenFile",
-        "add the Android ISO-backed PS2 VFS file implementation",
+        "add the Android cdRoot-backed PS2 VFS file implementation",
     )
     vfs_open_old = (
         "        std::filesystem::path hostPath;\n"
@@ -652,15 +652,15 @@ def main() -> int:
         "            return -1;\n"
         "#if defined(__ANDROID__)\n"
         "        const std::string hostPathString = hostPath.generic_string();\n"
-        "        constexpr std::string_view discPrefix{\"gowdisc:/\"};\n"
-        "        if (hostPathString.size() >= discPrefix.size() && hostPathString.compare(0u, discPrefix.size(), discPrefix) == 0)\n"
+        "        constexpr std::string_view cdRootPrefix{\"gowcdroot:/\"};\n"
+        "        if (hostPathString.size() >= cdRootPrefix.size() && hostPathString.compare(0u, cdRootPrefix.size(), cdRootPrefix) == 0)\n"
         "        {\n"
         "            const uint32_t access = flags & PS2_FIO_O_RDWR;\n"
         "            if (access != PS2_FIO_O_RDONLY || (flags & (PS2_FIO_O_CREAT | PS2_FIO_O_TRUNC | PS2_FIO_O_APPEND)) != 0u) return -1;\n"
         "            uint64_t fileSize = 0u;\n"
-        "            const uint64_t discHandle = gowAndroidDiscOpenFile(hostPathString.substr(discPrefix.size()).c_str(), &fileSize);\n"
-        "            if (discHandle == 0u) return -1;\n"
-        "            file = std::make_unique<AndroidDiscOpenFile>(discHandle, fileSize);\n"
+        "            const uint64_t cdRootHandle = gowAndroidCdRootOpenFile(hostPathString.substr(cdRootPrefix.size()).c_str(), &fileSize);\n"
+        "            if (cdRootHandle == 0u) return -1;\n"
+        "            file = std::make_unique<AndroidCdRootOpenFile>(cdRootHandle, fileSize);\n"
         "        }\n"
         "        else\n"
         "#endif\n"
@@ -688,7 +688,7 @@ def main() -> int:
         vfs_cpp,
         vfs_open_old,
         vfs_open_new,
-        "route Android cdrom0: VFS opens to the random-access ISO provider",
+        "route Android cdrom0: VFS opens to the private cdRoot provider",
     )
     stat_anchor = (
         "    if (!resolveHostPath(path, mounts, hostPath))\n"
@@ -700,13 +700,13 @@ def main() -> int:
         "        return false;\n"
         "#if defined(__ANDROID__)\n"
         "    const std::string hostPathString = hostPath.generic_string();\n"
-        "    constexpr std::string_view discPrefix{\"gowdisc:/\"};\n"
-        "    if (hostPathString.size() >= discPrefix.size() && hostPathString.compare(0u, discPrefix.size(), discPrefix) == 0)\n"
+        "    constexpr std::string_view cdRootPrefix{\"gowcdroot:/\"};\n"
+        "    if (hostPathString.size() >= cdRootPrefix.size() && hostPathString.compare(0u, cdRootPrefix.size(), cdRootPrefix) == 0)\n"
         "    {\n"
         "        uint64_t fileSize = 0u;\n"
-        "        const uint64_t discHandle = gowAndroidDiscOpenFile(hostPathString.substr(discPrefix.size()).c_str(), &fileSize);\n"
-        "        if (discHandle == 0u) return false;\n"
-        "        gowAndroidDiscCloseFile(discHandle);\n"
+        "        const uint64_t cdRootHandle = gowAndroidCdRootOpenFile(hostPathString.substr(cdRootPrefix.size()).c_str(), &fileSize);\n"
+        "        if (cdRootHandle == 0u) return false;\n"
+        "        gowAndroidCdRootCloseFile(cdRootHandle);\n"
         "        result.size = fileSize;\n"
         "        result.readOnly = true;\n"
         "        return true;\n"
@@ -715,26 +715,26 @@ def main() -> int:
         "    std::error_code error;\n"
     )
     replace_exactly_once(vfs_cpp, stat_anchor, stat_replace,
-                         "support file stat for Android ISO-backed cdrom0 paths")
+                         "support file stat for Android private cdRoot paths")
 
     replace_exactly_once(
         runtime_cpp,
         '#include "ps2_runtime.h"\n',
         '#include "ps2_runtime.h"\n'
         '#if defined(__ANDROID__)\n'
-        'extern "C" bool gowAndroidDiscIsReady() noexcept;\n'
+        'extern "C" bool gowAndroidCdRootIsReady() noexcept;\n'
         '#endif\n',
-        "declare Android ISO mount readiness for runtime path setup",
+        "declare Android cdRoot mount readiness for runtime path setup",
     )
     replace_exactly_once(
         runtime_cpp,
         "        paths.cdRoot = paths.elfDirectory;\n",
         "#if defined(__ANDROID__)\n"
-        "        paths.cdRoot = gowAndroidDiscIsReady() ? std::filesystem::path(\"gowdisc:/\") : paths.elfDirectory;\n"
+        "        paths.cdRoot = gowAndroidCdRootIsReady() ? std::filesystem::path(\"gowcdroot:/\") : paths.elfDirectory;\n"
         "#else\n"
         "        paths.cdRoot = paths.elfDirectory;\n"
         "#endif\n",
-        "mount the SAF-backed ISO as the PS2 runtime CD root when available",
+        "mount the private cdRoot as the PS2 runtime CD root when available",
     )
 
     # The strict Android profile must not retain the optional PCSX2 VU1 bridge.
