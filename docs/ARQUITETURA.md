@@ -70,92 +70,96 @@ A ISO não será copiada para o APK nem armazenada no Git.
 
 ### 3. Recompilador estático
 
-Ferramenta do pipeline de desenvolvimento, não parte do loop de jogo:
+Ferramenta do pipeline de build, não parte do loop de jogo:
 
-- Analisar ELF de entrada do usuário.
-- Identificar funções e instruções MIPS R5900.
-- Gerar C++ e compilar para `arm64-v8a`.
-- Registrar versão de ferramentas, mapa de funções, opções e hashes dos insumos privados.
-- Manter ELF, mapas privados sensíveis e código gerado a partir do executável original fora do repositório público.
+- Usar PS2Recomp, na revisão fixada pelo KIexster, como base do decoder/analyzer/lifter MIPS R5900.
+- Usar `recompiler/config/funcmap.csv` e `recomp.template.toml` já importados como configuração específica de `SCUS_973.99`.
+- Adaptar geração e compilação do C++ resultante para `arm64-v8a`, corrigindo diferenças de ABI, intrinsics e alinhamento.
+- Manter ELF, ISO, mapa derivado e C++ gerado a partir do executável original em ambiente privado, fora do Git e da CI pública.
+- Registrar commit do recompilador, parâmetros, hashes dos insumos privados e relatório de funções traduzidas/pendentes.
 
-O objetivo final é execução nativa do código recompilado, sem intérprete/JIT de EE no caminho final.
+O compilador será executado no ambiente host de build. O APK recebe apenas código nativo gerado/compilado; não interpreta nem recompila o ELF durante a partida.
 
 ### 4. Runtime EE e unidades vetoriais
 
-Responsabilidades previstas:
+A base Waffle/KIexster já contém estado de EE, memória, scheduler, stubs e serviços usados pelo executável. Vamos selecionar e adaptar esses módulos, em vez de reimplementar tudo:
 
 - Memória, registradores, exceções, syscalls, threads, timers e interrupções do EE.
-- Instruções MIPS R5900 e operações MMI necessárias ao jogo.
-- VU0 em modo macro.
-- VU1 e microprogramas convertidos antecipadamente, com testes de equivalência.
-- Tabelas de ligação entre código recompilado e serviços nativos.
+- Operações MMI e ligação das funções recompiladas aos serviços nativos.
+- VU0 macro e VU1 AOT.
+- Checkpoints e diagnóstico de PC, RA, SP, thread e último subsistema confirmado.
 
-Falhas devem registrar PC, RA, SP, thread e último subsistema confirmado.
+As APIs e sincronização que dependem do runner desktop serão substituídas pelo host Android. Não será mantido um caminho de interpretação/JIT do EE no produto final.
 
 ### 5. Subsistemas PS2 utilizados
 
-Implementar somente os contratos necessários ao título:
+Reutilizar os serviços Waffle/KIexster que já implementam os contratos utilizados pelo jogo e adaptá-los ao host Android:
 
-- IOP/R3000A e módulos IRX.
-- SIF, DMA, VIF e GIF.
-- CD/DVD e leitura dos arquivos do disco.
+- IOP/R3000A e módulos IRX; os módulos necessários devem ser gerados/compilados antecipadamente para evitar interpretador no caminho final.
+- SIF, DMA, VIF e GIF, preservando o fluxo de pacotes necessário entre EE, VU1 e GS.
+- CD/DVD e leitura dos arquivos no layout esperado pelo port.
 - Cartão de memória virtual e operações save/load.
 - SPU2/LIBSD e temporização de áudio.
-- Entrada equivalente ao DualShock 2.
+- Serviços de controle que reproduzem a semântica DualShock 2.
 
-Cada subsistema terá logs e contadores próprios.
+Cada subsistema terá logs e contadores próprios. A seleção de arquivos pelo SAF precisa alimentar o VFS/cache que o runtime espera; o simples URI do ISO não satisfaz automaticamente esse contrato.
 
 ### 6. Renderizador Graphics Synthesizer (GS) via Vulkan
 
 O código experimental de clear/present não equivale a modelar o Graphics Synthesizer e falhou ao ser iniciado no aparelho do mantenedor. Não é uma dependência para começar o trabalho no runtime; o backend GS será integrado e validado com comandos e frames reais do jogo.
 
-Próximas etapas:
+Estratégia gráfica:
 
-1. Criar um backend GS com interface independente do Android.
-2. Implementar recursos de renderização usados pelo jogo.
-3. Validar texturas, CLUT/paletas, swizzle, framebuffer, depth, blend e alpha test.
-4. Reproduzir passagens e efeitos específicos do jogo.
-5. Comparar capturas e checkpoints com referências conhecidas.
-6. Medir sincronização, filas e memória em GPUs móveis reais.
+1. Reaproveitar o frontend de comandos GS/GIF e as rotinas de formatos, memória, CLUT e swizzle do runtime KIexster/Waffle onde não estiverem acopladas ao OpenGL.
+2. Não transplantar o backend `gs_gl`, WGL nem o host Raylib do desktop.
+3. Implementar o backend GS/Vulkan para Android: render targets, depth, alpha test, destination-alpha, blending, texturas e sincronização.
+4. Substituir mecanismos OpenGL específicos por pipelines, descriptors, render passes/dynamic rendering e recursos Vulkan compatíveis com o aparelho.
+5. Comparar a primeira imagem do jogo e cenas de referência, não um clear/present isolado.
+6. Medir sincronização, filas, memória e frame time em GPUs móveis reais.
 
 **Critério do renderer:** primeira imagem real do jogo apresentada na tela Android. Um triângulo, clear pass ou probe não conclui esta fase.
 
 ### 7. Áudio
 
-O SPU2/LIBSD deverá alimentar um mixer próprio e saída de baixa latência pela API nativa AAudio do Android. Buffers e sincronização permanecem responsabilidade do runtime. O callback não deve bloquear, alocar memória imprevisivelmente nem ler disco.
+O motor de som SPU2/LIBSD do runtime Waffle/KIexster é um candidato a reaproveitamento. A saída de áudio específica do PC será substituída por um adaptador AAudio Android. Buffers e sincronização permanecem responsabilidade do runtime; o callback não deve bloquear, alocar memória imprevisivelmente nem ler disco.
 
 ### 8. Entrada e interface
 
-- Overlay de toque configurável.
-- Mapeamento de botões para a semântica DualShock 2.
-- Controles Bluetooth e USB pelas APIs de entrada Android.
-- Tratamento de pausa, perda de foco, reconexão e retorno.
-- Feedback tátil opcional, sem alterar a lógica original.
+- Reaproveitar a tradução dos comandos de pad do jogo quando independente do host.
+- Implementar overlay de toque configurável no FORGE/runtime Android.
+- Mapear gamepad Bluetooth/USB para a semântica DualShock 2 usando eventos Android.
+- Remover XInput/Win32 e chamadas de janela desktop.
+- Tratar pausa, perda de foco, reconexão, retorno e feedback tátil.
 
 ### 9. Frame pacing e desempenho
 
 Separar relógio da lógica, submissão GPU e apresentação. Usar inicialmente AChoreographer/Choreographer e os mecanismos de sincronização Vulkan do sistema; soluções externas de frame pacing só serão avaliadas se medições demonstrarem necessidade. Prioridade: estabilidade e velocidade correta; metas de FPS só serão publicadas após medições reproduzíveis.
 
-## Política de implementação própria
+## Estratégia de reaproveitamento seletivo
 
-**Não será importado código de outros ports ou emuladores.** Black para Android, Dragon Rage/Budokai Tenkaichi 3, CodeAbhi, KIexster, Waffle565, PS2Recomp e PCSX2 serão consultados somente como referências de engenharia. Não serão incorporados seus launchers, recompiladores, runtimes, renderizadores, intérpretes, shaders, hooks ou sistemas de controle.
+**A base principal é KIexster/god-of-war-recomp.** O objetivo é aproveitar a recompilação, configuração e comportamento específicos de God of War já trabalhados no PC, não reconstruir todo o software. Os arquivos já importados e seus hashes estão em [BASE_KIEXTER.md](BASE_KIEXTER.md).
 
-O FORGE continuará sendo a interface e o inicializador. O código responsável por executar God of War será construído neste repositório, em módulos separados e com testes próprios. O fluxo inicial será:
+A composição da base tem três origens que precisam permanecer identificadas:
 
-1. **Imagem:** validar o ISO, ler `SYSTEM.CNF`, identificar a região/revisão e localizar o ELF de boot.
-2. **Recompilador próprio:** implementar decoder/analisador MIPS R5900, resolução de funções e geração de C++ para ARM64. O compilador do jogo será uma ferramenta de build; não fará interpretação/JIT durante a partida.
-3. **Runtime próprio:** implementar memória, registradores, exceções, threads e serviços do EE utilizados pelo jogo; construir as funções necessárias de IOP, CD/DVD, SIF, DMA, VIF e GIF em código nativo. As microprogramas VU1 serão traduzidos/gerados antecipadamente, sem fallback de interpretador no produto final.
-4. **Gráficos próprios:** implementar o frontend do Graphics Synthesizer e seu backend Vulkan Android, incluindo VRAM, transferências, texturas, CLUT, depth, alpha test, blending e sincronização.
-5. **Áudio e entrada próprios:** ligar SPU2/LIBSD à saída de áudio Android de baixa latência e mapear toque/gamepad para os comandos do DualShock 2.
-6. **Validação:** testar cada marco com checkpoints do boot, menus e cenas do próprio jogo; comparar imagens, estado e temporização em aparelho real.
+1. **KIexster:** mapa de 6.414 funções, template de configuração, overrides específicos de God of War e ajustes/diagnósticos do port de PC.
+2. **Waffle565:** runtime nativo usado pelo KIexster, incluindo serviços EE/IOP/VU1/GS, áudio, pad e memória. Os três arquivos de código importados já indicam essa proveniência nos cabeçalhos.
+3. **PS2Recomp:** ferramenta de análise e recompilação estática MIPS R5900 → C++. O script KIexster fixa a revisão `c5a9d02573410a2085a4b4b831b0b68ba3515440`.
 
-As referências ajudam a formular critérios e identificar problemas típicos de ARM64, GPUs tile-based, memória, frame pacing, lifecycle, controles e instalação de dados. **Não são bases de código nem dependências do projeto.**
+### Regra de seleção
 
-### Dependências e APIs
+- Reaproveitar os módulos portáveis e os hooks necessários ao jogo.
+- Adaptar ou substituir tudo que dependa de Windows, Raylib desktop, OpenGL/WGL, teclado/mouse ou dispositivos de áudio do PC.
+- Preservar créditos, cabeçalhos, GPL-3.0 e avisos de componentes derivados de PCSX2.
+- Não importar o runtime Waffle inteiro nem aplicar a pilha de patches desktop sem separar as dependências.
+- Não incluir ISO, ELF, IRX original, PAK, dumps de microcódigo ou C++ gerado a partir do ELF no repositório público.
 
-A prioridade será usar Android SDK/NDK, CMake, APIs nativas do Android, Vulkan e APIs de áudio/entrada fornecidas pelo sistema. Bibliotecas externas genéricas só serão consideradas quando houver necessidade técnica demonstrada, licença compatível e justificativa documentada. Isso é distinto de importar o código de um port de jogo; qualquer dependência nova será avaliada individualmente.
+### Caminho Android
 
-O repositório não receberá ISO, ELF, IRX, arquivos extraídos, dados proprietários nem C++ gerado a partir do executável original. Insumos do usuário e artefatos derivados necessários à geração ficarão fora da CI pública e do Git.
+O launcher FORGE e a seleção SAF continuam sendo nossa camada Android. O runtime será ligado à atividade nativa e receberá os dados do jogo por um cache/VFS privado compatível com o layout usado pela base KIexster. A camada gráfica usará o frontend GS que puder ser separado do host e um backend Vulkan Android; o backend OpenGL do PC não será usado diretamente.
+
+A geração AOT de VU1 e dos módulos IRX deve ocorrer como ferramenta host, antes da compilação do APK. O CMake de referência exclui a geração VU1 quando `PS2X_IS_ANDROID` está ativo; essa etapa precisa ser separada do build Android e seus resultados compilados para ARM64. O produto final não deve recorrer a interpretadores do EE/VU1/IOP como caminho de execução.
+
+Bibliotecas genéricas Android existentes no launcher podem continuar. Para novos componentes, priorizar APIs do sistema e adicionar dependências externas somente quando necessárias e documentadas.
 
 ## Estrutura lógica pretendida
 
