@@ -13,6 +13,19 @@ inline constexpr uint64_t kIsoSectorSize = 2048u;
 struct IsoFile {
     uint64_t byteOffset = 0u;
     uint64_t size = 0u;
+    uint32_t lsn = 0u;
+};
+
+struct IsoDiscFile {
+    std::string path;
+    uint32_t lsn = 0u;
+    uint32_t size = 0u;
+};
+
+struct IsoDiscLayout {
+    uint32_t sectorCount = 0u;
+    uint32_t layer1Start = 0u;
+    std::vector<IsoDiscFile> files;
 };
 
 struct IsoDirectoryEntry {
@@ -38,6 +51,18 @@ public:
     void close() noexcept;
     bool isOpen() const noexcept { return descriptor_ >= 0; }
     uint64_t imageSize() const noexcept { return imageSize_; }
+    uint32_t sectorCount() const noexcept { return sectorCount_; }
+    uint32_t layer1Start() const noexcept { return layer1Start_; }
+
+    // Scans every volume/layer and returns all regular files with physical
+    // disc LSNs. Paths are normalized ISO9660 relative paths using '/'.
+    // Multi-extent files and ambiguous paths are rejected explicitly.
+    bool scanDiscLayout(IsoDiscLayout &layout,
+                        std::string *error = nullptr) const;
+
+    // Reads whole 2048-byte sectors from the original image.
+    bool readSectors(uint32_t lsn, uint32_t count,
+                     void *destination) const;
 
     // ISO paths are case-insensitive and may include an optional ;version suffix.
     // Directories and multi-extent files are not returned as ordinary files.
@@ -59,6 +84,14 @@ private:
     struct Directory {
         uint64_t byteOffset = 0u;
         uint64_t size = 0u;
+        uint32_t baseLsn = 0u;
+        uint32_t volumeSectors = 0u;
+    };
+
+    struct Volume {
+        uint32_t baseLsn = 0u;
+        uint32_t sectorCount = 0u;
+        Directory root{};
     };
 
     bool readAt(uint64_t offset, void *destination, size_t size) const;
@@ -72,7 +105,10 @@ private:
 
     int descriptor_ = -1;
     uint64_t imageSize_ = 0u;
+    uint32_t sectorCount_ = 0u;
+    uint32_t layer1Start_ = 0u;
     Directory root_{};
+    std::vector<Volume> volumes_;
 };
 
 } // namespace gow::disc
