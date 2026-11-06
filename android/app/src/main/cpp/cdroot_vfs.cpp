@@ -129,7 +129,11 @@ int CdRootVfs::openDirectory(const std::vector<std::string> &parts) const {
     if (rootFd_ < 0) {
         return -1;
     }
-    int current = ::dup(rootFd_);
+    // dup(rootFd_) would share the directory stream offset with the
+    // persistent root descriptor. Open "." instead to obtain an independent
+    // open-file description for every traversal/listing operation.
+    int current = ::openat(rootFd_, ".",
+        O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     if (current < 0) {
         return -1;
     }
