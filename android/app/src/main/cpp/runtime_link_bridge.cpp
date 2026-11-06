@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cctype>
 #include <exception>
 #include <filesystem>
 #include <limits>
@@ -250,6 +251,134 @@ bool gowInitializePs2RuntimeCoreHeadless(
     } catch (...) {
         writeMessage(message, capacity,
                      "Unknown Android PS2 core initialization failure.");
+        return false;
+    }
+}
+
+// Loads the user's already validated BOOT2 into PS2 memory only when a
+// generated static AOT table is linked and the ELF entry point is covered.
+// This function deliberately does not call PS2Runtime::run().
+extern "C" bool gowRuntimeLoadElfAndCheckAot(
+    PS2Runtime *runtime, const char *bootRelativePath,
+    char *message, size_t capacity) noexcept {
+    if (message != nullptr && capacity != 0u) message[0] = '\0';
+    try {
+        if (runtime == nullptr) {
+            writeMessage(message, capacity, "PS2Runtime não foi criado.");
+            return false;
+        }
+        if (bootRelativePath == nullptr || bootRelativePath[0] == '\0') {
+            writeMessage(message, capacity, "O caminho BOOT2 está vazio.");
+            return false;
+        }
+        if (g_ps2RecompiledFunctionTableSlotCount == 0u ||
+            g_ps2RecompiledFunctionTable == nullptr) {
+            writeMessage(
+                message, capacity,
+                "A tabela AOT do jogo está vazia. Este APK ainda não contém C++ recompilado do ELF privado.");
+            return false;
+        }
+
+        std::array<char, 4096> privateRoot{};
+        if (!gowAndroidCdRootCopyPath(privateRoot.data(), privateRoot.size())) {
+            writeMessage(message, capacity, "A pasta privada cdRoot não está montada.");
+            return false;
+        }
+
+        std::string relative(bootRelativePath);
+        if (relative.size() > 1024u || relative.front() == '/' ||
+            relative.find(':') != std::string::npos ||
+            relative.find('\0') != std::string::npos) {
+            writeMessage(message, capacity, "O caminho BOOT2 é absoluto ou excede os limites.");
+            return false;
+        }
+        std::replace(relative.begin(), relative.end(), '\\', '/');
+
+        std::filesystem::path normalized;
+        size_t cursor = 0u;
+        size_t depth = 0u;
+        while (cursor < relative.size()) {
+            const size_t end = relative.find('/', cursor);
+            const size_t finish = end == std::string::npos ? relative.size() : end;
+            std::string component = relative.substr(cursor, finish - cursor);
+            if (component.empty() || component == "." || component == ".." ||
+                component.size() > 255u || ++depth > 32u) {
+                writeMessage(message, capacity, "O caminho BOOT2 contém um componente inválido.");
+                return false;
+            }
+            const size_t version = component.find(';');
+            if (version != std::string::npos) component.resize(version);
+            if (component.empty()) {
+                writeMessage(message, capacity, "O caminho BOOT2 contém um nome vazio.");
+                return false;
+            }
+            for (char &ch : component) {
+                ch = static_cast<char>(
+                    std::toupper(static_cast<unsigned char>(ch)));
+            }
+            normalized /= component;
+            if (end == std::string::npos) break;
+            cursor = end + 1u;
+        }
+        if (normalized.empty()) {
+            writeMessage(message, capacity, "O caminho BOOT2 não contém um arquivo.");
+            return false;
+        }
+
+        const std::filesystem::path canonicalRoot =
+            std::filesystem::weakly_canonical(
+                std::filesystem::u8path(privateRoot.data()));
+        const std::filesystem::path candidate =
+            std::filesystem::weakly_canonical(canonicalRoot / normalized);
+        auto rootPart = canonicalRoot.begin();
+        auto candidatePart = candidate.begin();
+        for (; rootPart != canonicalRoot.end() &&
+               candidatePart != candidate.end();
+             ++rootPart, ++candidatePart) {
+            if (*rootPart != *candidatePart) break;
+        }
+        if (rootPart != canonicalRoot.end() ||
+            candidatePart == candidate.end() ||
+            !std::filesystem::is_regular_file(candidate)) {
+            writeMessage(
+                message, capacity,
+                "O BOOT2 não é um arquivo regular dentro da instalação privada.");
+            return false;
+        }
+
+        if (!runtime->loadELF(candidate.string())) {
+            writeMessage(
+                message, capacity,
+                "PS2Runtime::loadELF rejeitou o BOOT2. Consulte o Logcat GowAndroid para o detalhe do ELF.");
+            return false;
+        }
+
+        const uint32_t entryPoint = runtime->cpu().pc;
+        if (!runtime->hasFunction(entryPoint)) {
+            char summary[256]{};
+            std::snprintf(
+                summary, sizeof(summary),
+                "ELF carregado, mas a tabela AOT não contém a função de entrada 0x%08X. O jogo não será executado.",
+                entryPoint);
+            writeMessage(message, capacity, summary);
+            return false;
+        }
+
+        char summary[256]{};
+        std::snprintf(
+            summary, sizeof(summary),
+            "OK: ELF carregado · entry=0x%08X · tabela AOT=%u slots · guest execution ainda bloqueada.",
+            entryPoint, g_ps2RecompiledFunctionTableSlotCount);
+        writeMessage(message, capacity, summary);
+        return true;
+    } catch (const std::exception &exception) {
+        writeMessage(
+            message, capacity,
+            std::string("Falha ao carregar/verificar ELF AOT: ") + exception.what());
+        return false;
+    } catch (...) {
+        writeMessage(message, capacity,
+                     "Falha desconhecida ao carregar/verificar ELF AOT.");
         return false;
     }
 }
