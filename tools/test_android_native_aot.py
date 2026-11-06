@@ -35,9 +35,15 @@ class AndroidNativeAotCaptureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "expected exactly 16384"):
             validate_vu1_capture_directory(self.capture / "vu1")
 
-    def test_vu1_requires_at_least_one_capture(self) -> None:
-        with self.assertRaisesRegex(ValueError, "No VU1"):
-            validate_vu1_capture_directory(self.capture / "vu1")
+    def test_vu1_empty_capture_is_valid_for_incremental_bootstrap(self) -> None:
+        self.assertEqual(validate_vu1_capture_directory(self.capture / "vu1"), [])
+
+    def test_iop_empty_capture_is_valid_for_incremental_bootstrap(self) -> None:
+        records = normalize_and_validate_iop_dump(
+            self.capture / "iop", self.root / "normalized"
+        )
+        self.assertEqual(records, [])
+        self.assertTrue((self.root / "normalized").is_dir())
 
     def test_iop_manifest_is_verified_and_normalized(self) -> None:
         module = b"\x00\x00\x00\x00\x01\x00\x00\x00"
