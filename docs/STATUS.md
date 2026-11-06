@@ -178,8 +178,8 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle/KIext
 ## [NÃO TESTADO] Runtime e jogo
 
 - Ainda não foi executado um boot real do jogo, nem gameplay.
-- O launcher ainda não inicia a GameActivity/runtime depois da preparação.
-- O PS2Runtime ainda não recebe o ELF privado e não executa `loadELF()`/serviços de boot.
+- O FORGE agora abre a `GowGameActivity` em modo de diagnóstico após a instalação/verificação aprovada; isso encaminha cdRoot/BOOT2, não inicia gameplay.
+- A ponte Android já encaminha o BOOT2 e chama `gowRuntimeLoadElfAndCheckAot()` depois de `initializeCoreHeadless()`. O APK público ainda usa a tabela AOT placeholder vazia, então a porta recusa a carga antes de `loadELF()`; nenhum serviço real de boot é executado.
 - A pasta legada `gow_boot_seed`, criada por versões anteriores do fluxo parcial, pode permanecer nos dados privados de instalações atualizadas; ela não é usada pelo fluxo atual. A instalação atual cria diretórios por serial e extrai a árvore ISO9660 completa, mas ainda não comprova a cadeia de boot nem a disponibilidade/cobertura AOT dos módulos IRX.
 - O patch Waffle para encaminhar `cdrom0:` ao `CdRootVfs` e configurar o caminho físico em `IoPaths.cdRoot` compilou no host estrito e no target Android ARM64. A ponte para configuração de `IoPaths` está compilada; a validação efetiva desse caminho ocorre quando o app instala uma imagem. O dispatcher CDVD foi exercitado por teste host sintético; o probe Android foi compilado no run `42227233881`, mas ainda falta executá-lo em aparelho e, depois, exercitar o serviço CDVD do IOP de uma sessão real.
 - Não há cobertura comprovada de VU1 AOT/IRX para o conteúdo da cópia do usuário.
@@ -209,3 +209,12 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle/KIext
 O painel informa explicitamente que o jogo ainda não iniciou quando o núcleo headless está pronto: a geração/integração do C++ AOT privado, o backend GS/Vulkan Android e o áudio continuam pendentes. A mensagem de erro inclui a orientação para consultar Logcat com a etiqueta `GowAndroid`.
 
 **Limites de validação:** a CI `42246181055` executou os testes headless/host/VFS, mas o `assembleDebug` revelou que `GameActivity` não expõe `activity->clazz`; essa abordagem foi removida. A implementação seguinte registra a própria Activity por JNI e verifica sua identidade antes de liberar a referência global. Na última consulta, a nova CI `42246883029` já havia passado pelo checker e pelos testes nativos/VFS e estava compilando o APK ARM64. A build final e a apresentação visual em aparelho ainda não foram confirmadas. Essa alteração não habilita `loadELF()`, `run()` nem gameplay.
+## Encaminhamento FORGE → GameActivity e porta ELF/AOT — 06/11/2026
+
+**[IMPLEMENTADO; CI APROVADA]** Após a instalação/verificação privada, o FORGE abre `GowGameActivity` com `cdRoot` e o caminho BOOT2. `android_disc_bridge.cpp` monta o VFS privado; `main.cpp` recebe os parâmetros por um callback JNI atômico e usa uma condition variable para impedir que `android_main()` tente ler o BOOT2 antes da configuração Java. A Activity também libera a espera quando é destruída.
+
+**[IMPLEMENTADO; NÃO É BOOT]** Depois da inicialização headless, `android_main()` chama `gowRuntimeLoadElfAndCheckAot()`. A ponte recusa imediatamente o build público quando a tabela de funções AOT está vazia; quando houver código gerado, resolve o BOOT2 apenas dentro do diretório privado, chama `PS2Runtime::loadELF()` e verifica se a tabela contém a função do endereço de entrada. A função não chama `PS2Runtime::run()`.
+
+**[VERIFICADO NA CI, run `42250619735`]** Preparação Waffle, verificador de lifecycle/JNI, testes nativos de entrada/ISO/CDVD, PS2Vfs, teste de confinamento do caminho BOOT2 (traversal, caminho absoluto, nome vazio, diretório, prefixo de dispositivo e symlink externo) e build APK Debug ARM64 passaram. Artefato `gow-android-arm64-shell` ID `13520766214`, disponível até 13/11/2026. Ainda falta instalar e abrir esse APK em aparelho com uma instalação do usuário, conferir Logcat/painel e validar o callback visual.
+
+**Bloqueios para gameplay:** (1) executar PS2Recomp com o ELF privado e integrar o C++ AOT/registro de funções ARM64 ao APK de teste; (2) gerar e integrar VU1/IOP AOT/IRX com cobertura; (3) implementar GS Vulkan Android e presenter real; (4) implementar áudio Android; (5) validar CDVD/serviços da sessão real e a primeira imagem. Nenhuma ISO, ELF, IRX, microcódigo ou C++ gerado foi enviado ao Git ou à CI pública.
