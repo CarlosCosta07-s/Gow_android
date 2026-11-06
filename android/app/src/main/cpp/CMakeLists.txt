@@ -12,10 +12,33 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(game-activity REQUIRED CONFIG)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_program(GOW_GLSLANG_VALIDATOR NAMES glslangValidator
+    HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin"
+    REQUIRED)
 
 find_library(ANDROID_LOG_LIBRARY log REQUIRED)
 find_library(ANDROID_LIBRARY android REQUIRED)
 find_library(VULKAN_LIBRARY vulkan REQUIRED)
+
+set(GOW_GS_SHADER_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(GOW_GS_SHADER_HEADER "${GOW_GS_SHADER_GENERATED_DIR}/gs_vulkan_primitive_shaders.h")
+add_custom_command(
+    OUTPUT "${GOW_GS_SHADER_HEADER}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${GOW_GS_SHADER_GENERATED_DIR}"
+    COMMAND ${Python3_EXECUTABLE}
+        "${CMAKE_CURRENT_LIST_DIR}/../../../../../tools/compile_android_gs_shaders.py"
+        --compiler "${GOW_GLSLANG_VALIDATOR}"
+        --vertex "${CMAKE_CURRENT_LIST_DIR}/../shaders/gs_primitive.vert"
+        --fragment "${CMAKE_CURRENT_LIST_DIR}/../shaders/gs_primitive.frag"
+        --output "${GOW_GS_SHADER_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_LIST_DIR}/../../../../../tools/compile_android_gs_shaders.py"
+        "${CMAKE_CURRENT_LIST_DIR}/../shaders/gs_primitive.vert"
+        "${CMAKE_CURRENT_LIST_DIR}/../shaders/gs_primitive.frag"
+    VERBATIM
+)
+add_custom_target(gow_android_gs_shaders DEPENDS "${GOW_GS_SHADER_HEADER}")
 
 add_library(android-game SHARED
     main.cpp
@@ -28,6 +51,7 @@ add_library(android-game SHARED
     private_boot_path.cpp
     android_frame_scaler.cpp
     android_gs_geometry.cpp
+    android_gs_vulkan_backend.cpp
     ps2_elf_validator.cpp
     android_disc_bridge.cpp
     vu1_neon_compat_smoke.cpp
@@ -119,6 +143,7 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
     target_include_directories(android-game PRIVATE
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/include"
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/src/lib"
+        "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/src/lib/gs/gpu"
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/src/lib/Kernel"
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xIOP/include"
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xIOP/src"
@@ -134,6 +159,10 @@ else()
     )
 endif()
 
+
+target_sources(android-game PRIVATE "${GOW_GS_SHADER_HEADER}")
+target_include_directories(android-game PRIVATE "${GOW_GS_SHADER_GENERATED_DIR}")
+add_dependencies(android-game gow_android_gs_shaders)
 
 target_compile_definitions(android-game PRIVATE
     VK_USE_PLATFORM_ANDROID_KHR
