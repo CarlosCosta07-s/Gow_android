@@ -54,6 +54,7 @@ add_library(android-game SHARED
     android_frame_scaler.cpp
     android_gs_geometry.cpp
     android_gs_cpu_rasterizer.cpp
+    android_gs_scene_capture.cpp
     android_gs_vulkan_backend.cpp
     ps2_elf_validator.cpp
     android_disc_bridge.cpp
