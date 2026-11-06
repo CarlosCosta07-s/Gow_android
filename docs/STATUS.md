@@ -1,67 +1,57 @@
 # Estado do projeto
 
-**Data da auditoria:** 2026-11-05  
+**Data da auditoria:** 2026-11-06  
 **Branch de desenvolvimento:** `main`  
-**Estado global:** FORGE abre em aparelho Android real (confirmado pelo mantenedor). O shell, a retirada do teste Vulkan isolado e o parser inicial SYSTEM.CNF foram compilados com sucesso pela CI. O parser ainda aguarda validação com imagens reais no aparelho. Nenhum runtime ou gameplay de God of War está integrado.
+**Objetivo:** port nativo de God of War (PS2, 2005) para Android ARM64, usando recompilação estática e runtime de serviços PS2 nativo; não é um emulador.
 
-## Gow_android
+## [VERIFICADO] Shell FORGE
 
-**[VERIFICADO — build CI anterior]**
+- O aplicativo FORGE foi aberto em pelo menos um aparelho Android real, conforme relato do mantenedor.
+- A CI compilou o APK Debug ARM64 no run `42142814087`, commit `18839524eb1061c5331b5762213dadaa51d55dd3`.
+- O teste Vulkan isolado foi removido do launcher após fechar o aplicativo no aparelho. A validação gráfica será feita com o GS e o jogo real.
+- O launcher usa Storage Access Framework para escolher a imagem do usuário.
+- A implementação inicial lê ISO9660 e `SYSTEM.CNF`, interpreta `BOOT2` e reconhece inicialmente `SCUS_973.99` (NTSC-U) e `SCES_531.33` (PAL). Ela compilou na CI; ainda falta validação com imagens reais em aparelho.
 
-- Repositório público `CarlosCosta07-s/Gow_android`, branch padrão `main`.
-- Projeto Gradle Android com AndroidX AppCompat 1.8.0, Core 1.19.1 e GameActivity 4.4.2.
-- Configurado para compileSdk 37, targetSdk 36, minSdk 28 e ABI `arm64-v8a`.
-- Launcher FORGE com ícone adaptativo próprio, navegação, cartões de status, seletor Storage Access Framework e validação inicial do descritor primário ISO9660.
-- GitHub Actions `42125956300`, commit `993c1a9ec010a00db688da2affddad7dab09f07c`, concluiu com `success` para o launcher SAF/ISO9660.
-- GitHub Actions `42128232489`, commit `e2094dc922cff86313a1e0f46a92bdffae74fdea`, concluiu com `success`: compilou o launcher temático, o ícone adaptativo e o APK Debug ARM64.
-- O APK daquela build continha `lib/arm64-v8a/libandroid-game.so` e `lib/arm64-v8a/libc++_shared.so`.
+## [VERIFICADO] Componentes KIexter importados
 
-**[VERIFICADO — relato do mantenedor]**
+Fonte: [KIexster/god-of-war-recomp](https://github.com/KIexster/god-of-war-recomp), commit `a226151feb6ed22937e42be485aaf28a83acd166`, licença declarada GPL-3.0.
 
-- O FORGE foi aberto em pelo menos um aparelho Android real.
-- Ao tocar no antigo botão de teste Vulkan isolado, o aplicativo fechava. O botão foi removido da interface. A validação gráfica será feita junto do renderer GS e do jogo, não por aquele teste separado.
-- O submódulo que apontava para God of War: Recomp foi removido; `.gitmodules` também foi removido. Não há runtime de terceiros vinculado ao projeto.
+- `recompiler/config/funcmap.csv`: mapa das 6.414 funções de `SCUS_973.99`. Verificação estrutural: intervalos ordenados, tamanhos coerentes e sem sobreposições.
+- `recompiler/config/recomp.template.toml`: configuração de stubs, entry points, skips e patches do executável NTSC-U; marcadores `@ELF@`, `@MAP@`, `@OUT@` presentes.
+- `port/kiexter/gow_overrides.cpp`: overrides específicos de God of War, em staging.
+- `port/kiexter/tools/vu1n_gen.py`: gerador AOT VU1, em staging.
+- `port/kiexter/tools/iopn_gen.py`: gerador AOT dos módulos IRX/IOP, em staging.
+- `port/kiexter/tools/vu1n_heads.txt` e `port/kiexter/gow_pad2_packet.h`: arquivos auxiliares importados.
 
-**[CÓDIGO ADICIONADO — AINDA NÃO VALIDADO]**
+**Importante:** os arquivos de staging não estão no CMake/Gradle e ainda não são compilados pelo APK. O override depende do runtime Waffle/KIexster e de headers auxiliares; os geradores exigem dumps privados produzidos a partir da cópia do usuário.
 
-- O launcher agora abre o arquivo escolhido pelo SAF com `ParcelFileDescriptor` e lê por offset usando `pread`.
-- O parser valida o descritor primário ISO9660, lê o diretório raiz, procura `SYSTEM.CNF`, interpreta a entrada `BOOT2` e reconhece inicialmente `SCUS_973.99` (NTSC-U) e `SCES_531.33` (PAL).
-- A implementação foi enviada à branch `main` e compilou com sucesso no run `42142814087` (commit `18839524eb1061c5331b5762213dadaa51d55dd3`). Ainda não foi validada com imagem real no aparelho.
-- A ação JOGAR ainda não inicia uma sessão. O runtime de boot não foi integrado.
+## [VERIFICADO] Proveniência das bases
 
-## [NÃO TESTADO — aparelho físico e jogo]
+- O projeto KIexster usa como base o runtime de [Waffle565/God-Of-War-Native-Port](https://github.com/Waffle565/God-Of-War-Native-Port), branch `runtime`, licença GPL-3.0 nessa branch.
+- Os cabeçalhos dos overrides e dos geradores VU1/IOP apontam para código originalmente derivado de Waffle565, commit `34f30d5e432751369177af115104f4d19af6d080`.
+- O build KIexster fixa [PS2Recomp](https://github.com/ran-j/PS2Recomp) no commit `c5a9d02573410a2085a4b4b831b0b68ba3515440`, licença GPL-3.0.
+- Nenhum runtime Waffle completo, PS2Recomp ou renderer desktop foi importado ainda. O antigo submódulo CodeAbhi foi removido.
 
-- Validação da leitura de SYSTEM.CNF com imagens válidas, inválidas, PAL/NTSC-U e provedores SAF diferentes no aparelho Android.
-- Execução do ELF recompilado e serviços nativos de EE/IOP/VU.
-- Backend GS/Vulkan apresentando comandos reais e primeira imagem do jogo.
-- Menus, gameplay, áudio, FMVs, controles, saves e desempenho térmico.
+## [NÃO TESTADO] Runtime e jogo
 
-## Referências de engenharia — sem código importado
-
-### Black para Android — RanggaCasper
-
-- O README descreve recompilação estática x86 → C++/ARM64, Vulkan, SDL3, controles touch, giroscópio e gamepad.
-- Usaremos a separação de camadas e os critérios de compatibilidade móvel como referências.
-- Nenhum código, runtime, renderer, recompiler, shader ou controle será copiado.
-
-### Dragon Rage / Budokai Tenkaichi 3 — dfdx047
-
-- O README descreve launcher Android separado de engine ARM64, instalação de ISO e testes em GPUs Snapdragon e Mali.
-- Usaremos organização de dados, validação da imagem, diagnóstico, perfis de GPU e estratégia de teste como referências.
-- Nenhum código da decompilação, port de PC, engine, renderer, app ou sistema de controle será copiado.
-
-### God of War: Recomp, KIexster, Waffle565, PS2Recomp e PCSX2
-
-- Foram consultados para entender documentação, boot e subsistemas PS2.
-- Permanecem fontes de leitura e comparação; não são submódulos, dependências ou runtime deste projeto.
+- Pipeline PS2Recomp integrado ao projeto e gerando C++ do ELF privado.
+- Compilação do código gerado para Android ARM64.
+- Runtime EE e serviços PS2 selecionados/adaptados para Android.
+- Geração VU1 AOT cobrindo todos os microprogramas usados pelo jogo.
+- Geração AOT dos módulos IRX necessários, sem fallback interpretado no produto final.
+- Runner conectado à `GowGameActivity` mantendo o FORGE como launcher.
+- Cache/VFS dos arquivos do disco no layout de setores que o runtime KIexter espera.
+- Backend GS/Vulkan apresentando comandos e frames reais do jogo.
+- Menus, gameplay, áudio, FMVs, controles, saves, desempenho e compatibilidade em GPUs diferentes.
 
 ## Próximos bloqueios reais
 
-1. Validar o parser SYSTEM.CNF com imagens de teste do usuário no aparelho, sem enviar dados do disco à CI.
-3. Implementar nosso próprio parser ELF, decoder MIPS R5900, analisador de funções e gerador C++/ARM64.
-4. Implementar runtime nativo próprio para memória/EE e serviços PS2 necessários ao jogo.
-5. Implementar frontend GS e backend Vulkan próprios e apresentar a primeira imagem real.
-6. Compilar antecipadamente os microprogramas VU1; não manter interpretador no caminho final.
-7. Completar entrada, áudio, vídeos, saves e otimização.
+1. Validar em aparelho o parser `SYSTEM.CNF` com a imagem NTSC-U do usuário.
+2. Integrar PS2Recomp na revisão fixada e gerar C++ em ambiente privado.
+3. Selecionar e importar os módulos portáveis do runtime Waffle/KIexter que o jogo necessita.
+4. Adaptar runner, lifecycle, leitura/cache do disco, áudio e entrada para Android.
+5. Reaproveitar frontend GS/formatos portáveis e implementar o backend Vulkan Android.
+6. Executar VU1 e IRX necessários por AOT, sem fallback interpretado.
+7. Atingir boot, primeira imagem, menus e primeiro combate.
 
-**Nenhum gameplay foi testado ou declarado funcional.** As referências de outros ports não foram incorporadas ao código.
+**Nenhum gameplay foi testado ou declarado funcional.** Os arquivos importados são preparação da base; não constituem ainda um runtime jogável.
