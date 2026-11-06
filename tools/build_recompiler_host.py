@@ -484,8 +484,9 @@ def main() -> int:
         runtime_header,
         "#include <unordered_set>\n",
         "#include <unordered_set>\n"
+        "#include <exception>\n"
         "#include <thread>\n",
-        "include thread ownership for the Android guest worker",
+        "include exception and thread ownership for the Android guest worker",
     )
     replace_exactly_once(
         runtime_header,
@@ -1147,12 +1148,11 @@ def main() -> int:
         "    if (m_androidGuestThread.joinable())\n"
         "    {\n"
         "        if (m_androidGuestThread.get_id() == std::this_thread::get_id())\n"
-        "            m_androidGuestThread.detach();\n"
-        "        else\n"
         "        {\n"
-        "            try { m_androidGuestThread.join(); }\n"
-        "            catch (...) { m_androidGuestThread.detach(); }\n"
+        "            std::cerr << \"Android guest worker cannot destroy its owning runtime.\" << std::endl;\n"
+        "            std::terminate();\n"
         "        }\n"
+        "        m_androidGuestThread.join();\n"
         "    }\n"
         "    m_androidGuestStarted.store(false, std::memory_order_release);\n"
         "#endif\n"
