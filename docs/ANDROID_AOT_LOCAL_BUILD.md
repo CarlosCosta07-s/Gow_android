@@ -40,8 +40,9 @@ O script executa, em sequência:
 1. Valida as regras de privacidade: ELF e workspace precisam ficar fora do repositório; o staging de código precisa estar sob `android/app/build/` e ser ignorado pelo Git.
 2. Chama `tools/build_recompiler_host.py` para validar o ELF32/MIPS, compilar as ferramentas host, executar o PS2Recomp e exportar os arquivos C++/headers.
 3. Confere a presença de `register_functions.cpp`, `ps2_recompiled_functions.h`, `ps2_recompiled_stubs.h` e das unidades C++ de funções.
-4. Executa `gradlew assembleDebug`. O CMake detecta `android/app/build/gow-generated-game/` automaticamente e substitui a tabela vazia do shell pelo código AOT gerado.
-5. Exibe o caminho e o SHA-256 do APK resultante.
+4. Analisa a tabela gerada: rejeita zero slots, ausência de registros, endereços desalinhados/fora da faixa, slots incorretos ou duplicados e exige que o endereço de entrada do ELF esteja registrado. Esse é o mesmo requisito que a porta Android verifica antes de aceitar a carga.
+5. Só então executa `gradlew assembleDebug`. O CMake detecta `android/app/build/gow-generated-game/` automaticamente e substitui a tabela vazia do shell pelo código AOT gerado.
+6. Exibe o caminho e o SHA-256 do APK resultante.
 
 ## Saídas locais
 
@@ -56,7 +57,7 @@ Opções úteis:
 
 ## O que esse APK permite verificar — e o que ainda não permite
 
-O APK com AOT local permite testar se a tabela de funções recompiladas foi ligada, se o BOOT2 privado foi carregado e se o endereço de entrada do ELF possui uma função nativa registrada.
+O orquestrador agora faz uma pré-validação estática da tabela gerada antes do Gradle; fixtures de CI cobrem tabela válida, tabela vazia, ausência do entrypoint e mapeamento incorreto de slot. Um build AOT local validado poderá então testar se o código foi ligado e se o BOOT2 privado é carregado. Isso ainda não foi executado com o ELF do usuário nem em aparelho.
 
 **Ainda não é gameplay.** O build Android atual mantém `PS2Runtime::run()` bloqueado. O backend GS/Vulkan Android, presenter do GS, cadeia real de boot (incluindo IRX/VU1 AOT e serviços PS2) e áudio Android ainda precisam ser implementados e validados. Um resultado positivo na porta ELF/AOT não significa que o menu do jogo ou uma cena já possa ser executada.
 
