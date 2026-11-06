@@ -130,14 +130,14 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 - O launcher ainda não inicia a GameActivity/runtime depois da preparação.
 - O PS2Runtime ainda não recebe o ELF privado e não executa `loadELF()`/serviços de boot.
 - A pasta `gow_boot_seed` contém apenas SYSTEM.CNF e o ELF BOOT2. Ela não contém os assets, arquivos de dados, módulos IRX ou outros recursos necessários ao jogo.
-- A preparação do patch Waffle para rotear `cdRoot` para `gowcdroot:/` está na CI de runtime privado; mesmo após compilação, ainda faltará ligar os serviços reais ao boot.
+- O patch Waffle para rotear `cdRoot` para `gowcdroot:/` compilou no build host estrito (run `42186655605`) e o target Android ARM64 que consome a árvore preparada compilou no run `42187116530`; ainda falta exercitar uma chamada real do PS2 VFS/IOP contra arquivos no provider durante um boot.
 - Não há cobertura comprovada de VU1 AOT/IRX para o conteúdo da cópia do usuário.
 - Backend GS/Vulkan Android, presenter completo e saída de áudio Android ainda não estão integrados ao ciclo de gameplay.
 - Primeira imagem, menus, controles touch visuais, áudio, FMVs, saves, desempenho e compatibilidade ainda não foram testados em aparelhos reais.
 
 ## Próximos bloqueios reais — ordem de prioridade
 
-1. Validar na CI o patch do runtime Waffle que substitui o antigo provider ISO pelo VFS local `gowcdroot:/`.
+1. Criar um smoke test em nível do PS2 VFS que abra, leia, faça seek e feche arquivos via `gowcdroot:/` usando fixtures sintéticas; a compilação host/Android do patch já foi verificada.
 2. Implementar e validar um manifesto completo de God of War com base na árvore real da revisão do usuário e nos acessos de boot; não adivinhar caminhos.
 3. Preparar o ELF em caminho privado, executar PS2Recomp e compilar o C++ gerado para ARM64, sem enviar conteúdo proprietário ao Git/CI.
 4. Ligar o lifecycle do PS2Runtime à GameActivity, chamar o loader e estruturar diagnóstico de cada fase de boot.
