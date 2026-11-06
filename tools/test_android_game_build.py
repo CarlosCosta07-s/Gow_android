@@ -108,6 +108,8 @@ PS2Runtime::RecompiledFunction g_ps2RecompiledFunctionTable[1u] = {};
             plan.generated_dir,
             (self.root / "android/app/build/gow-generated-game").resolve(),
         )
+        self.assertIn("--prepare-android-runtime", plan.prepare_runtime_command)
+        self.assertIn(str(plan.work_dir), plan.prepare_runtime_command)
         self.assertIn("--export-game-cpp-dir", plan.recompiler_command)
         self.assertIn(str(plan.generated_dir), plan.recompiler_command)
         self.assertIn("--max-workers=1", plan.gradle_command)
