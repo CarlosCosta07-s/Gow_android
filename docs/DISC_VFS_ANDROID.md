@@ -47,19 +47,32 @@ Para God of War, adotaremos a **estratégia híbrida do BT4**, adaptada aos serv
 
 **Não copiar por suposição:** a lista de diretórios/arquivos a extrair será derivada dos acessos reais durante o boot de God of War. Primeiro manteremos os dados grandes na imagem; somente arquivos que o runtime precise como caminho físico local serão colocados no cache privado.
 
-## 4. Integração pendente com o runtime Waffle
+## 4. Integração implementada no runtime Waffle
 
-A base Waffle usa `PS2Runtime::IoPaths` para definir `hostRoot`, `cdRoot` e `mcRoot`. O `PS2IopHostAdapter` resolve caminhos de disco para caminhos do host e armazena `FILE*` em sua tabela de arquivos; `PS2Vfs::open` também abre arquivos com `fopen`. Isso não consegue consumir diretamente uma URI SAF nem um leitor ISO baseado em `pread`.
+A revisão atual prepara um provider ISO nativo e o injeta na cópia privada do runtime Waffle durante `--prepare-android-runtime`.
 
-A ponte de runtime ainda precisa:
-1. manter o FD da imagem válido enquanto a sessão estiver ativa e transferir uma cópia duplicada de forma explícita para o código nativo GameActivity;
-2. expor operações nativas de abrir arquivo por caminho ISO, consultar tamanho, ler em offset e fechar handle;
-3. adaptar o `PS2IopHostAdapter` para usar handles de disco Android quando `cdRoot` for o dispositivo ISO, mantendo `FILE*` para caminhos normais de host e cartão de memória;
-4. preservar o `cdRoot` explicitamente configurado quando `loadELF()` prepara os caminhos de I/O;
-5. garantir sincronização e liberação de handles em pausa, fim de sessão e troca de imagem;
-6. validar os nomes e arquivos que God of War realmente solicita no boot, incluindo serviços CD/DVD e módulos necessários.
+- `android_disc_bridge.cpp` mantém uma instância de `Iso9660Reader` e uma tabela de handles, com operações C ABI `gowAndroidDiscOpenFile`, `gowAndroidDiscReadFile`, `gowAndroidDiscCloseFile` e `gowAndroidDiscIsReady`.
+- A entrada JNI `GowGameActivity.nativeSetDiscFileDescriptor(int)` duplica o FD recebido. A Activity espera o extra `EXTRA_DISC_FD`; o launcher ainda não inicia essa Activity nem envia o descritor.
+- O patch privado estende `PS2IopHostAdapter::HostFile` com handle ISO e roteia open/size/read/close de caminhos `gowdisc:/` para o provider, mantendo `FILE*` para caminhos comuns de host.
+- O patch privado implementa `AndroidDiscOpenFile` em `PS2Vfs`, com read/seek de arquivos ISO somente leitura e uma consulta de tamanho para arquivos. Listagem de diretórios/metadata avançada ainda não está implementada.
+- `PS2Runtime::configureIoPathsFromElf` seleciona `gowdisc:/` como `cdRoot` quando o provider já possui uma imagem aberta.
+- As alterações privadas são aplicadas a partir do snapshot Waffle fixado; não são armazenadas como fontes de terceiros no repositório público.
 
-Essa estratégia evita materializar uma cópia completa do disco no armazenamento interno, mas exige integração do provider com a interface de arquivos do IOP. O leitor ISO está pronto para ser esse provider; o provider do runtime ainda não está conectado.
+### Evidência de compilação
+
+- Android [run 42161298942](https://github.com/CarlosCosta07-s/Gow_android/actions/runs/42161298942), commit `836da9a80a19d04b8b934da0481655ea167bb8e3`: passou nos testes host DualShock 2/ISO, preparou o runtime privado, compilou `assembleDebug` e publicou o APK ARM64.
+- Host [run 42161298950](https://github.com/CarlosCosta07-s/Gow_android/actions/runs/42161298950), mesmo commit: passou em `py_compile`, CLI e compilação do `ps2_recomp` + runtime Waffle estrito. O log confirma `ps2_iop` e `ps2_runtime` construídos sem ELF/ISO do jogo.
+
+**O que isso prova:** os patches privados foram aplicados e o target Android que contém o provider compilou. **O que não prova:** que o FD já está sendo enviado pelo FORGE, que uma ISO real foi aberta, que God of War solicitou arquivos via provider ou que o boot ocorreu.
+
+### Próximos passos de integração
+
+1. Ao liberar o início do jogo, abrir/duplicar o FD da imagem selecionada e enviá-lo no extra `GowGameActivity.EXTRA_DISC_FD`; depois fechar a cópia temporária Java sem invalidar o descritor que o provider duplicou.
+2. Implementar enumeração/stat de diretórios se o rastreamento de boot demonstrar que os serviços CD/DVD a exigem.
+3. Adicionar cache de blocos limitado e sincronização de handles; atualmente o provider serializa operações por mutex.
+4. Verificar, com imagem do usuário, quais caminhos/IRX/BIN são requisitados durante o boot.
+5. Criar o acesso ao ELF privado: `PS2Runtime::loadELF()` ainda usa caminho local/`std::ifstream`, então o ELF precisa de cache privado antes da sessão.
+6. Não chamar `PS2Runtime::initialize()` até GS/Vulkan, apresentação e áudio Android substituírem os adaptadores desktop.
 
 ## 5. Estado
 
