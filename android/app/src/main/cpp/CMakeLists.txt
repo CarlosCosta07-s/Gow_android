@@ -49,6 +49,21 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
     endif()
 
     target_sources(android-game PRIVATE runtime_link_bridge.cpp)
+
+    # The empty table is a shell-only link scaffold. Turn this option OFF when
+    # private C++ generated from the user's PS2 ELF is added to the Android target.
+    option(GOW_ANDROID_EMPTY_RECOMPILED_TABLE
+        "Link an empty function table until private game code is generated" ON)
+    if(GOW_ANDROID_EMPTY_RECOMPILED_TABLE)
+        set(GOW_EMPTY_TABLE_SOURCE
+            "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/src/lib/android_recompiled_table_placeholder.cpp")
+        if(NOT EXISTS "${GOW_EMPTY_TABLE_SOURCE}")
+            message(FATAL_ERROR
+                "Shell function-table stub is missing. Re-run --prepare-android-runtime.")
+        endif()
+        target_sources(android-game PRIVATE "${GOW_EMPTY_TABLE_SOURCE}")
+    endif()
+
     target_include_directories(android-game PRIVATE
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/include"
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/src/lib"
