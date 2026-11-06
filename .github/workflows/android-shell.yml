@@ -185,6 +185,9 @@ jobs:
             -I"$GOW_RUNTIME_DIR/ps2xRuntime/include" \
             -I"$GOW_RUNTIME_DIR/ps2xRuntime/src/lib" \
             -I"$GOW_RUNTIME_DIR/ps2xRuntime/src/lib/gs/gpu" \
+            -Wno-error=switch \
+            -Wno-error=unused-parameter \
+            -Wno-error=unused-variable \
             -o "$RUNNER_TEMP/android-gs-vram-adapter-test"
           "$RUNNER_TEMP/android-gs-vram-adapter-test"
 
