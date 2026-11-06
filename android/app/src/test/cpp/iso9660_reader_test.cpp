@@ -193,6 +193,25 @@ bool testDualLayerDiscLayout() {
         return false;
     }
 
+    IsoFile highFile{};
+    if (!reader.lookupFile("HIGH.BIN;1", highFile) || highFile.lsn != 38u ||
+        highFile.size != 3u) {
+        std::fclose(file);
+        std::cerr << "FAIL: dual-layer file lookup did not resolve its physical LSN\n";
+        return false;
+    }
+    std::array<uint8_t, 3> highFileBytes{};
+    size_t highBytesRead = 0u;
+    if (!reader.readFile(highFile, 0u, highFileBytes.data(),
+                         highFileBytes.size(), highBytesRead) ||
+        highBytesRead != highFileBytes.size() ||
+        highFileBytes[0] != 0xD1u || highFileBytes[1] != 0xD2u ||
+        highFileBytes[2] != 0xD3u) {
+        std::fclose(file);
+        std::cerr << "FAIL: dual-layer file extraction read mismatch\n";
+        return false;
+    }
+
     reader.close();
     std::fclose(file);
     return true;
