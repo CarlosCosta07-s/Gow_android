@@ -64,8 +64,10 @@ int main() {
             backend.ReadVram(GS_PSM_CT32, 0u, 1u, 11u, 11u) == upload[1],
             "HOST->LOCAL image transfer did not reach GS VRAM.");
         const GSTransferSnapshot snapshot = backend.GetTransferSnapshot();
-        require(snapshot.totalPixels == 2u && snapshot.copiedPixels == 2u,
-                "GS transfer progress counters are inconsistent.");
+        require(snapshot.totalPixels == 0u &&
+                snapshot.copiedPixels == 2u &&
+                snapshot.direction == 3u,
+                "Completed GS transfer did not reach the idle state.");
 
         std::vector<uint8_t> snapshotBytes;
         backend.SnapshotVram(snapshotBytes);
