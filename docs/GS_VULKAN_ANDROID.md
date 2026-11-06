@@ -93,7 +93,7 @@ O helper `android_frame_scaler.cpp` valida dimensões/limites de memória, prese
 
 ## 8. Próximo componente necessário: GSRasterBackend Android
 
-O runtime ainda instala `GSNullBackend` no Android. O próximo trabalho não deve modificar o smoke presenter para fingir que desenha GS. Deve fornecer uma implementação real de `GSRasterBackend` e conectá-la ao ciclo de vida da `GowGameActivity` quando o dispositivo Vulkan estiver pronto. A implementação precisa:
+O runtime começa com `GSNullBackend`; no Debug, após a surface Vulkan estar pronta, o adaptador experimental `AndroidGSVulkanBackend` substitui esse backend e envia primitivas coloridas ao pipeline. O Release continua com o backend nulo. O próximo trabalho não deve confundir esse bring-up com uma implementação real do GS: é necessário acrescentar render targets e semântica de memória/rasterização antes de liberar gameplay. A implementação precisa:
 
 - manter a imagem GS de 4 MiB e operações de VRAM com o layout correto para CT32/CT24/CT16/CT16S, T8/T4 e variantes de alpha/depth; reutilizar `GSTextureStore`/`GSMem` e as rotinas de swizzle sem levar dependências OpenGL;
 - respeitar `BeginTransfer`/`UploadImage`, cópias local-to-local, CLUT/CSM1/CSM2, invalidação de cache e leitura/escrita da memória que o EE acessa;
@@ -103,3 +103,16 @@ O runtime ainda instala `GSNullBackend` no Android. O próximo trabalho não dev
 - provar cada bloco com frames de referência e fixtures sintéticas antes de habilitar `run()`.
 
 **Não implementado:** o presenter recebe frames, mas o backend que gera esses frames ainda não existe. A tabela AOT pública também está vazia; áudio Android, VU1/IOP AOT e cadeia de boot ainda bloqueiam gameplay.
+## 9. Pipeline de primitivas sólidas (06/11/2026)
+
+O Debug ativa `GOW_ANDROID_ENABLE_GS_VULKAN=ON`; Release continua desligado. `APP_CMD_INIT_WINDOW` cria a surface/swapchain e então instala `AndroidGSVulkanBackend` em `PS2Runtime::gs()`. `APP_CMD_TERM_WINDOW` destaca o backend antes de destruir recursos Vulkan. A implementação chama `GS::setRasterBackend()` depois de `initializeCoreHeadless()`, mantendo o runtime inicialmente com `GSNullBackend` até a surface estar pronta.
+
+`AndroidGSVulkanBackend::Submit()` converte `GSPrimitiveBatch` para `GsGpuBatch`. `VulkanSmokeRenderer::enqueueGsBatch()` transforma XY em NDC e transfere a propriedade dos vértices para uma fila protegida por mutex. No frame, um buffer host-visible compartilhado é preenchido e três pipelines Vulkan (POINT_LIST, LINE_LIST, TRIANGLE_LIST) desenham cor sólida, com scissor por lote. Sprites já são expandidos em dois triângulos na conversão geométrica.
+
+A fila tem limite por frame, é esvaziada quando a surface é perdida e o cache do staging é invalidado quando o buffer passa a conter vértices. `ready_` é atômico entre a thread GS e a thread Android. O Logcat registra a criação dos pipelines e alerta quando recebe estado de textura, blend/depth/fog ou target PSM que o estágio ainda não suporta.
+
+**Evidência:** CIs `42258381042` a `42258945494` compilaram o Debug ARM64 com `GOW_ANDROID_ENABLE_GS_VULKAN=ON`, passaram a checagem estrutural da ligação/teardown e publicaram o artefato `gow-android-arm64-shell` ID `13524346408` (run 257). Nenhuma GPU física foi testada.
+
+**Não confundir com gameplay:** o caminho atual não cria render targets por FBP, não mapeia a VRAM para attachments, não amostra o resultado de `GSTextureStore::DecodeTextureRgba`, não implementa depth attachment, alpha test/DATE, equações AB/CD/FIX, PABE, FBA, fog, dithering ou composição PMODE/DISPLAY. Lotes são desenhados diretamente na surface e portanto não preservam o comportamento de múltiplos framebuffers do GS. `Present()` ainda não produz uma captura CPU e `PS2Runtime::run()` continua bloqueado.
+
+**Próxima etapa:** fechar e validar acesso/transferência à VRAM com testes host reais de `GSTextureStore`, depois implementar texture upload/sampling e render targets por FBP/PSM. Só depois entram os testes de alpha/depth/blending e composição de display.
