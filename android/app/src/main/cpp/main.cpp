@@ -9,6 +9,7 @@
 #include "android_gs_geometry.h"
 #include "gs_vulkan_primitive_shaders.h"
 #include "ps2_runtime.h"
+#include "android_runtime_log.h"
 
 #include <android/log.h>
 #include <android/native_window.h>
@@ -52,6 +53,11 @@ constexpr uint32_t kVulkanApiVersion = VK_API_VERSION_1_0;
 
 void logMessage(int priority, const char* message) {
     __android_log_write(priority, kTag, message);
+    const char *level = priority >= ANDROID_LOG_ERROR ? "ERROR" :
+        (priority >= ANDROID_LOG_WARN ? "WARN" :
+         (priority >= ANDROID_LOG_INFO ? "INFO" : "DEBUG"));
+    gow::android::appendPrivateRuntimeLog(
+        level, message == nullptr ? std::string_view{} : std::string_view(message));
 }
 
 bool configurePrivateAotCaptureDirectories(const std::string &privateCdRoot) {
@@ -67,6 +73,15 @@ bool configurePrivateAotCaptureDirectories(const std::string &privateCdRoot) {
                 ANDROID_LOG_WARN,
                 "Private AOT capture disabled: cdRoot is outside the expected app-private installation layout");
             return false;
+        }
+
+        if (gow::android::configurePrivateRuntimeLog(appFilesDir)) {
+            gow::android::appendPrivateRuntimeLog(
+                "INFO", "Private runtime diagnostic log configured (2 MiB maximum).");
+        } else {
+            logMessage(
+                ANDROID_LOG_WARN,
+                "Private runtime log could not be configured; Logcat remains available");
         }
 
         const std::filesystem::path captureRoot =
@@ -126,6 +141,10 @@ std::atomic<uint32_t> gGsSceneCaptureSequence{0u};
 constexpr uint32_t kMaxRequestedGsSceneCaptures = 32u;
 
 void reportRuntimeStatus(android_app *app, const char *message, bool failed) {
+    if (message != nullptr) {
+        gow::android::appendPrivateRuntimeLog(
+            failed ? "ERROR" : "STATUS", message);
+    }
     if (app == nullptr || message == nullptr) {
         return;
     }
@@ -1591,6 +1610,9 @@ bool tryStartAndroidGuestExecution(android_app *app) {
     }
 
     gGuestExecutionStarted = true;
+    logMessage(
+        ANDROID_LOG_INFO,
+        "Android AOT guest execution worker started after the strict readiness gates.");
     reportRuntimeStatus(
         app,
         "Tentativa de boot AOT iniciada no Android. O primeiro teste é silencioso; acompanhe o Logcat GowAndroid para o estágio do jogo.",
@@ -1607,6 +1629,9 @@ void reportAndroidGuestCompletion(android_app *app) {
         return;
     }
     gGuestExecutionFinishReported = true;
+    logMessage(
+        ANDROID_LOG_WARN,
+        "Android AOT guest execution worker finished; collecting last known diagnostics.");
     reportRuntimeStatus(
         app,
         "A execução AOT do guest foi encerrada. Consulte o Logcat GowAndroid para o último PC e o motivo; nenhuma cena real foi aprovada automaticamente.",
