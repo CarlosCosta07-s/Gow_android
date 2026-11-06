@@ -644,7 +644,7 @@ public final class MainActivity extends AppCompatActivity {
                 final int[] lastPercent = {-1};
                 InstallProgressCallback callback =
                         (totalBytes, copiedBytes, completedFiles, totalFiles) -> {
-                            if (cancelBootImportRequested || isFinishing() || isDestroyed()) {
+                            if (cancelBootImportRequested) {
                                 return false;
                             }
                             int percent = totalBytes <= 0L ? 100
@@ -666,8 +666,7 @@ public final class MainActivity extends AppCompatActivity {
                                     }
                                 });
                             }
-                            return !cancelBootImportRequested
-                                    && !isFinishing() && !isDestroyed();
+                            return !cancelBootImportRequested;
                         };
 
                 String error = nativeInstallIsoManifest(
