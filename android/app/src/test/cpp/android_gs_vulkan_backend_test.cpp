@@ -306,6 +306,14 @@ int main() {
         require(indexedBottomRight[0] == 255u && indexedBottomRight[1] == 255u &&
                 indexedBottomRight[2] == 255u && indexedBottomRight[3] == 255u,
                 "T8 GS sprite did not resolve its bottom-right CLUT entry.");
+        const auto indexed4TopLeft = pixelAt(52u, 12u);
+        require(indexed4TopLeft[0] == 0u && indexed4TopLeft[1] == 255u &&
+                indexed4TopLeft[2] == 255u && indexed4TopLeft[3] == 255u,
+                "T4 GS sprite did not resolve its top-left 16-entry CLUT color.");
+        const auto indexed4BottomRight = pixelAt(55u, 15u);
+        require(indexed4BottomRight[0] == 255u && indexed4BottomRight[1] == 255u &&
+                indexed4BottomRight[2] == 255u && indexed4BottomRight[3] == 255u,
+                "T4 GS sprite did not resolve its bottom-right 16-entry CLUT color.");
         const auto emptyPixel = pixelAt(60u, 30u);
         require(emptyPixel[0] == 0u && emptyPixel[1] == 0u &&
                 emptyPixel[2] == 0u,
