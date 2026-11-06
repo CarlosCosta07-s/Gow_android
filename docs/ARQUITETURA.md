@@ -42,9 +42,11 @@ A interface FORGE e o seletor SAF/ISO9660 estão implementados. O parser de `SYS
 
 ## Camadas futuras do port
 
-## Otimização para aparelhos modestos
+### Otimização para aparelhos modestos — etapa posterior
 
-As decisões de instalação, I/O, CPU, GS/Vulkan, memória e controle térmico estão detalhadas em [ANDROID_LOW_END_OPTIMIZATION.md](ANDROID_LOW_END_OPTIMIZATION.md). O objetivo é medir frame time, 1% low, memória, leitura e temperatura em aparelhos reais antes de declarar qualquer nível de desempenho.
+A otimização fina não é a prioridade atual. Primeiro precisamos alcançar boot real, primeira imagem, menu, novo jogo e primeiro combate. Depois disso, usaremos [Black for Android](https://github.com/RanggaCasper/Black-Android) como referência de arquitetura móvel e opções gráficas, sem transplantar seu renderer/runtime Xbox para o PS2.
+
+As medições e diretrizes futuras estão em [ANDROID_LOW_END_OPTIMIZATION.md](ANDROID_LOW_END_OPTIMIZATION.md).
 
 ### Leitor de disco Android — instalação por extração seletiva (BT3)
 
