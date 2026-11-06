@@ -255,6 +255,23 @@ int main() {
         }
     }
 
+    const auto existingInstallResult = gow::disc::installIsoManifest(
+        reader, manifest, privateRoot, "gow-test-install");
+    if (existingInstallResult.success) {
+        std::filesystem::remove_all(privateRoot);
+        std::fclose(file);
+        return fail("installer replaced an existing published installation");
+    }
+
+    const auto unsafeInstallNameResult = gow::disc::installIsoManifest(
+        reader, manifest, privateRoot, "nested/escape");
+    if (unsafeInstallNameResult.success ||
+        std::filesystem::exists(std::filesystem::path(privateRoot) / "nested")) {
+        std::filesystem::remove_all(privateRoot);
+        std::fclose(file);
+        return fail("installer accepted a path separator in the final directory name");
+    }
+
     const std::vector<gow::disc::IsoInstallFile> wrongSizeManifest{
         {"SYSTEM.CNF", "SYSTEM.CNF", 31u},
     };
