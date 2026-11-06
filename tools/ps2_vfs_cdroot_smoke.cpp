@@ -145,7 +145,7 @@ int main() {
         std::cerr << "DEBUG: parsed device=" << parsedCdPath.deviceName
                   << " parsed path=" << parsedCdPath.path
                   << " bridge calls=" << g_cdRootOpenCalls
-                  << " last bridge path=" << g_lastCdRootOpenPath << '\\n';
+                  << " last bridge path=" << g_lastCdRootOpenPath << '\n';
         g_cdRoot.close();
         std::filesystem::remove_all(root);
         return fail("PS2Vfs could not open cdrom0 path through the private-root bridge");

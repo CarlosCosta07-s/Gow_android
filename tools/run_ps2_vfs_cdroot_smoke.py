@@ -56,6 +56,7 @@ def main() -> int:
             "-D__ANDROID__",
             "-Wall",
             "-Wextra",
+            "-Werror=multichar",
             "-I",
             str(repo_root / "android" / "app" / "src" / "main" / "cpp"),
             "-I",
