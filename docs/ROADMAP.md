@@ -58,6 +58,7 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [ ] Reaproveitar apenas a camada de comandos, formatos PSM, CLUT, swizzle e estado que não dependa de OpenGL/host desktop.
 - [ ] Isolar completamente o backend OpenGL/WGL/Raylib do runner Android.
 - [ ] Implementar backend GS/Vulkan Android: render targets, depth, alpha test, destination-alpha, blending e sincronização (contrato e dependências auditados; veja `docs/GS_VULKAN_ANDROID.md`).
+- [x] Preparar presenter Vulkan de frames RGBA para a GameActivity (staging `VkBuffer`, barriers e `vkCmdCopyBufferToImage`), scaler aspect-fit e invalidação do cache após recriação da swapchain; host tests e builds ARM64 aprovados nas CIs `42255177609`/`42255283925`. Esse marco **não** implementa rasterização GS nem produz frames do jogo.
 - [ ] Adaptar shaders e operações para GPUs móveis; usar passes intermediários quando necessário.
 - [ ] Validar comandos reais do jogo, começando pelo logo/menu e primeira cena.
 
