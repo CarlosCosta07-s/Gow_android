@@ -34,7 +34,7 @@ Fonte: [KIexster/god-of-war-recomp](https://github.com/KIexster/god-of-war-recom
 
 ## [VERIFICADO] Bloqueios identificados na configuração Waffle
 
-Auditoria estática do CMake e dos fontes no snapshot Waffle runtime 49ca62c1d20b4659c61df6286c54e86edf411012:
+Auditoria estática do CMake e dos fontes na revisão Waffle de referência 49ca62c1d20b4659c61df6286c54e86edf411012:
 
 - O alvo ps2_runtime inclui fontes ee_ref e vu_pcsx2 para teste diferencial/diagnóstico PCSX2. O alvo ps2_iop também inclui iop_emulator.cpp e core/iop_cpu.cpp. Elas não devem compor o caminho de execução final; se houver build de diagnóstico separado, manter os avisos GPL-3.0-or-later.
 - ps2_vu1_core.cpp implementa VU1Interpreter. A geração/ligação dos blocos VU1 AOT no CMake de referência é condicional e excluída quando Android está ativo; o caminho final precisa gerar AOT no host e impedir fallback para microprogramas sem cobertura. O CMake IOP combina módulos AOT com iop_cpu interpretado, então a variante final precisa impedir esse fallback também.
@@ -51,6 +51,20 @@ Esse snapshot é referência para identificar fronteiras. Nenhum desses arquivos
 - O log confirmou a compilação das dependências, de ps2_recomp_lib e do executável ps2_recomp.
 - A execução não acessou ELF, ISO ou outro arquivo do jogo e não gerou C++ derivado do jogo.
 
+## [VERIFICADO] IOP com fallback interpretado bloqueado na CI host
+
+- O script aplica uma proteção em ps2xIOP/src/emulator/iop_emulator.cpp: após as rotas de import/HLE, overrides nativos e blocos IRX AOT, a ausência de uma faixa nativa gera diagnóstico [IOP:native-required], registra PC/RA, marca a execução como parada e retorna falha em vez de chamar iop_cpu.executeInstruction.
+- O CMake introduz PS2X_IOP_NATIVE_ONLY; a opção é forçada para ON quando ANDROID está ativo. O teste host da CI também a força para ON.
+- A execução GitHub Actions 42147331364 compilou com sucesso o executável ps2_recomp e a biblioteca estática ps2_iop com essa proteção ativa.
+- O build utilizou iop_native_none.cpp, sem módulos IRX do jogo. Isso confirma a compilação da proteção, não a cobertura AOT dos módulos reais nem uma execução do runtime no aparelho.
+- O teste foi feito com GNU C++ no runner Linux; ainda falta compilar com Android NDK/ARM64 e validar com IRX privados.
+
+## [PREPARADO, COM TESTE SINTÉTICO] VU1 AOT estrito
+
+- port/kiexter/tools/vu1n_gen.py agora aceita --strict: falha se nenhuma imagem válida for processada, nenhum bloco for gerado ou qualquer bloco descoberto não tiver implementação nativa.
+- A CI inclui um microcódigo sintético vazio para confirmar que a opção rejeita cobertura zero. Esse teste não usa microcódigo do jogo.
+- A opção ainda não foi executada com capturas reais e o runtime VU1 ainda permite fallback interpretado; a trava no runtime e a ligação dos arquivos AOT ao target Android continuam pendentes.
+
 ## [PREPARADO, NÃO TESTADO] Geração do C++ do jogo
 
 - O mesmo script aceita --elf e usa funcmap.csv + recomp.template.toml para gerar C++ em diretório privado.
@@ -63,8 +77,8 @@ Esse snapshot é referência para identificar fronteiras. Nenhum desses arquivos
 - Geração do C++ do ELF privado com PS2Recomp (o executável host foi compilado, mas o ELF ainda não foi processado).
 - Compilação do código gerado para Android ARM64.
 - Runtime EE e serviços PS2 selecionados/adaptados para Android.
-- Geração VU1 AOT cobrindo todos os microprogramas usados pelo jogo.
-- Geração AOT dos módulos IRX necessários, sem fallback interpretado no produto final.
+- Geração VU1 AOT cobrindo todos os microprogramas usados pelo jogo; o gerador possui gate sintético --strict, ainda sem capturas reais.
+- Geração AOT dos módulos IRX necessários e teste da proteção com IRX real; a proteção foi compilada sem esses módulos, mas ainda não foi executada.
 - Runner conectado à `GowGameActivity` mantendo o FORGE como launcher.
 - Cache/VFS dos arquivos do disco no layout de setores que o runtime KIexter espera.
 - Backend GS/Vulkan apresentando comandos e frames reais do jogo.
