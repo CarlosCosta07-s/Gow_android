@@ -91,3 +91,12 @@ O helper `android_frame_scaler.cpp` é testado em host para dimensões e tamanho
 **[VERIFICADO NA CI]** Run `42255177609` (230): scaler host e APK ARM64 aprovados. Run `42255283925` (231): recompilação ARM64 após a invalidação do cache de upload em swapchain resize/recreate. Artefato `gow-android-arm64-shell` ID `13522097351`.
 
 **[NÃO TESTADO EM APARELHO]** O caminho permanece desligado por padrão; nenhuma imagem de God of War foi fornecida pelo backend GS. A implementação não prova render targets, rasterização, texturas, alpha/depth ou composição GS. Um clear/present ou cópia RGBA não conta como primeira imagem do jogo.
+## Pipeline de primitivas Vulkan GS — CIs 251–257
+
+O Debug compila com `GOW_ANDROID_ENABLE_GS_VULKAN=ON`. O verificador de lifecycle confere `vkCreateGraphicsPipelines`, `vkCmdBindVertexBuffers`, `vkCmdDraw`, ligação e desligamento de `AndroidGSVulkanBackend`, e a ausência de `runtime->run()` no startup Android. CIs `42258381042`–`42258945494` compilaram o APK ARM64 e passaram o checker.
+
+Artefato run 257: `gow-android-arm64-shell`, ID `13524346408`, expira em 13/11/2026. O pipeline é só cor sólida e não tem teste de device/GPU; não prova texturas, VRAM render targets, alpha/depth, blending nem primeira imagem do jogo.
+
+## Teste sintético de VRAM/transferências
+
+`android_gs_vulkan_backend_test.cpp` verifica acesso CT32, scissor/FBMSK, HOST→LOCAL e snapshot 4 MiB usando o `GSTextureStore` e `ps2_gs_memory.cpp` originais do runtime Waffle. As CIs `42259346530` e `42259354011` foram abertas para essa validação; o teste só deve ser marcado como aprovado depois de uma execução verde.
