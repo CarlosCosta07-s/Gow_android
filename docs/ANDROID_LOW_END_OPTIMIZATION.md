@@ -1,12 +1,32 @@
 # Otimização para celulares modestos
 
-**Estado:** diretrizes de arquitetura e testes; nenhuma meta de FPS foi declarada como atingida.
+**Estado:** ETAPA POSTERIOR AO PRIMEIRO GAMEPLAY FUNCIONAL. Este documento é uma referência futura; a prioridade atual não é fazer tuning de desempenho.
 
 ## Objetivo
 
 Priorizar compatibilidade, estabilidade térmica e frame time consistente em aparelhos Android ARM64 com CPU, GPU, RAM e armazenamento limitados. A otimização deve ser demonstrada por medições reproduzíveis, não por estimativas.
 
 A instalação no estilo Dragon Rage BT3 reduz a dependência do SAF/ISO durante a partida e permite ao runtime ler arquivos locais. Ela não resolve, por si só, o custo de CPU do runtime PS2 nem o custo de renderização do GS.
+
+## Referência de otimização: Black for Android
+
+Projeto de referência: [RanggaCasper/Black-Android](https://github.com/RanggaCasper/Black-Android).
+
+O README do projeto descreve:
+- recompilação estática antecipada do código x86 para C++/ARM64 com XboxXBE-Recomp;
+- renderer Vulkan e SDL3 para janela, entrada e áudio;
+- opções de resolução interna, V-Sync, limite de FPS, contador de FPS, filtragem anisotrópica e distância de desenho;
+- controles touch configuráveis, giroscópio e suporte a controles físicos.
+
+Isso serve como referência de arquitetura móvel e de opções de usuário, não como receita pronta para God of War. Black é a versão original de Xbox, com runtime e contratos gráficos diferentes do PS2; nosso renderer precisa implementar o Graphics Synthesizer (GS), não reutilizar o renderer Direct3D 8 desse projeto.
+
+O README do Black lista Android 10+, ARM64, GPU com Vulkan 1.1 e 4 GB de memória. Portanto, ele é uma referência técnica, mas essa lista não demonstra compatibilidade com aparelhos abaixo desses requisitos nem comprova que Gow_android alcançará o mesmo desempenho.
+
+### Quando esta etapa começa
+
+Somente depois que Gow_android tiver um caminho funcional demonstrado: boot real, primeira imagem, menu, novo jogo e primeiro combate. Antes disso, faremos apenas o trabalho de desempenho indispensável à correção da arquitetura — recompilação estática/AOT e backend GS/Vulkan — sem iniciar tuning fino, perfis de qualidade, limites de cache ou metas de FPS.
+
+A prioridade atual é fazer o jogo funcionar. Este documento não deve desviar esforço das fases de recompilação, runtime, GS, boot e gameplay.
 
 ## 1. Instalação e acesso a dados
 
