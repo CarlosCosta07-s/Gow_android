@@ -262,3 +262,29 @@ O painel informa explicitamente que o jogo ainda não iniciou quando o núcleo h
 **[VERIFICADO NA CI `42261321872`]** O teste sintético desenha um triângulo vermelho e um sprite azul em VRAM CT32, lê o CRTC de 64×32 pixels e verifica as cores no frame RGBA, o stride 640 e uma região não desenhada preta. O teste de VRAM/transferências de 4 MiB também continua passando. Artefato `gow-android-arm64-shell` ID `13524359107`, expira em 13/11/2026.
 
 **Limitações:** apenas primitivos opacos sem textura em CT32/CT24/CT16; `Present()` escolhe um circuito e não compõe DISPLAY1+DISPLAY2/PMODE. Textura/CLUT, depth, alpha test/DATE, blending, fog, dithering e formatos não suportados são bloqueadores. `PS2Runtime::run()` continua bloqueado, e esta fixture não contém o jogo.
+## Rasterizador GS, composição PMODE e preparação da comparação visual — 06/11/2026
+
+**[IMPLEMENTADO; TESTES HOST APROVADOS; APK ARM64 EM VALIDAÇÃO NA ÚLTIMA CONSULTA]**
+
+A rota Android de correção gráfica usa `AndroidGSVulkanBackend` para manter a VRAM real de 4 MiB por meio de `GSTextureStore`, rasterizar por CPU os fragmentos suportados e entregar o `PresentationFrame` ao presenter Vulkan da GameActivity. Isso é um backend de referência funcional para testes de semântica GS; ainda não é um rasterizador GS inteiramente executado em shaders Vulkan.
+
+Cobertura atual exercitada em `android_gs_vulkan_backend_test.cpp`:
+
+- Primitivas POINT, LINE/LINESTRIP, TRIANGLE/TRISTRIP/TRIFAN e SPRITE; escrita em FBP/FBW/PSM e CRTC básico.
+- Texturas CT32 e formatos indexados T8/T4/T4HL/T4HH/T8H, com carregamento de CLUT CSM2 e fixture de índices swizzled CSM1.
+- UV e STQ básicos, amostragem nearest/bilinear e modos de clamp suportados pelo caminho CPU.
+- Z32 com teste GEQUAL e escrita de depth; alpha test com ação KEEP; DATE; equação GS ALPHA com color clamp.
+- Composição dos circuitos 1/2 com PMODE, ALP/MMOD e SLBG/BGCOLOR.
+- Testes FBP/VRAM e quadro CRTC com pixels esperados.
+
+**[VERIFICADO NA CI HOST]** Run `42266913226` passou no verificador de lifecycle, comparator de cenas, escritor de captura PPM, bateria nativa de entrada/disco/GS e VFS; o APK Debug ARM64 estava em compilação na última consulta. Run `42266994501` repetiu os testes do comparator, captura, bateria nativa e VFS; a etapa seguinte era compilar o APK ARM64. Essas execuções não usam ELF, ISO ou conteúdo proprietário do jogo.
+
+**Limites ainda existentes:** fog/FGE e antialiasing são rejeitados pelo rasterizador; dithering GS, mipmapping e todas as particularidades de filtering/blending ainda não foram demonstrados; interlace/overscan de vídeo não estão completos; a cobertura de PSM não equivale à implementação de todos os render targets e estados do GS. A rota de desenho é CPU/readback para correção inicial, não a solução final de desempenho móvel. Nenhuma GPU física Android foi validada por esses testes.
+
+## Preparação da comparação de cenas reais — captura local e ferramenta offline
+
+`android_gs_scene_capture.cpp` grava o primeiro `PresentationFrame` recebido em `gow_android_first_gs_frame.ppm`, sob o diretório de arquivos externos da aplicação (com fallback para o diretório interno). O caminho é informado no Logcat `GowAndroid`. A gravação é local, validada e publicada via arquivo temporário; nenhuma captura é enviada à CI ou ao GitHub.
+
+`tools/compare_gs_scene.py` compara duas imagens PPM P6 com dimensões idênticas e produz MAE, RMSE, PSNR, erro máximo por canal e porcentagem de pixels dentro da tolerância; opcionalmente grava um mapa de diferenças. Os limiares padrão são parâmetros iniciais para inspeção, não critérios definitivos de compatibilidade.
+
+**[PENDENTE — CENA REAL]** O runtime ainda mantém `PS2Runtime::run()` bloqueado e a tabela AOT pública vazia. Portanto, ainda não existe captura comprovada do God of War real no Android. A captura local só será gerada quando o runtime entregar um frame; a validação visual real exige o ELF/AOT privado do usuário, boot real em aparelho e uma referência da mesma cena, resolução e momento.
