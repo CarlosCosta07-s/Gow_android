@@ -173,7 +173,7 @@ def main() -> int:
         require(required in native_main, f"GameActivity BOOT2 handoff is missing: {required}")
     require(
         "gowRuntimeLoadElfAndCheckAot(" in native_main[
-            native_main.find("extern \\"C\\" void android_main"):
+            native_main.find('extern "C" void android_main'):
         ],
         "android_main must invoke the guarded ELF/AOT gate after core initialization.",
     )
