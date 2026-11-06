@@ -517,29 +517,19 @@ def main() -> int:
     )
     replace_exactly_once(
         runtime_cpp,
-        "#if defined(PLATFORM_VITA)\\n"
-        "        m_audioBackend.stopAll();\\n"
-        "        m_audioBackend.setAudioReady(false);\\n"
-        "#else\\n"
+        "        if (IsAudioDeviceReady())\\n"
+        "        {\\n"
+        "            CloseAudioDevice();\\n"
+        "            m_audioBackend.setAudioReady(false);\\n"
+        "        }",
+        "#if !defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\\n"
         "        if (IsAudioDeviceReady())\\n"
         "        {\\n"
         "            CloseAudioDevice();\\n"
         "            m_audioBackend.setAudioReady(false);\\n"
         "        }\\n"
-        "#endif\\n"
-        "        if (m_debugUiInitialized && m_debugUiShutdownCallback)",
-        "#if defined(PLATFORM_VITA) || defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\\n"
-        "        m_audioBackend.stopAll();\\n"
-        "        m_audioBackend.setAudioReady(false);\\n"
-        "#else\\n"
-        "        if (IsAudioDeviceReady())\\n"
-        "        {\\n"
-        "            CloseAudioDevice();\\n"
-        "            m_audioBackend.setAudioReady(false);\\n"
-        "        }\\n"
-        "#endif\\n"
-        "        if (m_debugUiInitialized && m_debugUiShutdownCallback)",
-        "reset the core audio backend without calling Raylib during Android teardown",
+        "#endif",
+        "avoid querying or closing an uninitialized Raylib audio device in Android core-only lifecycle",
     )
 
     # Android has no Raylib host window yet. Keep the PS2 core's default GS
