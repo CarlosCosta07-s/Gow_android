@@ -36,7 +36,7 @@ Fonte: [KIexster/god-of-war-recomp](https://github.com/KIexster/god-of-war-recom
 
 Auditoria estática do CMake e dos fontes na revisão Waffle de referência 49ca62c1d20b4659c61df6286c54e86edf411012:
 
-- O alvo ps2_runtime inclui fontes ee_ref e vu_pcsx2 para teste diferencial/diagnóstico PCSX2. O alvo ps2_iop também inclui iop_emulator.cpp e core/iop_cpu.cpp. Elas não devem compor o caminho de execução final; se houver build de diagnóstico separado, manter os avisos GPL-3.0-or-later.
+- O alvo ps2_runtime inclui fontes ee_ref e vu_pcsx2 para teste diferencial/diagnóstico PCSX2. No IOP, o modo estrito agora exclui core/iop_cpu.cpp do conjunto de fontes, sem remover os contratos de estado/serviço necessários à execução AOT. Elas não devem compor o caminho de execução final; se houver build de diagnóstico separado, manter os avisos GPL-3.0-or-later.
 - ps2_vu1_core.cpp implementa VU1Interpreter. A geração/ligação dos blocos VU1 AOT no CMake de referência é condicional e excluída quando Android está ativo; o caminho final precisa gerar AOT no host e impedir fallback para microprogramas sem cobertura. O CMake IOP combina módulos AOT com iop_cpu interpretado, então a variante final precisa impedir esse fallback também.
 - gs_gl.cpp é backend OpenGL e ps2_audio_device.cpp usa miniaudio/Raylib do host; substituir por GS/Vulkan Android e saída de áudio Android.
 - ps2_pad_rumble_win.cpp é específico de Windows. ps2_android_runtime.cpp contém apenas um TODO de controles touch.
@@ -54,9 +54,9 @@ Esse snapshot é referência para identificar fronteiras. Nenhum desses arquivos
 ## [VERIFICADO] IOP com fallback interpretado bloqueado na CI host
 
 - O script aplica uma proteção em ps2xIOP/src/emulator/iop_emulator.cpp: após as rotas de import/HLE, overrides nativos e blocos IRX AOT, a ausência de uma faixa nativa gera diagnóstico [IOP:native-required], registra PC/RA, marca a execução como parada e retorna falha em vez de chamar iop_cpu.executeInstruction.
-- O CMake introduz PS2X_IOP_NATIVE_ONLY; a opção é forçada para ON quando ANDROID está ativo. O teste host da CI também a força para ON.
-- A execução GitHub Actions 42147331364 compilou com sucesso o executável ps2_recomp e a biblioteca estática ps2_iop com essa proteção ativa.
-- O build utilizou iop_native_none.cpp, sem módulos IRX do jogo. Isso confirma a compilação da proteção, não a cobertura AOT dos módulos reais nem uma execução do runtime no aparelho.
+- O CMake introduz PS2X_IOP_NATIVE_ONLY; a opção é forçada para ON quando ANDROID está ativo. No modo estrito, o arquivo core/iop_cpu.cpp é removido da lista de fontes; IopCpuCore deixa de ser construído e a rotina de exceções é fornecida por helper independente.
+- A execução GitHub Actions 42148409363 compilou com sucesso ps2_recomp e a biblioteca ps2_iop. O script analisou compile_commands.json e confirmou que nenhuma unidade iop_cpu.cpp foi compilada.
+- O build utilizou iop_native_none.cpp, sem módulos IRX do jogo. Isso confirma a exclusão da unidade de interpretação e a compilação da proteção, não a cobertura AOT dos módulos reais nem uma execução do runtime no aparelho.
 - O teste foi feito com GNU C++ no runner Linux; ainda falta compilar com Android NDK/ARM64 e validar com IRX privados.
 
 ## [PREPARADO, COM TESTE SINTÉTICO] VU1 AOT estrito
