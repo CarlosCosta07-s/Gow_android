@@ -153,6 +153,59 @@ int main() {
         }
         backend.Submit(texturedSprite);
 
+        // Indexed T8 textures must resolve their palette through TEX0/CLUT
+        // state instead of treating the palette index as a direct color.
+        const std::array<uint32_t, 4> palette = {
+            0xFF0000FFu, 0xFF00FF00u, 0xFFFF0000u, 0xFFFFFFFFu};
+        for (uint32_t index = 0u; index < palette.size(); ++index) {
+            backend.WriteVram(
+                GS_PSM_CT32, 256u, 4u, index, 0u, palette[index]);
+        }
+        backend.WriteVram(GS_PSM_T8, 128u, 1u, 0u, 0u, 0u);
+        backend.WriteVram(GS_PSM_T8, 128u, 1u, 1u, 0u, 1u);
+        backend.WriteVram(GS_PSM_T8, 128u, 1u, 0u, 1u, 2u);
+        backend.WriteVram(GS_PSM_T8, 128u, 1u, 1u, 1u, 3u);
+
+        GSTex0Reg indexedTex0{};
+        indexedTex0.tbp0 = 128u;
+        indexedTex0.tbw = 1u;
+        indexedTex0.psm = GS_PSM_T8;
+        indexedTex0.tcc = 1u;
+        indexedTex0.tfx = 0u;
+        indexedTex0.cbp = 256u;
+        indexedTex0.cpsm = GS_PSM_CT32;
+        indexedTex0.csm = 1u;
+        indexedTex0.cld = 1u;
+        GSTexClutReg indexedClut{};
+        indexedClut.cbw = 4u;
+        backend.LoadClut(indexedTex0, indexedClut);
+
+        GSPrimitiveBatch indexedSprite{};
+        indexedSprite.vertexCount = 2u;
+        indexedSprite.state.context.frame = triangle.state.context.frame;
+        indexedSprite.state.context.scissor = triangle.state.context.scissor;
+        indexedSprite.state.context.tex0 = indexedTex0;
+        indexedSprite.state.prim.type = GS_PRIM_SPRITE;
+        indexedSprite.state.prim.tme = true;
+        indexedSprite.state.prim.fst = true;
+        indexedSprite.state.textureWidth = 2u;
+        indexedSprite.state.textureHeight = 2u;
+        indexedSprite.vertices[0].x = 44.0f;
+        indexedSprite.vertices[0].y = 12.0f;
+        indexedSprite.vertices[0].u = 0u;
+        indexedSprite.vertices[0].v = 0u;
+        indexedSprite.vertices[1].x = 48.0f;
+        indexedSprite.vertices[1].y = 16.0f;
+        indexedSprite.vertices[1].u = 32u;
+        indexedSprite.vertices[1].v = 32u;
+        for (auto &vertex : indexedSprite.vertices) {
+            vertex.r = 128u;
+            vertex.g = 128u;
+            vertex.b = 128u;
+            vertex.a = 128u;
+        }
+        backend.Submit(indexedSprite);
+
         GSPresentationRequest presentation{};
         presentation.pmode = 1u;
         presentation.dispfb1 =
