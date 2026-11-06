@@ -206,6 +206,61 @@ int main() {
         }
         backend.Submit(indexedSprite);
 
+        // Four-bit indexed textures use the same CLUT path with a 16-entry palette.
+        const std::array<uint32_t, 16> palette4 = {
+            0xFF000000u, 0xFFFFFF00u, 0xFF00FFFFu, 0xFFFF00FFu,
+            0xFFFFFFFFu, 0xFF0000FFu, 0xFF00FF00u, 0xFFFF0000u,
+            0xFF808080u, 0xFF404040u, 0xFF804000u, 0xFF008040u,
+            0xFF400080u, 0xFF804080u, 0xFF408080u, 0xFF808040u};
+        for (uint32_t index = 0u; index < palette4.size(); ++index) {
+            backend.WriteVram(
+                GS_PSM_CT32, 320u, 1u, index, 0u, palette4[index]);
+        }
+        backend.WriteVram(GS_PSM_T4, 192u, 1u, 0u, 0u, 1u);
+        backend.WriteVram(GS_PSM_T4, 192u, 1u, 1u, 0u, 2u);
+        backend.WriteVram(GS_PSM_T4, 192u, 1u, 0u, 1u, 3u);
+        backend.WriteVram(GS_PSM_T4, 192u, 1u, 1u, 1u, 4u);
+
+        GSTex0Reg indexed4Tex0{};
+        indexed4Tex0.tbp0 = 192u;
+        indexed4Tex0.tbw = 1u;
+        indexed4Tex0.psm = GS_PSM_T4;
+        indexed4Tex0.tcc = 1u;
+        indexed4Tex0.tfx = 0u;
+        indexed4Tex0.cbp = 320u;
+        indexed4Tex0.cpsm = GS_PSM_CT32;
+        indexed4Tex0.csm = 1u;
+        indexed4Tex0.cld = 1u;
+        GSTexClutReg indexed4Clut{};
+        indexed4Clut.cbw = 1u;
+        backend.LoadClut(indexed4Tex0, indexed4Clut);
+
+        GSPrimitiveBatch indexed4Sprite{};
+        indexed4Sprite.vertexCount = 2u;
+        indexed4Sprite.state.context.frame = triangle.state.context.frame;
+        indexed4Sprite.state.context.scissor = triangle.state.context.scissor;
+        indexed4Sprite.state.context.tex0 = indexed4Tex0;
+        indexed4Sprite.state.prim.type = GS_PRIM_SPRITE;
+        indexed4Sprite.state.prim.tme = true;
+        indexed4Sprite.state.prim.fst = true;
+        indexed4Sprite.state.textureWidth = 2u;
+        indexed4Sprite.state.textureHeight = 2u;
+        indexed4Sprite.vertices[0].x = 52.0f;
+        indexed4Sprite.vertices[0].y = 12.0f;
+        indexed4Sprite.vertices[0].u = 0u;
+        indexed4Sprite.vertices[0].v = 0u;
+        indexed4Sprite.vertices[1].x = 56.0f;
+        indexed4Sprite.vertices[1].y = 16.0f;
+        indexed4Sprite.vertices[1].u = 32u;
+        indexed4Sprite.vertices[1].v = 32u;
+        for (auto &vertex : indexed4Sprite.vertices) {
+            vertex.r = 128u;
+            vertex.g = 128u;
+            vertex.b = 128u;
+            vertex.a = 128u;
+        }
+        backend.Submit(indexed4Sprite);
+
         GSPresentationRequest presentation{};
         presentation.pmode = 1u;
         presentation.dispfb1 =
