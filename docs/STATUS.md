@@ -103,6 +103,15 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 
 ## Próximos bloqueios reais
 
+1. Validar em aparelho o parser `SYSTEM.CNF` com a imagem NTSC-U fornecida pelo usuário.
+2. Executar PS2Recomp com o ELF privado e confirmar as saídas geradas; nenhum ELF foi fornecido a esta revisão.
+3. Compilar as fontes C++ geradas para ARM64 e validar o contrato de registro da tabela real de funções.
+4. Criar o VFS/cache privado que conecta a imagem de disco SAF aos caminhos PS2 esperados pelo runtime.
+5. Substituir `GSHwBackend` OpenGL e `GSHostPresentation` Raylib pelo backend GS/Vulkan Android e seu presenter; conferir [GS/Vulkan Android](GS_VULKAN_ANDROID.md).
+6. Substituir a saída desktop de áudio por adaptador Android e só então liberar `PS2Runtime::initialize()`.
+7. Gerar e integrar VU1/IRX AOT com cobertura comprovada para o jogo.
+8. Abrir a sessão real a partir do botão JOGAR, atingir o boot, primeira imagem, menus e primeiro combate.
+
 1. Validar em aparelho o parser `SYSTEM.CNF` com a imagem NTSC-U do usuário.
 2. Executar e validar o pipeline host criado para PS2Recomp, usando o ELF NTSC-U correto e mantendo a saída privada.
 3. Integrar e vincular a biblioteca estática Waffle já compilada para arm64-v8a ao alvo android-game, mantendo a Activity FORGE/GowGameActivity.
@@ -121,7 +130,17 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 - A conclusão do build não prova boot, rendering GS, áudio, controles ou gameplay. Nenhum ELF, IRX, microcódigo ou dado de jogo foi adicionado ao repositório.
 - A construção/inicialização do objeto PS2Runtime e a integração do seu ciclo de vida com GameActivity ainda precisam de um smoke test controlado; PS2Runtime::initialize() não deve ser chamado antes da substituição dos adaptadores desktop de janela, gráficos e áudio.
 
-## [IMPLEMENTADO; CI PENDENTE] Ciclo GameActivity e ponte Android de controle
+## [COMPILADO NA CI; EXECUÇÃO EM APARELHO NÃO TESTADA] Ciclo GameActivity e ponte Android de controle
+
+- O alvo `android-game` cria o objeto `PS2Runtime` no início de `android_main` e o destrói ao encerrar a atividade. É um teste de construção/destruição no código; a CI compila, mas não inicia a Activity num aparelho Android.
+- O perfil Android define `PS2X_ANDROID_LIFECYCLE_MANAGED`; o patch privado evita consultar `IsAudioDeviceReady()` quando o host Android não inicializou o dispositivo Raylib.
+- Eventos físicos de gamepad/teclado são lidos de `android_input_buffer` por `android_app_swap_input_buffers`; não existe callback `android_app::onInputEvent` no glue GameActivity utilizado.
+- `GameActivityKeyEvent` e `GameActivityMotionEvent` são convertidos para o pacote DualShock 2 ativo-baixo/analógico. A primeira implementação suporta porta 0/slot 0, botões, eixos, gatilhos, deadzone, sensibilidade e inversão.
+- O estado de toque tem API para alimentar o mesmo pad virtual, mas o overlay visual, a configuração no menu do jogo e a vibração Android ainda não foram implementados.
+- A CI Android `42159084825` aprovou o lifecycle/entrada; as revisões posteriores `42159359100` e `42159363088` também aprovaram o build Android com a preparação CMake do código gerado.
+- Não há teste físico automatizado de gamepad nem prova de que GameActivity executou a construção/destruição em aparelho.
+
+**Bloqueio preservado:** `PS2Runtime::initialize()`, `loadELF()` e `run()` continuam sem chamada no Android. O runtime host ainda depende de Raylib/OpenGL para GS/apresentação e áudio; a tabela de funções recompiladas permanece vazia enquanto não houver C++ gerado do ELF privado.
 
 - O código nativo cria o objeto PS2Runtime no início do android_main e o destrói ao encerrar a atividade. Este é um smoke de construção/destruição, não inicialização do runtime nem execução do jogo.
 - O perfil Android define PS2X_ANDROID_LIFECYCLE_MANAGED; a preparação privada protege o destrutor para não consultar IsAudioDeviceReady() sem inicialização do áudio Raylib.
