@@ -1,8 +1,13 @@
 #include "iso9660_reader.h"
+#include "iso9660_installer.h"
 
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -207,6 +212,114 @@ int main() {
         return fail("directory was returned as a regular file");
     }
 
+    char temporaryRoot[] = "/tmp/gow-iso-install-XXXXXX";
+    char *privateRoot = ::mkdtemp(temporaryRoot);
+    if (!privateRoot) {
+        std::fclose(file);
+        return fail("could not create private installation test directory");
+    }
+
+    const std::vector<gow::disc::IsoInstallFile> manifest{
+        {"SYSTEM.CNF", "boot/SYSTEM.CNF", 32u},
+        {"DATA/TEST.BIN", "assets/test.bin", 2050u},
+    };
+    const auto installResult = gow::disc::installIsoManifest(
+        reader, manifest, privateRoot, "gow-test-install");
+    if (!installResult.success ||
+        installResult.totalBytes != 2082u ||
+        installResult.copiedBytes != 2082u ||
+        installResult.completedFiles != 2u) {
+        std::filesystem::remove_all(privateRoot);
+        std::fclose(file);
+        return fail("manifest extraction did not publish a complete installation: " +
+                    installResult.error);
+    }
+
+    const std::filesystem::path installedRoot =
+        std::filesystem::path(privateRoot) / "gow-test-install";
+    std::ifstream extractedFile(installedRoot / "assets/test.bin",
+                                std::ios::binary);
+    const std::vector<uint8_t> extractedBytes(
+        (std::istreambuf_iterator<char>(extractedFile)),
+        std::istreambuf_iterator<char>());
+    if (!extractedFile.eof() || extractedBytes.size() != 2050u) {
+        std::filesystem::remove_all(privateRoot);
+        std::fclose(file);
+        return fail("extracted file has an unexpected size or could not be read");
+    }
+    for (size_t i = 0u; i < extractedBytes.size(); ++i) {
+        if (extractedBytes[i] != static_cast<uint8_t>((i * 17u) & 0xFFu)) {
+            std::filesystem::remove_all(privateRoot);
+            std::fclose(file);
+            return fail("extracted bytes do not match the ISO source file");
+        }
+    }
+
+    const std::vector<gow::disc::IsoInstallFile> wrongSizeManifest{
+        {"SYSTEM.CNF", "SYSTEM.CNF", 31u},
+    };
+    const auto wrongSizeResult = gow::disc::installIsoManifest(
+        reader, wrongSizeManifest, privateRoot, "wrong-size");
+    if (wrongSizeResult.success ||
+        std::filesystem::exists(std::filesystem::path(privateRoot) / "wrong-size")) {
+        std::filesystem::remove_all(privateRoot);
+        std::fclose(file);
+        return fail("manifest size mismatch was not rejected before extraction");
+    }
+
+    const std::vector<gow::disc::IsoInstallFile> traversalManifest{
+        {"SYSTEM.CNF", "../outside.txt", 32u},
+    };
+    const auto traversalResult = gow::disc::installIsoManifest(
+        reader, traversalManifest, privateRoot, "traversal");
+    if (traversalResult.success ||
+        std::filesystem::exists(std::filesystem::path(privateRoot) / "outside.txt")) {
+        std::filesystem::remove_all(privateRoot);
+        std::fclose(file);
+        return fail("manifest destination traversal was not rejected");
+    }
+
+    const std::vector<gow::disc::IsoInstallFile> duplicateManifest{
+        {"SYSTEM.CNF", "same.bin", 32u},
+        {"DATA/TEST.BIN", "SAME.BIN", 2050u},
+    };
+    const auto duplicateResult = gow::disc::installIsoManifest(
+        reader, duplicateManifest, privateRoot, "duplicate");
+    if (duplicateResult.success) {
+        std::filesystem::remove_all(privateRoot);
+        std::fclose(file);
+        return fail("case-insensitive duplicate destinations were accepted");
+    }
+
+    const std::vector<gow::disc::IsoInstallFile> prefixCollisionManifest{
+        {"SYSTEM.CNF", "boot", 32u},
+        {"DATA/TEST.BIN", "boot/file.bin", 2050u},
+    };
+    const auto prefixCollisionResult = gow::disc::installIsoManifest(
+        reader, prefixCollisionManifest, privateRoot, "prefix-collision");
+    if (prefixCollisionResult.success) {
+        std::filesystem::remove_all(privateRoot);
+        std::fclose(file);
+        return fail("manifest file/directory prefix collision was accepted");
+    }
+
+    const std::vector<gow::disc::IsoInstallFile> cancelManifest{
+        {"DATA/TEST.BIN", "cancel/test.bin", 2050u},
+    };
+    const auto cancelResult = gow::disc::installIsoManifest(
+        reader, cancelManifest, privateRoot, "cancelled-install",
+        [](const gow::disc::IsoInstallProgress &progress, void *) {
+            return progress.copiedBytes == 0u;
+        });
+    if (cancelResult.success || !cancelResult.cancelled ||
+        std::filesystem::exists(std::filesystem::path(privateRoot) / "cancelled-install") ||
+        std::filesystem::exists(std::filesystem::path(privateRoot) / ".cancelled-install.staging")) {
+        std::filesystem::remove_all(privateRoot);
+        std::fclose(file);
+        return fail("cancelled installation was published or staging was not cleaned");
+    }
+
+    std::filesystem::remove_all(privateRoot);
     std::fclose(file);
     reader.close();
     if (reader.isOpen()) return fail("reader did not close its duplicated descriptor");
