@@ -181,17 +181,17 @@ def _verify_generated_outputs(
         return int(matches[0], base)
 
     table_base = read_single(
-        r"g_ps2RecompiledFunctionTableBase\\s*=\\s*0x([0-9a-fA-F]+)u\\s*;",
+        r"g_ps2RecompiledFunctionTableBase\s*=\s*0x([0-9a-fA-F]+)u\s*;",
         "function-table base",
         base=16,
     )
     table_end = read_single(
-        r"g_ps2RecompiledFunctionTableEnd\\s*=\\s*0x([0-9a-fA-F]+)u\\s*;",
+        r"g_ps2RecompiledFunctionTableEnd\s*=\s*0x([0-9a-fA-F]+)u\s*;",
         "function-table end",
         base=16,
     )
     table_slots = read_single(
-        r"g_ps2RecompiledFunctionTableSlotCount\\s*=\\s*(\\d+)u\\s*;",
+        r"g_ps2RecompiledFunctionTableSlotCount\s*=\s*(\d+)u\s*;",
         "function-table slot count",
     )
 
@@ -210,8 +210,8 @@ def _verify_generated_outputs(
         )
 
     assignments = re.findall(
-        r"(?m)^\\s*g_ps2RecompiledFunctionTable\\[(\\d+)\\]\\s*=\\s*"
-        r"([A-Za-z_][A-Za-z0-9_:]*)\\s*;\\s*//\\s*0x([0-9a-fA-F]+)\\s*$",
+        r"(?m)^\s*g_ps2RecompiledFunctionTable\[(\d+)\]\s*=\s*"
+        r"([A-Za-z_][A-Za-z0-9_:]*)\s*;\s*//\s*0x([0-9a-fA-F]+)\s*$",
         registration_source,
     )
     if not assignments:
