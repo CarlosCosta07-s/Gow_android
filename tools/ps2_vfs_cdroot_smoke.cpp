@@ -110,7 +110,10 @@ int main() {
 
     PS2Vfs vfs;
     PS2VfsMounts mounts;
-    mounts.cdRoot = std::filesystem::path("gowcdroot:/");
+    // The runtime keeps the real private directory for DiscSource/LSN access.
+    // The Android PS2 VFS bridge routes parsed cdrom0: paths by device, not by
+    // a virtual filesystem path that std::filesystem could normalize away.
+    mounts.cdRoot = root;
     PS2RomDevice rom;
 
     const int32_t descriptor = vfs.open(
@@ -118,7 +121,7 @@ int main() {
     if (descriptor < 0) {
         g_cdRoot.close();
         std::filesystem::remove_all(root);
-        return fail("PS2Vfs could not open cdrom0 path through gowcdroot provider");
+        return fail("PS2Vfs could not open cdrom0 path through the private-root bridge");
     }
 
     std::array<uint8_t, 4> firstRead{};
@@ -198,6 +201,6 @@ int main() {
 
     g_cdRoot.close();
     std::filesystem::remove_all(root);
-    std::cout << "PS2Vfs gowcdroot synthetic open/read/seek/stat/close smoke passed\n";
+    std::cout << "PS2Vfs physical-cdRoot synthetic open/read/seek/stat/close smoke passed\n";
     return 0;
 }
