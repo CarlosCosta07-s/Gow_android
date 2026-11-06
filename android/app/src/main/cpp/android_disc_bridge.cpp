@@ -213,6 +213,9 @@ Java_org_gowandroid_app_MainActivity_nativeInstallIsoManifest(
             progressCallback != nullptr ? forwardInstallProgress : nullptr,
             progressCallback != nullptr ? &progress : nullptr);
         if (!result.success) {
+            if (result.cancelled) {
+                return makeResult("Importação cancelada. Os arquivos temporários foram removidos.");
+            }
             return makeResult(result.error.empty()
                 ? "A extração dos arquivos de boot falhou."
                 : result.error);
