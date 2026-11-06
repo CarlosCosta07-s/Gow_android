@@ -2,9 +2,58 @@ plugins {
     id "com.android.application"
 }
 
+def gowDebugSigningValues = [
+    keystoreBase64: System.getenv("GOW_ANDROID_DEBUG_KEYSTORE_BASE64"),
+    storePassword: System.getenv("GOW_ANDROID_DEBUG_KEYSTORE_PASSWORD"),
+    keyAlias: System.getenv("GOW_ANDROID_DEBUG_KEY_ALIAS"),
+    keyPassword: System.getenv("GOW_ANDROID_DEBUG_KEY_PASSWORD")
+]
+def gowDebugSigningProvided = gowDebugSigningValues.values().any {
+    it != null && !it.trim().isEmpty()
+}
+def gowDebugSigningConfigured = gowDebugSigningValues.values().every {
+    it != null && !it.trim().isEmpty()
+}
+if (gowDebugSigningProvided && !gowDebugSigningConfigured) {
+    throw new GradleException(
+        "Persistent Debug signing requires all four GOW_ANDROID_DEBUG_KEYSTORE_* secrets."
+    )
+}
+
+def gowDebugKeystoreFile = file("$buildDir/forge-debug-signing.keystore")
+if (gowDebugSigningConfigured) {
+    try {
+        if (!gowDebugKeystoreFile.parentFile.isDirectory()
+                && !gowDebugKeystoreFile.parentFile.mkdirs()) {
+            throw new IOException("Could not create the private signing directory.")
+        }
+        byte[] keystoreBytes = java.util.Base64.getDecoder().decode(
+            gowDebugSigningValues.keystoreBase64
+        )
+        if (keystoreBytes.length < 1024) {
+            throw new IOException("The persistent Debug keystore is unexpectedly small.")
+        }
+        gowDebugKeystoreFile.bytes = keystoreBytes
+    } catch (Exception exception) {
+        throw new GradleException(
+            "Could not prepare the persistent Debug signing keystore.",
+            exception
+        )
+    }
+}
 android {
     namespace "org.gowandroid.app"
-    compileSdk 37
+
+    signingConfigs {
+        if (gowDebugSigningConfigured) {
+            persistentDebug {
+                storeFile gowDebugKeystoreFile
+                storePassword gowDebugSigningValues.storePassword
+                keyAlias gowDebugSigningValues.keyAlias
+                keyPassword gowDebugSigningValues.keyPassword
+            }
+        }
+    }    compileSdk 37
     buildToolsVersion "37.0.0"
     ndkVersion "30.0.16248370"
 
@@ -49,6 +98,14 @@ android {
             applicationIdSuffix ".debug"
             versionNameSuffix "-debug"
             minifyEnabled false
+            if (gowDebugSigningConfigured) {
+                signingConfig signingConfigs.persistentDebug
+            } else {
+                project.logger.warn(
+                    "FORGE Debug APK is using the ephemeral runner debug key. " +
+                    "It cannot update an APK signed by another CI run."
+                )
+            }
             externalNativeBuild {
                 cmake {
                     // Build the first GS primitive path in Debug only. Release remains disabled
