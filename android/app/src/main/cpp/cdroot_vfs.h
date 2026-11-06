@@ -22,6 +22,8 @@ struct CdRootFile {
 };
 
 // Read-only VFS rooted at an application-private installed disc directory.
+// Guest path matching follows ISO9660 conventions: ASCII case-insensitive and
+// optional ;version suffixes are ignored. Ambiguous normalized names are rejected.
 // All paths are relative to the root and are resolved with openat/O_NOFOLLOW.
 class CdRootVfs {
 public:
