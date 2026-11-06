@@ -189,3 +189,10 @@ O procedimento, dependências, versões fixadas e a triagem dos patches estão d
 A seleção do runtime usa como referência o commit Waffle 49ca62c1d20b4659c61df6286c54e86edf411012, apontado pela documentação do KIexter para o patch-base de runtime. Não devemos misturar fontes de snapshots posteriores da branch runtime sem revalidar os contratos.
 
 A revisão também deixa explícitos dois requisitos adicionais: ps2xIOP combina módulos IRX gerados por AOT com um núcleo CPU IOP interpretado, e o runner Android upstream ainda depende da organização Raylib/NativeActivity. A integração FORGE vai precisar de um alvo Android próprio, sem o runner de desktop e sem os fallbacks de CPU.
+
+
+### Política nativa obrigatória no IOP
+
+O pipeline host prepara uma variante PS2X_IOP_NATIVE_ONLY. Nessa variante, o caminho de dispatch continua atendendo imports/HLE, overrides nativos e faixas de IRX AOT; se uma instrução não pertencer a nenhuma faixa nativa, o runtime registra PC/RA e interrompe a execução em vez de chamar o intérprete IOP. A rotina de exceções permanece disponível de forma independente, mas core/iop_cpu.cpp e o objeto IopCpuCore são removidos do alvo estrito. A CI verificou essa exclusão por compile_commands.json na execução 42148409363.
+
+Isso é uma validação host/Linux com o registro de módulos IRX vazio. Ainda não comprova cobertura AOT real, integração do alvo ao APK nem execução em Android NDK/ARM64.
