@@ -221,7 +221,7 @@ int main() {
 
     const std::vector<gow::disc::IsoInstallFile> manifest{
         {"SYSTEM.CNF", "boot/SYSTEM.CNF", 32u},
-        {"DATA/TEST.BIN", "assets/test.bin", 2050u},
+        {"DATA/TEST.BIN", "assets/nested/test.bin", 2050u},
     };
     const auto installResult = gow::disc::installIsoManifest(
         reader, manifest, privateRoot, "gow-test-install");
@@ -237,7 +237,7 @@ int main() {
 
     const std::filesystem::path installedRoot =
         std::filesystem::path(privateRoot) / "gow-test-install";
-    std::ifstream extractedFile(installedRoot / "assets/test.bin",
+    std::ifstream extractedFile(installedRoot / "assets/nested/test.bin",
                                 std::ios::binary);
     const std::vector<uint8_t> extractedBytes(
         (std::istreambuf_iterator<char>(extractedFile)),
@@ -270,6 +270,24 @@ int main() {
         std::filesystem::remove_all(privateRoot);
         std::fclose(file);
         return fail("installer accepted a path separator in the final directory name");
+    }
+
+    size_t finalProgressCallbacks = 0u;
+    const auto finalCancelResult = gow::disc::installIsoManifest(
+        reader, cancelManifest, privateRoot, "final-cancel",
+        [](const gow::disc::IsoInstallProgress &, void *userData) {
+            auto *calls = static_cast<size_t *>(userData);
+            ++(*calls);
+            return *calls < 4u;
+        },
+        &finalProgressCallbacks);
+    if (finalProgressCallbacks != 4u ||
+        finalCancelResult.success || !finalCancelResult.cancelled ||
+        std::filesystem::exists(std::filesystem::path(privateRoot) / "final-cancel") ||
+        std::filesystem::exists(std::filesystem::path(privateRoot) / ".final-cancel.staging")) {
+        std::filesystem::remove_all(privateRoot);
+        std::fclose(file);
+        return fail("installer did not honor cancellation at the final publication boundary");
     }
 
     const std::vector<gow::disc::IsoInstallFile> wrongSizeManifest{
