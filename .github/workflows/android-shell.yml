@@ -70,11 +70,12 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Build Waffle static runtime for Android arm64-v8a
+      - name: Prepare pinned Waffle runtime for Gradle/CMake
         run: |
           python tools/build_recompiler_host.py \
-            --android-runtime-only \
-            --work-dir "$RUNNER_TEMP/gowport-android-runtime"
+            --prepare-android-runtime \
+            --work-dir "$RUNNER_TEMP/gowport-android-runtime" \
+            --export-runtime-dir "$GITHUB_WORKSPACE/android/app/build/gow-runtime-source"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
