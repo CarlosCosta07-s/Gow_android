@@ -37,6 +37,7 @@ O arquivo deve ser o ELF `SCUS_973.99` extraído da sua própria imagem. Não us
 - Git e CMake 3.21 ou superior.
 - Compilador C/C++ compatível com C++20 e Ninja (recomendado).
 - Android SDK/NDK instalados e configurados para o Gradle do projeto.
+- **`glslangValidator`** disponível no PATH. No Windows, instale o Vulkan SDK e adicione a pasta `Bin` ao PATH; no Ubuntu/Debian, instale `glslang-tools`.
 - Java 17 (o projeto usa o Gradle Wrapper).
 
 ## Controle de memória durante a compilação
@@ -64,6 +65,7 @@ Copie o ELF da sua própria mídia para uma pasta privada fora do repositório. 
 ```powershell
 python tools/build_android_game.py `
   --elf "D:\GowPrivate\SCUS_973.99" `
+  --capture-bootstrap `
   --work-dir "C:\gowport"
 ```
 
@@ -141,6 +143,10 @@ Opções úteis:
 
 - `--plan-only` valida caminhos e imprime os comandos, sem executá-los.
 - `--generate-only` gera e prepara o C++ AOT, mas não chama Gradle.
+
+## Exportação do log privado de boot (APK Debug)
+
+O runtime grava as transições de estado e mensagens nativas em `files/gow-runtime.log` dentro do armazenamento privado do aplicativo. O arquivo é limitado a 2 MiB, escrito sem seguir symlinks e não é enviado à CI. Na `GowGameActivity`, use **Exportar log** e salve `gow-runtime.log` em um destino local. Ele pode conter caminhos privados, endereços de execução e detalhes do jogo; mantenha-o privado e compartilhe-o somente para diagnóstico. O Logcat `GowAndroid` continua sendo a fonte complementar para mensagens emitidas diretamente por dependências nativas.
 
 ## O que esse APK permite verificar — e o que ainda não permite
 
