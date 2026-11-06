@@ -1,6 +1,6 @@
 # Arquitetura técnica — Gow_android
 
-**Estado:** shell Android ARM64, launcher SAF/ISO9660, ícone adaptativo e interface temática compilados com sucesso pela CI; ainda não executa o jogo.
+**Estado:** shell Android ARM64, launcher SAF/ISO9660, ícone adaptativo e interface FORGE compilados pela CI e abertos em aparelho Android real segundo o mantenedor; ainda não executa o jogo.
 
 ## Objetivo
 
@@ -35,9 +35,9 @@ O código executável inicial do projeto está em:
 - `android/app/src/main/cpp/main.cpp`: ciclo nativo e smoke test Vulkan.
 - `.github/workflows/android-shell.yml`: build de APK Debug ARM64.
 
-O smoke test atual cria instância Vulkan, surface Android, seleciona GPU e filas de gráficos/apresentação, cria device, swapchain, image views, render pass, framebuffers, command buffers e semáforos. Envia um pass que limpa a imagem e chama apresentação. Trata eventos de criação/encerramento da janela e recriação do swapchain. A build ARM64 foi confirmada na CI, incluindo a versão com launcher SAF.
+O código nativo inicial em `main.cpp` ainda contém um bring-up Vulkan de clear/present. Embora compile na CI, o mantenedor observou que iniciar esse teste separado fecha o aplicativo no aparelho. Por decisão de escopo, o botão foi removido; esse teste não será tratado como critério de progresso nem como prova de compatibilidade gráfica. A atividade nativa será reaproveitada para receber o runtime real. A validação Vulkan acontecerá por meio do GS e de frames reais do jogo.
 
-**Limite importante:** esse clear/present é apenas um teste de integração Vulkan. A interface temática e os recursos do ícone adaptativo foram compilados na CI do run `42128232489`. A validação ISO9660 já está implementada no launcher, mas ainda não lê `SYSTEM.CNF` nem identifica serial/revisão. A tela customizada mantém as ações de seleção de disco, teste Vulkan, configurações, sobre e sair. Ainda não há frontend GS, shaders do jogo, recursos gráficos de God of War, recompilação de ELF ou runtime de jogo. O APK foi compilado pela CI, mas ainda precisa ser executado em aparelho real.
+A interface FORGE e o seletor SAF/ISO9660 estão implementados. A validação atual ainda não lê `SYSTEM.CNF` nem identifica o serial/revisão do disco. Não há frontend GS, código recompilado do jogo ou runtime de God of War integrado.
 
 ## Camadas futuras do port
 
@@ -107,7 +107,7 @@ Cada subsistema terá logs e contadores próprios.
 
 ### 6. Renderizador Graphics Synthesizer (GS) via Vulkan
 
-O smoke test já prova o caminho Android surface/swapchain/clear/present quando a CI e os dispositivos o validarem. Isso não equivale a modelar o Graphics Synthesizer.
+O código experimental de clear/present não equivale a modelar o Graphics Synthesizer e falhou ao ser iniciado no aparelho do mantenedor. Não é uma dependência para começar o trabalho no runtime; o backend GS será integrado e validado com comandos e frames reais do jogo.
 
 Próximas etapas:
 
@@ -135,6 +135,16 @@ O SPU2/LIBSD deverá alimentar um mixer nativo e saída Android de baixa latênc
 ### 9. Frame pacing e desempenho
 
 Separar relógio da lógica, submissão GPU e apresentação. Avaliar Frame Pacing/Swappy do Android Game Development Kit. Prioridade: estabilidade e velocidade correta; metas de FPS só serão publicadas após medições em dispositivos e cenas identificados.
+
+## Estratégia de integração do runtime
+
+A primeira base a integrar será a branch `android` de [CodeAbhi826/God-Of-War-Recomp](https://github.com/CodeAbhi826/God-Of-War-Recomp), após fixar um commit imutável e revisar os arquivos/licenças. Ela reúne PS2Recomp, runtime EE/IOP, hooks específicos do jogo, shell Android e pipeline de build ARM64. O próprio projeto declara GPL-3.0 e informa que deriva trabalho de Waffle565, PS2Recomp e PCSX2.
+
+A integração deve preservar o `MainActivity` e a identidade FORGE deste repositório. A camada de runtime nativa será trazida de forma controlada, evitando substituir o launcher por outra interface. O backend GS/Vulkan Android ainda precisa ser concluído; a referência Android consultada não apresenta frames do jogo atualmente.
+
+A referência desktop de Waffle565 é útil para estudar GS, VU1, IOP, áudio e saves, mas não pode ser transplantada como se fosse Android: sua aplicação desktop usa OpenGL e dependências de host. O port Android deve usar as implementações compatíveis com Android e completar as lacunas do renderer.
+
+**Regra de execução final:** o código MIPS R5900 do jogo será recompilado estaticamente para C++/ARM64. Não haverá interpretador/JIT do EE no caminho de jogo, nem interpretador VU1 no resultado final; microprogramas VU1 deverão ser gerados/compilados antecipadamente. O pipeline que exige ELF e gera código derivado do jogo ficará privado; o repositório público não receberá ELF, IRX, dados de disco nem C++ gerado.
 
 ## Estrutura lógica pretendida
 
