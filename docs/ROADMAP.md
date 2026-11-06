@@ -71,7 +71,13 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [ ] Extrair ELF, arquivos de boot e dados necessários para staging privado, preservando archives grandes nos formatos originais.
 - [ ] Verificar tamanhos/hashes disponíveis e publicar a instalação atomicamente; limpar ou retomar staging incompleto sem marcar instalação parcial como pronta.
 - [ ] Configurar `PS2Runtime::loadELF()` para o ELF local e o `PS2IopHostAdapter`/`PS2Vfs` para usar o `cdRoot` local da instalação.
-- [ ] Substituir o caminho híbrido `gowdisc:/` no caminho normal de execução quando a leitura local estiver validada; remover a dependência de FD ISO mantido durante gameplay.
+- [ ] Manter `IoPaths.cdRoot` como o caminho físico da instalação privada; encaminhar `cdrom0:` no PS2 VFS antes de normalizar caminhos virtuais (correção enviada, aguardando CI).
+- [ ] Implementar descoberta da segunda camada do DVD e enumeração recursiva de diretórios/extents nas duas camadas.
+- [ ] Gerar `.disc_layout` e `.disc_meta` compatíveis com `ps2x::iop::DiscSource::openExtracted()`, preservando LSNs originais.
+- [ ] Extrair o conjunto completo de arquivos do disco para staging privado, com previsão de espaço, progresso, cancelamento, validação e publicação atômica.
+- [ ] Disponibilizar os módulos IRX no layout `IOP_MOD/` esperado pelo jogo, sem enviar módulos do disco para Git/CI.
+- [ ] Testar `DiscSource::openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` com ISO sintética de dupla camada.
+- [ ] Remover o uso residual do provider ISO transitório `gowdisc:/` do caminho normal de gameplay após validar a instalação local completa; não manter um FD da ISO aberto durante a partida.
 - [ ] Testar instalação, cancelamento, falta de espaço, reparo, integridade e inicialização com ISO do usuário em aparelho Android.
 - [ ] Ligar código recompilado, overrides de God of War e serviços mínimos de boot.
 - [ ] Resolver CD/DVD, IRX, SIF, DMA e cadeia inicial de execução.
