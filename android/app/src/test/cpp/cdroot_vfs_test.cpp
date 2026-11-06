@@ -96,6 +96,26 @@ int main() {
         return fail("could not open a nested cdRoot file: " + error);
     }
 
+    gow::disc::CdRootFile isoStyleFile{};
+    if (!vfs.openFile("data/boot.bin;1", isoStyleFile, &error) ||
+        isoStyleFile.handle == 0u || isoStyleFile.size != payload.size()) {
+        vfs.close();
+        std::filesystem::remove_all(root);
+        std::filesystem::remove(outsideFile);
+        return fail("cdRoot did not resolve case-insensitive ISO versioned path: " + error);
+    }
+    vfs.closeFile(isoStyleFile.handle);
+
+    std::vector<gow::disc::CdRootEntry> caseInsensitiveEntries;
+    if (!vfs.listDirectory("data", caseInsensitiveEntries, &error) ||
+        caseInsensitiveEntries.size() != 1u ||
+        caseInsensitiveEntries[0].name != "BOOT.BIN") {
+        vfs.close();
+        std::filesystem::remove_all(root);
+        std::filesystem::remove(outsideFile);
+        return fail("cdRoot did not resolve a case-insensitive directory path: " + error);
+    }
+
     std::array<uint8_t, 6> readBuffer{};
     size_t bytesRead = 0u;
     if (!vfs.readFile(file.handle, 2u, readBuffer.data(),
