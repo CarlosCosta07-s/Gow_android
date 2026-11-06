@@ -7,6 +7,7 @@ host-side static recompiler. Keep the ELF and generated C++ outside this repo.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -334,8 +335,23 @@ def main() -> int:
         "-B", str(iop_build_dir),
         "-DCMAKE_BUILD_TYPE=Release",
         "-DPS2X_IOP_NATIVE_ONLY=ON",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
     ])
     run([cmake, "--build", str(iop_build_dir), "--target", "ps2_iop", "--parallel"])
+    compile_database = iop_build_dir / "compile_commands.json"
+    if not compile_database.is_file():
+        raise RuntimeError("CMake did not emit compile_commands.json for the strict IOP target.")
+    compilation_entries = json.loads(compile_database.read_text(encoding="utf-8"))
+    interpreter_entries = [
+        entry for entry in compilation_entries
+        if Path(entry.get("file", "")).name == "iop_cpu.cpp"
+    ]
+    if interpreter_entries:
+        raise RuntimeError(
+            "Strict IOP target still compiles the guest interpreter: "
+            + ", ".join(entry["file"] for entry in interpreter_entries)
+        )
+    print("Verified: compile_commands.json contains no iop_cpu.cpp interpreter source.")
 
     executable_names = {"ps2_recomp", "ps2_recomp.exe"}
     candidates = [
