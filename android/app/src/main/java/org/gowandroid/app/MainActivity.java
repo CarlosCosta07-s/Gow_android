@@ -19,6 +19,7 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -75,12 +76,16 @@ public final class MainActivity extends AppCompatActivity {
     private TextView discStatus;
     private Button selectDiscButton;
     private Button prepareBootButton;
+    private AlertDialog bootImportDialog;
+    private ProgressBar bootImportProgressBar;
+    private TextView bootImportProgressText;
 
     private Uri selectedDiscUri;
     private boolean selectedDiscValid;
     private String selectedDiscSerial;
     private String selectedDiscBootPath;
     private boolean installingBootFiles;
+    private volatile boolean cancelBootImportRequested;
 
     // The native runtime reads this descriptor through /proc/self/fd/<n>.
     // Keep it open while the launcher and NativeActivity share the same process.
@@ -596,6 +601,8 @@ public final class MainActivity extends AppCompatActivity {
         }
 
         installingBootFiles = true;
+        cancelBootImportRequested = false;
+        showBootImportProgressDialog();
         if (prepareBootButton != null) {
             prepareBootButton.setEnabled(false);
             prepareBootButton.setText("IMPORTANDO...");
@@ -630,7 +637,7 @@ public final class MainActivity extends AppCompatActivity {
                 final int[] lastPercent = {-1};
                 InstallProgressCallback callback =
                         (totalBytes, copiedBytes, completedFiles, totalFiles) -> {
-                            if (isFinishing() || isDestroyed()) {
+                            if (cancelBootImportRequested || isFinishing() || isDestroyed()) {
                                 return false;
                             }
                             int percent = totalBytes <= 0L ? 100
@@ -640,13 +647,20 @@ public final class MainActivity extends AppCompatActivity {
                                 lastPercent[0] = percent;
                                 runOnUiThread(() -> {
                                     if (!isFinishing() && !isDestroyed()) {
-                                        discStatus.setText(
-                                                "Importando arquivos de boot: " + percent + "% · "
-                                                        + completedFiles + "/" + totalFiles);
+                                        String progressText = percent + "% · "
+                                                + completedFiles + "/" + totalFiles + " arquivos";
+                                        discStatus.setText("Importando arquivos de boot: " + progressText);
+                                        if (bootImportProgressBar != null) {
+                                            bootImportProgressBar.setProgress(percent);
+                                        }
+                                        if (bootImportProgressText != null) {
+                                            bootImportProgressText.setText(progressText);
+                                        }
                                     }
                                 });
                             }
-                            return true;
+                            return !cancelBootImportRequested
+                                    && !isFinishing() && !isDestroyed();
                         };
 
                 String error = nativeInstallIsoManifest(
@@ -669,10 +683,55 @@ public final class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void showBootImportProgressDialog() {
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(20), dp(14), dp(20), dp(8));
+
+        bootImportProgressText = text(
+                "Preparando arquivos...", 10, COLOR_MUTED,
+                Typeface.create("sans-serif", Typeface.NORMAL));
+        content.addView(bootImportProgressText, matchWrap());
+
+        bootImportProgressBar = new ProgressBar(
+                this, null, android.R.attr.progressBarStyleHorizontal);
+        bootImportProgressBar.setIndeterminate(false);
+        bootImportProgressBar.setMax(100);
+        bootImportProgressBar.setProgress(0);
+        LinearLayout.LayoutParams progressParams = matchWrap();
+        progressParams.topMargin = dp(13);
+        content.addView(bootImportProgressBar, progressParams);
+
+        bootImportDialog = new AlertDialog.Builder(this)
+                .setTitle("Importando arquivos de boot")
+                .setView(content)
+                .setNegativeButton("Cancelar", null)
+                .create();
+        bootImportDialog.setCancelable(false);
+        bootImportDialog.setCanceledOnTouchOutside(false);
+        bootImportDialog.setOnShowListener(dialog -> {
+            Button cancelButton = bootImportDialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+            cancelButton.setOnClickListener(view -> {
+                cancelBootImportRequested = true;
+                cancelButton.setEnabled(false);
+                if (bootImportProgressText != null) {
+                    bootImportProgressText.setText("Cancelando e limpando os arquivos temporários...");
+                }
+            });
+        });
+        bootImportDialog.show();
+    }
+
     private void showBootImportResult(boolean success, String error) {
         if (isFinishing() || isDestroyed()) {
             return;
         }
+        if (bootImportDialog != null) {
+            bootImportDialog.dismiss();
+            bootImportDialog = null;
+        }
+        bootImportProgressBar = null;
+        bootImportProgressText = null;
         installingBootFiles = false;
         if (prepareBootButton != null) {
             prepareBootButton.setEnabled(true);
@@ -1070,7 +1129,12 @@ public final class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        cancelBootImportRequested = true;
         ioExecutor.shutdownNow();
+        if (bootImportDialog != null) {
+            bootImportDialog.dismiss();
+            bootImportDialog = null;
+        }
         closeQuietly(selectedDiscDescriptor);
         selectedDiscDescriptor = null;
         super.onDestroy();
