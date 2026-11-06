@@ -258,7 +258,7 @@ def main() -> int:
     for required in (
         "nativeRequestGsSceneCapture",
         'setText("Capturar cena")',
-        "BuildConfig.DEBUG",
+        "ApplicationInfo.FLAG_DEBUGGABLE",
     ):
         require(required in activity, f"Debug GS scene capture control is missing: {required}")
     for required in (
