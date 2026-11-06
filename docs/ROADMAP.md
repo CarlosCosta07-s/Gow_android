@@ -33,8 +33,8 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 ## Fase 2 — Recompilação estática ARM64 com base KIexster
 
 - [x] Importar `funcmap.csv` (6.414 funções) e `recomp.template.toml` para `recompiler/config/`.
-- [ ] Fixar PS2Recomp no commit `c5a9d02573410a2085a4b4b831b0b68ba3515440` e integrar a ferramenta ao pipeline host.
-- [ ] Preparar o ambiente privado de build que recebe o ELF NTSC-U do usuário.
+- [x] Fixar PS2Recomp no commit `c5a9d02573410a2085a4b4b831b0b68ba3515440` e integrar/buildar a ferramenta host (run `42159359104`).
+- [x] Preparar o pipeline privado que recebe o ELF NTSC-U sem armazená-lo no repositório; falta executá-lo com o ELF real do usuário.
 - [ ] Gerar C++ usando a configuração específica de `SCUS_973.99`.
 - [ ] Compilar código gerado para `arm64-v8a`; corrigir ABI, MMI/intrinsics e particularidades de ARM64.
 - [ ] Comparar checkpoints/estados e produzir relatório de funções traduzidas, stubs e pendências.
@@ -44,10 +44,10 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 
 ## Fase 3 — GS no Android: reaproveitar frontend e substituir backend
 
-- [ ] Auditar o frontend GS/GIF e os utilitários portáveis do runtime Waffle/KIexter.
+- [x] Auditar o frontend GS/GIF e identificar as fronteiras OpenGL/Raylib; documentar o contrato do backend em `docs/GS_VULKAN_ANDROID.md`.
 - [ ] Reaproveitar apenas a camada de comandos, formatos PSM, CLUT, swizzle e estado que não dependa de OpenGL/host desktop.
 - [ ] Isolar completamente o backend OpenGL/WGL/Raylib do runner Android.
-- [ ] Implementar backend GS/Vulkan Android: render targets, depth, alpha test, destination-alpha, blending e sincronização.
+- [ ] Implementar backend GS/Vulkan Android: render targets, depth, alpha test, destination-alpha, blending e sincronização (contrato e dependências auditados; veja `docs/GS_VULKAN_ANDROID.md`).
 - [ ] Adaptar shaders e operações para GPUs móveis; usar passes intermediários quando necessário.
 - [ ] Validar comandos reais do jogo, começando pelo logo/menu e primeira cena.
 
@@ -56,7 +56,7 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 ## Fase 4 — Integrar runtime e boot ao FORGE
 
 - [ ] Selecionar e importar os módulos portáveis do runtime Waffle/KIexter (EE, memória, scheduler, stubs e serviços usados pelo título).
-- [ ] Adaptar o runner nativo para AndroidX GameActivity/NDK e preservar o MainActivity FORGE.
+- [x] Adaptar o runner nativo para AndroidX GameActivity/NDK, ligar `ps2_runtime` ao alvo `android-game` e preservar o MainActivity FORGE (smoke apenas de construção/destruição; sem iniciar o runtime).
 - [ ] Implementar passagem segura do arquivo/URI do usuário para o runtime.
 - [ ] Criar cache privado ou VFS para os arquivos do disco no layout e setores que o runtime espera.
 - [ ] Ligar código recompilado, overrides de God of War e serviços mínimos de boot.
@@ -75,7 +75,7 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - [ ] Rodar `iopn_gen.py` sobre os módulos IRX necessários e compilar as unidades geradas para ARM64.
 - [ ] Garantir que os IRX necessários ao jogo não caiam em caminho interpretado no produto final.
 - [ ] Adaptar comandos VIF/GIF/DMA e sincronização do GS.
-- [x] Implementar a ponte de eventos Android para estado virtual DualShock 2 (porta 0/slot 0), deadzone/sensibilidade/inversão e API compartilhada para entrada física/touch.
+- [x] Implementar a ponte de eventos Android para estado virtual DualShock 2 (porta 0/slot 0), deadzone/sensibilidade/inversão e API compartilhada para entrada física/touch. A CI compila a ponte; gamepads físicos ainda não foram testados no aparelho.
 - [ ] Implementar overlay visual de toque e ligar a configuração dos controles às opções do próprio jogo; não criar tela independente no FORGE.
 - [ ] Validar mapeamento, gatilhos analógicos, desconexão e reconexão com controles reais em aparelho Android.
 - [ ] Validar movimento, câmera, combate, HUD, partículas e efeitos.
