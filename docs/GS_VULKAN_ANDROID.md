@@ -77,3 +77,9 @@ O construtor/destrutor do objeto `PS2Runtime` já está ligado ao loop nativo co
 6. Benchmark de GPU/CPU, frame pacing, memória, temperatura e readback; nenhuma meta de FPS sem medições.
 
 **Não implementado:** nenhum dos blocos Vulkan acima está conectado ao jogo. O estado atual é o contrato auditado e a compilação do shell/runtime; ainda não há frame GS de God of War apresentado no Android.
+
+## Estado do handoff de boot (06/11/2026)
+
+O FORGE encaminha `cdRoot` e BOOT2 para `GowGameActivity`; a ponte JNI monta o VFS privado e sincroniza a configuração antes de a thread `android_main()` prosseguir. Depois de `initializeCoreHeadless()`, a ponte `gowRuntimeLoadElfAndCheckAot()` confere a tabela AOT, resolve o executável estritamente dentro da instalação, carrega o ELF quando a tabela está ligada e verifica a função de entrada. Não executa guest code.
+
+CI `42250619735` aprovou a checagem estática, teste host do resolvedor BOOT2, VFS e APK ARM64. O artefato ainda precisa ser instalado/aberto em aparelho para provar o handoff Java/native. A tabela AOT no APK público permanece vazia, e não há renderer GS/Vulkan nem áudio Android conectado. Portanto, o primeiro frame real não está alcançado.
