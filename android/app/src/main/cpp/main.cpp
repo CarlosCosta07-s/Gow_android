@@ -2,6 +2,7 @@
 
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include "android_pad_bridge.h"
+#include "android_cdroot_bridge.h"
 
 #include <android/log.h>
 #include <android/native_window.h>
@@ -906,5 +907,6 @@ extern "C" void android_main(android_app* app) {
     }
     gowAndroidPadResetAll();
     gowAndroidDiscCloseImage();
+    gowAndroidCdRootClose();
     logMessage(ANDROID_LOG_INFO, "Gow_android native shell stopped");
 }
