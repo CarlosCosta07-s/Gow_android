@@ -1,6 +1,8 @@
 package org.gowandroid.app;
 
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -57,6 +59,11 @@ public final class MainActivity extends AppCompatActivity {
     private static final int COLOR_TEXT = 0xFFF2F1EF;
     private static final int COLOR_MUTED = 0xFF969DA7;
     private static final int COLOR_LINE = 0xFF2B323B;
+    private static final int COLOR_SUCCESS = 0xFF8BC28F;
+    private static final int COLOR_WARNING = 0xFFE0B04A;
+    private static final int COLOR_ERROR = 0xFFE27676;
+
+    private static final String FALLBACK_VERSION_NAME = "0.1.0-dev";
 
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
 
@@ -84,6 +91,14 @@ public final class MainActivity extends AppCompatActivity {
     private ProgressBar bootImportProgressBar;
     private TextView bootImportProgressText;
 
+    private TextView clockTime;
+    private TextView clockDate;
+    private BatteryGaugeView batteryGauge;
+    private TextView batteryPercent;
+    private TextView batteryState;
+    private DeviceStatusMonitor deviceStatusMonitor;
+    private String cachedVersionName;
+
     private Uri selectedDiscUri;
     private boolean selectedDiscValid;
     private String selectedDiscSerial;
@@ -106,7 +121,46 @@ public final class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         applyImmersiveMode();
         buildLauncherUi();
+        deviceStatusMonitor = new DeviceStatusMonitor(this,
+                new DeviceStatusMonitor.Listener() {
+                    @Override
+                    public void onTimeChanged(long nowMillis) {
+                        updateClock(nowMillis);
+                    }
+
+                    @Override
+                    public void onBatteryChanged(BatteryReading reading) {
+                        updateBattery(reading);
+                    }
+                });
         restoreSelectedDisc();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        // Refreshes the clock and battery immediately, including after the
+        // launcher spent time in the background.
+        if (deviceStatusMonitor != null) {
+            deviceStatusMonitor.start();
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        if (deviceStatusMonitor != null) {
+            deviceStatusMonitor.stop();
+        }
+        super.onStop();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // Dialogs and the system shade can drop immersive mode.
+        if (hasFocus) {
+            applyImmersiveMode();
+        }
     }
 
     private void applyImmersiveMode() {
@@ -200,7 +254,7 @@ public final class MainActivity extends AppCompatActivity {
 
         TextView footer = text(
                 "FORGE  •  ANDROID ARM64  •  PORT NATIVO",
-                8, COLOR_MUTED,
+                9, COLOR_MUTED,
                 Typeface.create("sans-serif-medium", Typeface.NORMAL));
         footer.setGravity(Gravity.CENTER);
         footer.setLetterSpacing(0.07f);
@@ -287,13 +341,13 @@ public final class MainActivity extends AppCompatActivity {
         sidebar.addView(createDivider(), topMargin(10));
 
         TextView versionLabel = text(
-                "VERSÃO", 7, COLOR_MUTED,
+                "VERSÃO", 8, COLOR_MUTED,
                 Typeface.create("sans-serif-medium", Typeface.NORMAL));
         versionLabel.setLetterSpacing(0.13f);
         sidebar.addView(versionLabel, topMargin(11));
 
         TextView version = text(
-                "0.1.0-dev", 9, COLOR_TEXT,
+                versionName(), 9, COLOR_TEXT,
                 Typeface.create("monospace", Typeface.NORMAL));
         sidebar.addView(version, topMargin(4));
 
@@ -328,6 +382,13 @@ public final class MainActivity extends AppCompatActivity {
         header.addView(labels, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        header.addView(createDeviceStatusCluster(), new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        View clusterGap = new View(this);
+        header.addView(clusterGap, new LinearLayout.LayoutParams(dp(8), 1));
+
         TextView platform = text(
                 "ANDROID  /  ARM64", 8, COLOR_MUTED,
                 Typeface.create("monospace", Typeface.NORMAL));
@@ -338,6 +399,116 @@ public final class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, dp(29)));
 
         return header;
+    }
+
+    /** Clock and battery chip shown in the page header. */
+    private View createDeviceStatusCluster() {
+        LinearLayout cluster = new LinearLayout(this);
+        cluster.setOrientation(LinearLayout.HORIZONTAL);
+        cluster.setGravity(Gravity.CENTER_VERTICAL);
+        cluster.setPadding(dp(10), dp(5), dp(10), dp(5));
+        cluster.setBackground(rounded(COLOR_SURFACE, COLOR_LINE, dp(3)));
+
+        LinearLayout clock = new LinearLayout(this);
+        clock.setOrientation(LinearLayout.VERTICAL);
+
+        clockTime = text("--:--", 13, COLOR_TEXT,
+                Typeface.create("sans-serif-medium", Typeface.BOLD));
+        clockTime.setSingleLine(true);
+        clock.addView(clockTime, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        clockDate = text("", 8, COLOR_MUTED,
+                Typeface.create("sans-serif", Typeface.NORMAL));
+        clockDate.setSingleLine(true);
+        clock.addView(clockDate, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        cluster.addView(clock, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        View separator = new View(this);
+        separator.setBackgroundColor(COLOR_LINE);
+        LinearLayout.LayoutParams separatorParams =
+                new LinearLayout.LayoutParams(dp(1), dp(24));
+        separatorParams.setMargins(dp(10), 0, dp(10), 0);
+        cluster.addView(separator, separatorParams);
+
+        batteryGauge = new BatteryGaugeView(this);
+        cluster.addView(batteryGauge, new LinearLayout.LayoutParams(
+                dp(26), dp(13)));
+
+        LinearLayout battery = new LinearLayout(this);
+        battery.setOrientation(LinearLayout.VERTICAL);
+        battery.setPadding(dp(8), 0, 0, 0);
+
+        batteryPercent = text("--", 11, COLOR_TEXT,
+                Typeface.create("sans-serif-medium", Typeface.BOLD));
+        batteryPercent.setSingleLine(true);
+        battery.addView(batteryPercent, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        batteryState = text("", 8, COLOR_MUTED,
+                Typeface.create("sans-serif", Typeface.NORMAL));
+        batteryState.setSingleLine(true);
+        battery.addView(batteryState, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        cluster.addView(battery, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        return cluster;
+    }
+
+    private void updateClock(long nowMillis) {
+        if (clockTime == null || clockDate == null) {
+            return;
+        }
+        clockTime.setText(DeviceStatusMonitor.formatTime(this, nowMillis));
+        clockDate.setText(DeviceStatusMonitor.formatDate(nowMillis));
+    }
+
+    private void updateBattery(BatteryReading reading) {
+        if (batteryGauge == null || batteryPercent == null || batteryState == null) {
+            return;
+        }
+        batteryGauge.setReading(reading);
+        batteryPercent.setText(reading.percentText());
+        batteryState.setText(reading.stateText());
+
+        int color;
+        switch (reading.severity()) {
+            case CRITICAL:
+                color = COLOR_ERROR;
+                break;
+            case LOW:
+                color = COLOR_WARNING;
+                break;
+            default:
+                color = COLOR_TEXT;
+                break;
+        }
+        batteryPercent.setTextColor(color);
+    }
+
+    private String versionName() {
+        if (cachedVersionName == null) {
+            String value = FALLBACK_VERSION_NAME;
+            try {
+                PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+                if (info.versionName != null && !info.versionName.trim().isEmpty()) {
+                    value = info.versionName;
+                }
+            } catch (PackageManager.NameNotFoundException | RuntimeException ignored) {
+                // Fall back to the compiled-in name.
+            }
+            cachedVersionName = value;
+        }
+        return cachedVersionName;
     }
 
     private View createHeroCard() {
@@ -386,7 +557,7 @@ public final class MainActivity extends AppCompatActivity {
         details.addView(gameDescription, descriptionParams);
 
         TextView badge = text(
-                "EM DESENVOLVIMENTO", 7, 0xFFFFA5A8,
+                "EM DESENVOLVIMENTO", 8, 0xFFFFA5A8,
                 Typeface.create("sans-serif-medium", Typeface.BOLD));
         badge.setLetterSpacing(0.09f);
         badge.setPadding(dp(8), dp(5), dp(8), dp(5));
@@ -466,7 +637,7 @@ public final class MainActivity extends AppCompatActivity {
 
     private TextView sectionLabel(String value) {
         TextView label = text(
-                value, 8, COLOR_MUTED,
+                value, 9, COLOR_MUTED,
                 Typeface.create("sans-serif-medium", Typeface.NORMAL));
         label.setLetterSpacing(0.13f);
         return label;
@@ -564,7 +735,7 @@ public final class MainActivity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle("Preparar arquivos de boot")
                 .setMessage(
-                        "Disco reconhecido: " + selectedDiscSerial + ".\\n\\n"
+                        "Disco reconhecido: " + selectedDiscSerial + ".\n\n"
                                 + "O FORGE vai copiar SYSTEM.CNF e o executável indicado por BOOT2 "
                                 + "para o armazenamento privado do aplicativo. Esta é apenas a "
                                 + "primeira etapa de importação: os demais dados do jogo ainda "
@@ -608,7 +779,7 @@ public final class MainActivity extends AppCompatActivity {
                             : "Arquivos de boot já importados")
                     .setMessage(
                             "A pasta de preparação já existe no armazenamento privado. "
-                                    + detail + "\\n\\n"
+                                    + detail + "\n\n"
                                     + "Ela contém somente os arquivos de boot importados nesta etapa; "
                                     + "não representa uma instalação completa nem permite iniciar o jogo.")
                     .setPositiveButton("Entendi", null)
@@ -814,7 +985,7 @@ public final class MainActivity extends AppCompatActivity {
                         "PLATAFORMA\nAndroid / ARM64\n\n"
                                 + "GRÁFICOS\nVulkan (renderizador do jogo em desenvolvimento)\n\n"
                                 + "INTERFACE\nFORGE\n\n"
-                                + "VERSÃO\n0.1.0-dev\n\n"
+                                + "VERSÃO\n" + versionName() + "\n\n"
                                 + "As opções de resolução, controles e áudio serão adicionadas "
                                 + "quando os respectivos subsistemas estiverem integrados.")
                 .setPositiveButton("Fechar", null)
@@ -1168,6 +1339,9 @@ public final class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (deviceStatusMonitor != null) {
+            deviceStatusMonitor.stop();
+        }
         cancelBootImportRequested = true;
         ioExecutor.shutdownNow();
         if (bootImportDialog != null) {

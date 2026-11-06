@@ -62,6 +62,15 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Test battery interpretation on host JVM
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/battery-test"
+          javac -Xlint:all -Werror -d "$RUNNER_TEMP/battery-test" \
+            android/app/src/main/java/org/gowandroid/app/BatteryReading.java \
+            android/app/src/test/java/org/gowandroid/app/BatteryReadingTest.java
+          java -cp "$RUNNER_TEMP/battery-test" org.gowandroid.app.BatteryReadingTest
+
       - name: Locate Android SDK
         shell: bash
         run: |

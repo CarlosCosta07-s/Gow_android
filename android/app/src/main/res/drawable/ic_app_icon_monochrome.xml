@@ -5,18 +5,17 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Monochrome layer for Android themed icons. -->
+    <!-- Monochrome layer for Android themed icons: same silhouette, one tone. -->
     <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="7"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M29,70 H36 C40,70 43,67 43,62 C43,55 35,49 35,41 C35,28 43,22 54,22 C65,22 73,28 73,41 C73,49 65,55 65,62 C65,67 68,70 72,70 H79" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M27,41 L81,41 L81,50 L72,50 C72,55 68,57 67,60 L67,66 L77,66 L77,76 L31,76 L31,66 L41,66 L41,53 C41,47 33,41.5 27,41 Z" />
     <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="7"
-        android:strokeLineCap="square"
-        android:pathData="M37,80 H46 M62,80 H71" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M58,22 Q58,30 66,30 Q58,30 58,38 Q58,30 50,30 Q58,30 58,22 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M75,32 L77,35 L75,38 L73,35 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M45,33 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 Z" />
 </vector>
