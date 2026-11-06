@@ -1483,7 +1483,7 @@ def main() -> int:
             raise RuntimeError("CMake did not emit the Android runtime compile database.")
         android_entries = json.loads(android_compile_db.read_text(encoding="utf-8"))
         def normalized_source(entry: dict[str, object]) -> str:
-            return str(entry.get("file", "")).replace("\\\", "/")
+            return str(entry.get("file", "")).replace("\\\\", "/")
 
         vu_android_entries = [
             entry for entry in android_entries
@@ -1602,8 +1602,8 @@ def main() -> int:
     print("Verified: ps2_vu1_core.cpp compiled with PS2X_VU1_NATIVE_ONLY=1.")
     diagnostic_entries = [
         entry for entry in vu_entries
-        if "/ee_ref/" in entry.get("file", "").replace("\\\", "/")
-        or "/vu_pcsx2/" in entry.get("file", "").replace("\\\", "/")
+        if "/ee_ref/" in entry.get("file", "").replace("\\\\", "/")
+        or "/vu_pcsx2/" in entry.get("file", "").replace("\\\\", "/")
         or Path(entry.get("file", "")).name == "ee_watch.cpp"
     ]
     if diagnostic_entries:
