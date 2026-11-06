@@ -103,7 +103,7 @@ def compare_rgb(
     mae = absolute_sum / sample_count if sample_count else 0.0
     mse = squared_sum / sample_count if sample_count else 0.0
     rmse = math.sqrt(mse)
-    psnr = math.inf if mse == 0.0 else 20.0 * math.log10(255.0 / rmse)
+    psnr = None if mse == 0.0 else 20.0 * math.log10(255.0 / rmse)
     return {
         "pixels": pixel_count,
         "mae": mae,
@@ -118,6 +118,7 @@ def compare_rgb(
 
 def write_diff_ppm(path: Path, reference: bytes, actual: bytes,
                    width: int, height: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     diff = bytearray(len(reference))
     for offset in range(0, len(reference), 3):
         error = max(
@@ -157,8 +158,8 @@ def main() -> int:
             )
         if not 0.0 <= args.min_matching_pixels <= 100.0:
             raise ValueError("--min-matching-pixels must be between 0 and 100.")
-        if args.max_mae < 0.0:
-            raise ValueError("--max-mae must be non-negative.")
+        if not math.isfinite(args.max_mae) or args.max_mae < 0.0:
+            raise ValueError("--max-mae must be a finite non-negative number.")
 
         metrics = compare_rgb(reference, actual, args.tolerance)
         passed = (
