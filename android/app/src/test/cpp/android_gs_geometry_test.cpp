@@ -36,7 +36,7 @@ GSPrimitiveBatch makeBatch(GSPrimType type, uint8_t count) {
 
 int main() {
     try {
-        GsGpuBatch output;
+        gow::android::GsGpuBatch output;
         std::string error;
 
         auto triangle = makeBatch(GS_PRIM_TRIANGLE, 3u);
