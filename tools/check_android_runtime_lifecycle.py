@@ -119,6 +119,8 @@ def main() -> int:
     )
     for required in (
         "nativeSetActivityReference(this)",
+        "gBootRelativePath.clear()",
+        "gBootPathConfigurationReceived = false",
         "nativeClearActivityReference(this)",
         "nativeClearActivityReference(GowGameActivity activity)",
         "protected void onDestroy()",
@@ -207,6 +209,14 @@ def main() -> int:
     ):
         require(required in main_activity, f"FORGE diagnostic launch is missing: {required}")
 
+    on_create_start = activity.find("protected void onCreate(Bundle savedInstanceState)")
+    on_create_super = activity.find("super.onCreate(savedInstanceState)", on_create_start)
+    on_create_register = activity.find("nativeSetActivityReference(this)", on_create_start)
+    require(
+        on_create_start >= 0 and on_create_register >= 0
+        and on_create_register < on_create_super,
+        "GameActivity must register the JNI reference before super.onCreate starts the native thread.",
+    )
     print("Verified: Android PS2 core initialization is headless, uses a null GS backend,")
     print("and cannot enter Raylib desktop initialization or guest execution.")
     return 0
