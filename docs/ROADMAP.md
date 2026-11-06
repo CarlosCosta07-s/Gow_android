@@ -44,7 +44,8 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Importar `funcmap.csv` (6.414 funções) e `recomp.template.toml` para `recompiler/config/`.
 - [x] Fixar PS2Recomp no commit `c5a9d02573410a2085a4b4b831b0b68ba3515440` e integrar/buildar a ferramenta host (run `42159359104`).
 - [x] Preparar o pipeline privado que recebe o ELF NTSC-U sem armazená-lo no repositório; falta executá-lo com o ELF real do usuário.
-- [ ] Gerar C++ usando a configuração específica de `SCUS_973.99`.
+- [x] Criar o orquestrador local `tools/build_android_game.py` para validar o ELF NTSC-U privado, executar PS2Recomp, exportar C++ para staging ignorado e compilar APK ARM64; testes de planejamento/privacidade e CLI passam em CI. Execução com o ELF real do usuário ainda pendente.
+- [ ] Gerar C++ usando a configuração específica de `SCUS_973.99` a partir do ELF real do usuário.
 - [ ] Compilar código gerado para `arm64-v8a`; corrigir ABI, MMI/intrinsics e particularidades de ARM64.
 - [ ] Comparar checkpoints/estados e produzir relatório de funções traduzidas, stubs e pendências.
 - [ ] Manter ISO, ELF e C++ gerado fora do repositório público e da CI pública.
