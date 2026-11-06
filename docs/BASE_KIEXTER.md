@@ -118,3 +118,37 @@ A decisão arquitetural é **reaproveitar o núcleo de serviços PS2 e substitui
 Esta é uma seleção por responsabilidade, não uma lista de arquivos já importados. A seleção arquivo a arquivo exige conferir includes, símbolos, alocações, dependências CMake e sincronização de cada módulo. A base Waffle será tratada como uma versão de referência fixada pelo patch do KIexter, evitando misturar arquivos de commits diferentes da branch runtime.
 
 A classificação inicial dos patches (correção, otimização, host desktop ou dependência x86) está em [PIPELINE_RECOMPILADOR.md](PIPELINE_RECOMPILADOR.md). Os patches opcionais não foram aplicados automaticamente: cada um precisa de revisão e teste ARM64/Vulkan próprio.
+
+
+## Auditoria de fontes do runtime Waffle (snapshot de referência)
+
+Foi feita leitura do CMake de ps2xRuntime na branch runtime do Waffle, snapshot ba16c8d70eb5ae73267732e3c0e36cb3b6e90ebc. Esse snapshot serve para identificar dependências e bloqueios; ele **não deve ser misturado automaticamente** com a versão Waffle incorporada no patch-base KIexster. A integração deve manter uma única revisão coerente.
+
+A lista do alvo ps2_runtime mostra candidatos para reaproveitamento, ainda não importados:
+
+- Núcleo/serviços: ps2_memory.cpp, ps2_runtime.cpp, ps2_iop_host.cpp, ps2_rom_device.cpp, ps2_vfs.cpp e os arquivos do diretório Kernel.
+- GS/fluxo gráfico: ps2_gif_arbiter.cpp, ps2_gs_memory.cpp, gs_frontend.cpp, gs_stage.cpp, gs_display.cpp, gs_host_present.cpp, gs_swizzle.cpp e gs_texture_store.cpp.
+- Áudio e controles: ps2_audio.cpp, ps2_audio_vag.cpp e ps2_pad.cpp, sujeitos à separação do dispositivo físico/host.
+- VIF1: ps2_vif1_interpreter.cpp é um decodificador de comandos e operações UNPACK do subsistema VIF1. Isso não é interpretação de instruções MIPS do EE; é um serviço de hardware do runtime. A permanência dele precisa ser avaliada por função e não confundida com o fallback de CPU.
+
+### Fontes que não podem entrar no caminho final do jogo
+
+O CMake desse snapshot adiciona explicitamente ao alvo do runtime arquivos de referência PCSX2 para o teste diferencial do EE:
+
+- ee_ref/ee_diff.cpp, ee_watch.cpp, ee_ref/eeref.cpp;
+- ee_ref/R5900OpcodeImpl.cpp, R5900OpcodeTables.cpp, MMI.cpp e FPU.cpp;
+- vu_pcsx2/pcsx2_vu0_cop2.cpp, pcsx2_vu1_bridge.cpp, VUops.cpp, VUflags.cpp e VU1microInterp.cpp.
+
+O próprio CMake descreve esse grupo como diferencial/teste EE. Essas fontes não são necessárias para o jogo recompilado e devem ser excluídas da build de release Android. Caso sejam mantidas em um build de diagnóstico separado, preservar os avisos PCSX2 GPL-3.0-or-later.
+
+Há outro bloqueio: ps2_vu1_core.cpp implementa VU1Interpreter, enquanto o CMake habilita a geração/ligação de blocos VU1 nativos apenas sob condições específicas e exclui esse gerador quando PS2X_IS_ANDROID está ativo. O runtime pode, portanto, executar fallback interpretado para microprogramas/blocos sem cobertura AOT. **O produto final deve falhar com diagnóstico claro se faltar código nativo**, em vez de cair nesse fallback. A geração deve ser executada no host e seus arquivos compilados pelo NDK para ARM64.
+
+### Host e APIs de plataforma que precisam ser trocados
+
+- gs_gl.cpp é o backend OpenGL do desktop; não é o backend Vulkan do FORGE.
+- ps2_audio_device.cpp usa miniaudio integrado ao Raylib/host; reaproveitar o motor SPU2/LIBSD quando separável, mas substituir a saída pelo adaptador Android.
+- ps2_pad_rumble_win.cpp é específico de controles Windows e deve ser substituído pelo GameController Android.
+- ps2_android_runtime.cpp no snapshot consultado contém apenas um TODO de controles touch; não constitui uma integração Android pronta.
+- O runner Waffle usa sua própria integração NativeActivity/Raylib. O aplicativo atual usa AndroidX GameActivity; preservar a Activity e a interface FORGE existentes, adaptando a ponte de runtime em vez de substituir o launcher por esse runner.
+
+**Consequência:** não vamos importar ou compilar o alvo ps2_runtime integralmente como está. A próxima integração precisa de uma lista CMake própria para Android que inclua somente os serviços portáveis aprovados, exclua o grupo de intérpretes de diagnóstico e impeça fallback interpretado de EE/VU1/IOP no caminho do jogo.
