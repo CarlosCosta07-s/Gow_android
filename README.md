@@ -44,6 +44,8 @@ A atividade nativa usa AndroidX GameActivity. O código Vulkan atual é apenas u
 
 A base principal do código específico de God of War será [KIexster/god-of-war-recomp](https://github.com/KIexster/god-of-war-recomp), commit `a226151feb6ed22937e42be485aaf28a83acd166`. Já trouxemos o mapa de 6.414 funções, o template de recompilação, os overrides do jogo e os geradores AOT de VU1/IOP. Os arquivos importados estão separados e ainda não foram conectados ao build Android.
 
+O pipeline host do PS2Recomp já compilou com sucesso na CI. A variante estrita do IOP também foi compilada, e a CI confirmou que core/iop_cpu.cpp não entrou no alvo estrito (execução [42148409363](https://github.com/CarlosCosta07-s/Gow_android/actions/runs/42148409363)). Essa validação não usou módulos IRX reais nem Android NDK; a geração C++ do jogo e o runtime continuam pendentes.
+
 O port do KIexster utiliza o runtime de [Waffle565/God-Of-War-Native-Port](https://github.com/Waffle565/God-Of-War-Native-Port) e o [PS2Recomp](https://github.com/ran-j/PS2Recomp). Vamos selecionar as partes portáveis do runtime e dos serviços do jogo. O runner desktop, a camada Raylib/Windows, o backend OpenGL e os dispositivos de entrada/áudio de PC não serão transplantados diretamente.
 
 Referências adicionais:
