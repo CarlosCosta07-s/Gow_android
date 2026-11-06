@@ -18,6 +18,7 @@ PS2RECOMP_COMMIT = "c5a9d02573410a2085a4b4b831b0b68ba3515440"
 KIEXTER_URL = "https://github.com/KIexster/god-of-war-recomp.git"
 KIEXTER_COMMIT = "a226151feb6ed22937e42be485aaf28a83acd166"
 BASE_PATCH = "patches/ps2recomp-waffle-runtime.patch"
+ANDROID_IOP_PATCH = "patches/android/ps2x-iop-native-only.patch"
 
 
 def run(command: list[str], *, cwd: Path | None = None) -> None:
@@ -130,6 +131,19 @@ def main() -> int:
     )
     run(
         ["git", "apply", "--ignore-whitespace", str(patch_path)],
+        cwd=recompiler_source,
+    )
+
+    # Strict Android IOP policy: reject missing AOT coverage instead of interpreting IRX instructions.
+    android_iop_patch = repo_root / ANDROID_IOP_PATCH
+    if not android_iop_patch.is_file():
+        raise RuntimeError(f"Required Android IOP policy patch not found: {android_iop_patch}")
+    run(
+        ["git", "apply", "--check", "--ignore-whitespace", str(android_iop_patch)],
+        cwd=recompiler_source,
+    )
+    run(
+        ["git", "apply", "--ignore-whitespace", str(android_iop_patch)],
         cwd=recompiler_source,
     )
 
