@@ -59,6 +59,9 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [ ] Isolar completamente o backend OpenGL/WGL/Raylib do runner Android.
 - [ ] Implementar backend GS/Vulkan Android: render targets, depth, alpha test, destination-alpha, blending e sincronização (contrato e dependências auditados; veja `docs/GS_VULKAN_ANDROID.md`).
 - [x] Ligar a primeira via Vulkan de primitivas sólidas (point/line/triangle/sprite), fila thread-safe entre GS worker e surface, criação/destruição conforme `ANativeWindow` e opção ativa somente no Debug; CIs `42258381042`–`42258945494` aprovaram build ARM64 e checagens estruturais. Não é rasterizador GS completo: sem texturas/CLUT, FBP/PSM, depth, alpha/DATE, blending/fog ou composição de display.
+- [x] Testar adaptador real de memória GS com `GSTextureStore`/`ps2_gs_memory.cpp`: CT32 read/write, scissor/FBMSK, HOST→LOCAL e snapshot 4 MiB aprovados na CI `42260019446`; artefato ARM64 ID `13524986210`.
+- [ ] Rasterizar primitivas dentro dos render targets GS endereçados por FBP/FBW/PSM, em vez de desenhá-las diretamente na surface Android.
+- [ ] Fazer `Present()` ler o framebuffer selecionado por DISPFB/DISPLAY/PMODE e entregar o primeiro `PresentationFrame` derivado de VRAM para Vulkan.
 - [x] Preparar presenter Vulkan de frames RGBA para a GameActivity (staging `VkBuffer`, barriers e `vkCmdCopyBufferToImage`), scaler aspect-fit e invalidação do cache após recriação da swapchain; host tests e builds ARM64 aprovados nas CIs `42255177609`/`42255283925`. Esse marco **não** implementa rasterização GS nem produz frames do jogo.
 - [ ] Adaptar shaders e operações para GPUs móveis; usar passes intermediários quando necessário.
 - [ ] Validar comandos reais do jogo, começando pelo logo/menu e primeira cena.
