@@ -32,14 +32,21 @@ O código executável inicial do projeto está em:
 - `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`: ícone adaptativo do aplicativo.
 - `android/app/src/main/res/drawable-nodpi/ic_launcher_foreground.webp`: arte original do ícone do projeto.
 - `android/app/src/main/java/org/gowandroid/app/GowGameActivity.java`: Activity baseada em AndroidX GameActivity.
-- `android/app/src/main/cpp/main.cpp`: ciclo nativo e smoke test Vulkan.
+- `android/app/src/main/cpp/main.cpp`: ciclo nativo GameActivity, dispatch de eventos de entrada e construção/destruição controlada do runtime.
+- `android/app/src/main/cpp/android_pad_bridge.cpp`: conversão atômica de eventos Android em estado de controle DualShock 2.
 - `.github/workflows/android-shell.yml`: build de APK Debug ARM64.
 
-O código nativo inicial em `main.cpp` ainda contém um bring-up Vulkan de clear/present. Embora compile na CI, o mantenedor observou que iniciar esse teste separado fecha o aplicativo no aparelho. Por decisão de escopo, o botão foi removido; esse teste não será tratado como critério de progresso nem como prova de compatibilidade gráfica. A atividade nativa será reaproveitada para receber o runtime real. A validação Vulkan acontecerá por meio do GS e de frames reais do jogo.
+O código nativo inicial em `main.cpp` ainda contém um bring-up Vulkan de clear/present. Embora compile na CI, o mantenedor observou que iniciar esse teste separado fecha o aplicativo no aparelho. Por decisão de escopo, o botão foi removido; esse teste não será tratado como critério de progresso nem como prova de compatibilidade gráfica. A atividade nativa foi ligada ao construtor/destrutor do PS2Runtime para um smoke controlado. No perfil Android, o destrutor não consulta o estado do dispositivo de áudio Raylib, pois GameActivity ainda não inicializou áudio desktop. initialize(), loadELF() e run() continuam bloqueados até existirem adaptadores Android de gráficos/áudio/VFS e código estático privado do jogo. A validação Vulkan acontecerá por meio do GS e de frames reais do jogo.
 
 A interface FORGE e o seletor SAF/ISO9660 estão implementados. O parser de `SYSTEM.CNF` e a identificação inicial de `SCUS_973.99`/`SCES_531.33` foram compilados com sucesso pela CI no run `42142814087`; ainda aguardam validação com imagens de teste em aparelho. Não há frontend GS, código recompilado do jogo ou runtime de God of War integrado.
 
 ## Camadas futuras do port
+
+### Entrada física e estado virtual de DualShock 2
+
+O shell recebe eventos por android_app::onInputEvent. A ponte android_pad_bridge.cpp converte botões, eixos e gatilhos dos controles Android para o pacote analógico ativo-baixo consumido por PSPadBackend. O perfil inicial implementa porta 0/slot 0, deadzone/sensibilidade/inversão por configuração e uma API para o overlay touch alimentar o mesmo estado. Ao perder foco ou pausar, o estado é limpo para evitar botões presos.
+
+**Limite desta etapa:** a ponte de entrada está ligada ao backend Android, mas ainda não existe camada visual de touch nem página de configuração dentro do menu de God of War. A API de configuração existe para a futura página de opções; não há UI no FORGE para remapeamento.
 
 ### 1. Aplicativo Android
 
