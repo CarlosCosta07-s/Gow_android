@@ -14,7 +14,9 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <vector>
+#include <jni.h>
 
 class PS2Runtime;
 extern "C" PS2Runtime *gowCreatePs2Runtime() noexcept;
@@ -30,6 +32,62 @@ constexpr uint32_t kVulkanApiVersion = VK_API_VERSION_1_0;
 
 void logMessage(int priority, const char* message) {
     __android_log_write(priority, kTag, message);
+}
+
+void reportRuntimeStatus(android_app *app, const char *message, bool failed) {
+    if (app == nullptr || app->activity == nullptr ||
+        app->activity->vm == nullptr || app->activity->clazz == nullptr ||
+        message == nullptr) {
+        return;
+    }
+
+    JavaVM *vm = app->activity->vm;
+    JNIEnv *env = nullptr;
+    bool attachedHere = false;
+    const jint envResult = vm->GetEnv(
+        reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
+    if (envResult == JNI_EDETACHED) {
+        if (vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+            logMessage(ANDROID_LOG_WARN,
+                "Could not attach native thread to report runtime status");
+            return;
+        }
+        attachedHere = true;
+    } else if (envResult != JNI_OK || env == nullptr) {
+        logMessage(ANDROID_LOG_WARN,
+            "Could not obtain JNIEnv to report runtime status");
+        return;
+    }
+
+    jclass activityClass = env->GetObjectClass(app->activity->clazz);
+    jmethodID callback = activityClass == nullptr ? nullptr :
+        env->GetMethodID(activityClass, "onNativeRuntimeStatus",
+                         "(Ljava/lang/String;Z)V");
+    jstring javaMessage = callback == nullptr ? nullptr :
+        env->NewStringUTF(message);
+
+    if (callback != nullptr && javaMessage != nullptr) {
+        env->CallVoidMethod(
+            app->activity->clazz, callback, javaMessage,
+            static_cast<jboolean>(failed ? JNI_TRUE : JNI_FALSE));
+    }
+
+    const bool javaFailed = env->ExceptionCheck() == JNI_TRUE;
+    if (javaFailed) {
+        env->ExceptionClear();
+        logMessage(ANDROID_LOG_WARN,
+            "Java runtime-status callback failed; native startup will continue");
+    }
+
+    if (javaMessage != nullptr) {
+        env->DeleteLocalRef(javaMessage);
+    }
+    if (activityClass != nullptr) {
+        env->DeleteLocalRef(activityClass);
+    }
+    if (attachedHere) {
+        vm->DetachCurrentThread();
+    }
 }
 
 void logVkError(const char* operation, VkResult result) {
@@ -855,6 +913,8 @@ extern "C" void android_main(android_app* app) {
     // backend is intentionally null and no Raylib window/audio device is touched.
     // ELF loading and guest execution remain gated on the Android GS/audio adapters
     // and private recompilation output.
+    reportRuntimeStatus(
+        app, "Preparando o núcleo PS2 (memória, EE, IOP e VU)...", false);
     PS2Runtime *runtime = gowCreatePs2Runtime();
     if (runtime != nullptr) {
         std::array<char, 512> coreMessage{};
@@ -863,13 +923,28 @@ extern "C" void android_main(android_app* app) {
             __android_log_print(
                 ANDROID_LOG_INFO, kTag,
                 "PS2Runtime core ready: %s", coreMessage.data());
+            reportRuntimeStatus(
+                app,
+                "Núcleo PS2 inicializado. O jogo ainda não iniciou: o código AOT do ELF, o GS/Vulkan Android e o áudio nativo continuam pendentes.",
+                false);
         } else {
             __android_log_print(
                 ANDROID_LOG_ERROR, kTag,
                 "PS2Runtime core initialization failed: %s", coreMessage.data());
+            std::string status =
+                "Falha ao inicializar o núcleo PS2: ";
+            status += coreMessage[0] == '\\0'
+                ? "motivo não informado."
+                : coreMessage.data();
+            status += " Consulte o Logcat com a etiqueta GowAndroid.";
+            reportRuntimeStatus(app, status.c_str(), true);
         }
     } else {
         logMessage(ANDROID_LOG_ERROR, "PS2Runtime construction failed");
+        reportRuntimeStatus(
+            app,
+            "Não foi possível criar PS2Runtime. O jogo não foi iniciado; consulte o Logcat com a etiqueta GowAndroid.",
+            true);
     }
 
     while (app->destroyRequested == 0) {
