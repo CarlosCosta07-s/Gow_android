@@ -4,7 +4,7 @@
 
 > Estado atual: shell Android ARM64 com interface FORGE, ícone vetorial Ômega branco sobre vermelho e seleção SAF/ISO9660. O mantenedor confirmou a abertura do app em um aparelho Android. O runtime do jogo ainda não está integrado e não há versão jogável.
 
-[![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml)
+[![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml) [![Host recompiler](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml)
 
 ## Objetivo
 
@@ -59,7 +59,7 @@ Referências adicionais:
 ## Roadmap
 
 1. Validar em aparelho a identificação ISO9660/SYSTEM.CNF e preparar a leitura dos dados do disco no layout exigido pelo runtime.
-2. Integrar PS2Recomp com a configuração e o mapa de funções do KIexter para gerar C++ do ELF privado.
+2. Executar PS2Recomp com a configuração e o mapa de funções do KIexter para gerar C++ do ELF privado (o executável host já compila na CI).
 3. Adaptar os módulos portáveis do runtime Waffle/KIexter e os overrides específicos do jogo para ARM64.
 4. Integrar a geração AOT de VU1 e dos módulos IRX necessários, sem fallback interpretado no produto final.
 5. Adaptar a entrada nativa do jogo ao Android e desenvolver o backend GS/Vulkan.
@@ -92,6 +92,7 @@ A licença GPL-3.0 deste repositório cobre somente o código que seus autores p
 
 - [Arquitetura técnica](docs/ARQUITETURA.md)
 - [Base KIexter: arquivos, origem e adaptação Android](docs/BASE_KIEXTER.md)
+- [Pipeline host do recompilador](docs/PIPELINE_RECOMPILADOR.md)
 - [Roadmap e critérios de conclusão](docs/ROADMAP.md)
 - [Auditoria das referências](docs/REFERENCIAS.md)
 - [Créditos e avisos de terceiros](THIRD_PARTY_NOTICES.md)
