@@ -96,9 +96,9 @@ def create_build_plan(
         str(generated),
     )
     gradle_command = (
-        str(wrapper),
-        "--no-daemon",
-        "assembleDebug",
+        ("cmd", "/c", str(wrapper), "--no-daemon", "assembleDebug")
+        if use_windows
+        else (str(wrapper), "--no-daemon", "assembleDebug")
     )
     return BuildPlan(
         elf=elf,
@@ -206,7 +206,11 @@ def main() -> int:
     if not plan.apk_path.is_file():
         raise RuntimeError(f"Gradle reported success, but APK is missing: {plan.apk_path}")
 
-    digest = hashlib.sha256(plan.apk_path.read_bytes()).hexdigest()
+    hasher = hashlib.sha256()
+    with plan.apk_path.open("rb") as apk_stream:
+        for chunk in iter(lambda: apk_stream.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    digest = hasher.hexdigest()
     print("")
     print(f"APK: {plan.apk_path}")
     print(f"SHA-256: {digest}")
