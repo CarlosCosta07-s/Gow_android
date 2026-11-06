@@ -573,6 +573,7 @@ def main() -> int:
         'extern "C" uint64_t gowAndroidCdRootOpenFile(const char *path, uint64_t *fileSize) noexcept;\n'
         'extern "C" bool gowAndroidCdRootReadFile(uint64_t handle, uint64_t offset, void *destination, size_t requested, size_t *bytesRead) noexcept;\n'
         'extern "C" void gowAndroidCdRootCloseFile(uint64_t handle) noexcept;\n'
+        'extern "C" bool gowAndroidCdRootStat(const char *path, bool *isDirectory, uint64_t *fileSize) noexcept;\n'
         '#endif\n',
         "declare the Android private cdRoot handle bridge in the IOP adapter",
     )
@@ -834,10 +835,10 @@ def main() -> int:
         "    constexpr std::string_view cdRootPrefix{\"gowcdroot:/\"};\n"
         "    if (hostPathString.size() >= cdRootPrefix.size() && hostPathString.compare(0u, cdRootPrefix.size(), cdRootPrefix) == 0)\n"
         "    {\n"
+        "        bool isDirectory = false;\n"
         "        uint64_t fileSize = 0u;\n"
-        "        const uint64_t cdRootHandle = gowAndroidCdRootOpenFile(hostPathString.substr(cdRootPrefix.size()).c_str(), &fileSize);\n"
-        "        if (cdRootHandle == 0u) return false;\n"
-        "        gowAndroidCdRootCloseFile(cdRootHandle);\n"
+        "        if (!gowAndroidCdRootStat(hostPathString.substr(cdRootPrefix.size()).c_str(), &isDirectory, &fileSize)) return false;\n"
+        "        result.directory = isDirectory;\n"
         "        result.size = fileSize;\n"
         "        result.readOnly = true;\n"
         "        return true;\n"
