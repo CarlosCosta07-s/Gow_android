@@ -9,6 +9,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.os.ParcelFileDescriptor;
 import android.provider.OpenableColumns;
 import android.system.ErrnoException;
@@ -1008,6 +1009,11 @@ public final class MainActivity extends AppCompatActivity {
                 }
 
                 final int[] lastPercent = {-1};
+                final long installStartedAt = SystemClock.elapsedRealtime();
+                final long[] lastProgressSampleAt = {installStartedAt};
+                final long[] lastProgressSampleBytes = {0L};
+                final long[] lastProgressUiAt = {0L};
+                final double[] smoothedBytesPerSecond = {0.0};
                 InstallProgressCallback callback =
                         (totalBytes, copiedBytes, completedFiles, totalFiles) -> {
                             if (cancelDiscInstallRequested) {
@@ -1016,13 +1022,56 @@ public final class MainActivity extends AppCompatActivity {
                             int percent = totalBytes <= 0L ? 0
                                     : (int) Math.min(100L,
                                             (copiedBytes * 100L) / totalBytes);
-                            if (percent != lastPercent[0]) {
+                            long now = SystemClock.elapsedRealtime();
+                            long sampleElapsed = now - lastProgressSampleAt[0];
+                            if (sampleElapsed >= 500L) {
+                                long byteDelta = Math.max(
+                                        0L, copiedBytes - lastProgressSampleBytes[0]);
+                                if (byteDelta > 0L) {
+                                    double sampleRate = byteDelta * 1000.0 / sampleElapsed;
+                                    smoothedBytesPerSecond[0] =
+                                            smoothedBytesPerSecond[0] <= 0.0
+                                                    ? sampleRate
+                                                    : smoothedBytesPerSecond[0] * 0.70
+                                                            + sampleRate * 0.30;
+                                }
+                                lastProgressSampleAt[0] = now;
+                                lastProgressSampleBytes[0] = copiedBytes;
+                            }
+                            if (percent != lastPercent[0]
+                                    || now - lastProgressUiAt[0] >= 1000L
+                                    || (totalFiles > 0 && completedFiles >= totalFiles)) {
                                 lastPercent[0] = percent;
+                                lastProgressUiAt[0] = now;
+                                final String progressText;
+                                if (totalFiles <= 0) {
+                                    progressText = "Analisando setores do disco: " + percent + "%";
+                                } else {
+                                    double mibPerSecond =
+                                            smoothedBytesPerSecond[0] / (1024.0 * 1024.0);
+                                    long remainingBytes = Math.max(0L, totalBytes - copiedBytes);
+                                    long etaSeconds = smoothedBytesPerSecond[0] > 0.0
+                                            ? (long) Math.ceil(
+                                                    remainingBytes / smoothedBytesPerSecond[0])
+                                            : -1L;
+                                    String rateText = mibPerSecond > 0.0
+                                            ? String.format(
+                                                    Locale.getDefault(), "%.1f MB/s", mibPerSecond)
+                                            : "calculando velocidade...";
+                                    String etaText = etaSeconds >= 0L
+                                            ? formatRemainingTime(etaSeconds)
+                                            : "calculando tempo...";
+                                    progressText = percent + "% · " + completedFiles + "/"
+                                            + totalFiles + " arquivos\n"
+                                            + String.format(
+                                                    Locale.getDefault(),
+                                                    "%.2f/%.2f GB",
+                                                    copiedBytes / (1024.0 * 1024.0 * 1024.0),
+                                                    totalBytes / (1024.0 * 1024.0 * 1024.0))
+                                            + " · " + rateText + " · restante " + etaText;
+                                }
                                 runOnUiThread(() -> {
                                     if (!isFinishing() && !isDestroyed()) {
-                                        String progressText = totalFiles <= 0
-                                                ? "Analisando setores do disco: " + percent + "%"
-                                                : percent + "% · " + completedFiles + "/" + totalFiles + " arquivos";
                                         discStatus.setText("Preparando instalação: " + progressText);
                                         if (discInstallProgressBar != null) {
                                             discInstallProgressBar.setProgress(percent);
@@ -1113,6 +1162,23 @@ public final class MainActivity extends AppCompatActivity {
                         startFullDiscInstall(true))
                 .setNegativeButton("Cancelar", null)
                 .show();
+    }
+
+    private static String formatRemainingTime(long seconds) {
+        long safeSeconds = Math.max(0L, seconds);
+        if (safeSeconds < 60L) {
+            return safeSeconds + " s";
+        }
+        long minutes = safeSeconds / 60L;
+        long remainingSeconds = safeSeconds % 60L;
+        if (minutes < 60L) {
+            return String.format(
+                    Locale.getDefault(), "%d min %02d s", minutes, remainingSeconds);
+        }
+        long hours = minutes / 60L;
+        long remainingMinutes = minutes % 60L;
+        return String.format(
+                Locale.getDefault(), "%d h %02d min", hours, remainingMinutes);
     }
 
     private void showDiscInstallProgressDialog() {
