@@ -210,7 +210,7 @@ extern "C" bool gowAndroidCdRootCopyPath(
 extern "C" uint64_t gowAndroidCdRootOpenFile(
     const char *path, uint64_t *fileSize) noexcept {
     if (fileSize != nullptr) *fileSize = 0u;
-    if (path == nullptr || path[0] == '\\0' || fileSize == nullptr) return 0u;
+    if (path == nullptr || path[0] == '\0' || fileSize == nullptr) return 0u;
 
     gow::disc::CdRootFile file{};
     if (!g_cdRootVfs.openFile(path, file, nullptr)) return 0u;
