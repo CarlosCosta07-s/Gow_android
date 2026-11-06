@@ -191,6 +191,20 @@ int main() {
         return fail("cdRoot directory listing accepted a symbolic link entry");
     }
 
+    std::filesystem::remove(root / "ESCAPE.BIN", filesystemError);
+    if (filesystemError || !writeFile(dataDirectory / "boot.bin;1", payload)) {
+        vfs.close();
+        std::filesystem::remove_all(root);
+        std::filesystem::remove(outsideFile);
+        return fail("could not create duplicate ISO-normalized name fixture");
+    }
+    if (vfs.openFile("DATA/BOOT.BIN", rejected, &error)) {
+        vfs.close();
+        std::filesystem::remove_all(root);
+        std::filesystem::remove(outsideFile);
+        return fail("cdRoot selected one of two ambiguous ISO-normalized names");
+    }
+
     vfs.closeFile(file.handle);
     if (vfs.readFile(file.handle, 0u, readBuffer.data(),
                      readBuffer.size(), bytesRead)) {
