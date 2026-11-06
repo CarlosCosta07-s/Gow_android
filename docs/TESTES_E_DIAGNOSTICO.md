@@ -107,3 +107,10 @@ Artefato run 257: `gow-android-arm64-shell`, ID `13524346408`, expira em 13/11/2
 Artefato Debug ARM64: `gow-android-arm64-shell`, ID `13524986210`, expira em 13/11/2026.
 
 **Ainda não testado:** rasterização em FBP/PSM, apresentação por DISPFB/DISPLAY/PMODE, texturas/CLUT no shader, depth, alpha/DATE, blending, áudio e boot real. A aprovação host não substitui a validação numa GPU Android.
+## Rasterização e apresentação por VRAM/CRTC — CI 268
+
+**[APROVADO]** Run `42261321872` executou `android_gs_vulkan_backend_test.cpp` com o rasterizador inicial. O teste escreveu triângulo vermelho e sprite azul na VRAM CT32 pelo `Submit()`, chamou `Present()` com DISPFB/DISPLAY 64×32 e verificou as cores RGBA no buffer de saída, stride de 640 pixels e área não desenhada preta. A compilação Android ARM64 também passou.
+
+Artefato: `gow-android-arm64-shell`, ID `13524359107`, expira em 13/11/2026.
+
+**Escopo do que foi provado:** caminho sintético GS→VRAM→CRTC→PresentationFrame→Vulkan. Não foi testado o jogo. Texturas/CLUT, Z, alpha/DATE, blending, fog, DISPLAY1+2/PMODE, áudio, AOT e boot real continuam pendentes.
