@@ -1256,20 +1256,23 @@ def main() -> int:
     {""",
         "exclude VU1 interpreter A/B verifier from strict runtime",
     )
-    vu_dispatch_anchor = (
-        "    if (m_unit == Unit::VU1 && m_native && m_native->enabled && "
-        "vuData && codeSize == PS2_VU1_CODE_SIZE)\\n"
+    vu_dispatch_pattern = re.compile(
+        r"(?m)^[ \\t]*if\\s*\\(\\s*m_unit\\s*==\\s*Unit::VU1\\s*&&"
+        r"\\s*m_native\\s*&&\\s*m_native->enabled\\s*&&\\s*vuData"
+        r"\\s*&&\\s*codeSize\\s*==\\s*PS2_VU1_CODE_SIZE\\s*\\)"
     )
     vu_core_text = vu_core.read_text(encoding="utf-8")
-    if vu_core_text.count(vu_dispatch_anchor) != 2:
+    vu_dispatch_matches = list(vu_dispatch_pattern.finditer(vu_core_text))
+    if len(vu_dispatch_matches) != 1:
         raise RuntimeError(
-            "Expected the two VU1 native dispatch sites (run and resume); "
-            f"found {vu_core_text.count(vu_dispatch_anchor)}."
+            "Expected one VU1 run dispatch following the optional A/B verifier; "
+            f"found {len(vu_dispatch_matches)}."
         )
-    vu_core_text = vu_core_text.replace(
-        vu_dispatch_anchor,
-        "#endif\\n" + vu_dispatch_anchor,
-        1,
+    dispatch_position = vu_dispatch_matches[0].start()
+    vu_core_text = (
+        vu_core_text[:dispatch_position]
+        + "#endif\\n"
+        + vu_core_text[dispatch_position:]
     )
     vu_core.write_text(vu_core_text, encoding="utf-8")
     print(
