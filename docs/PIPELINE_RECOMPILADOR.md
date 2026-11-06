@@ -55,7 +55,21 @@ Por segurança, o script:
 
 O script limpa alterações locais dentro das duas cópias Git privadas antes de reaplicar a revisão fixada. Não coloque arquivos próprios dentro de sources/PS2Recomp ou sources/KIexster.
 
-A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. A execução 42150329023 compilou ps2_recomp, ps2_iop e ps2_runtime no host. O banco de compilação confirmou que core/iop_cpu.cpp não entrou no alvo estrito, que ps2_vu1_core.cpp recebeu PS2X_VU1_NATIVE_ONLY=1 e que as fontes diferenciais PCSX2 foram excluídas. O build IOP usou iop_native_none.cpp e não recebeu microcódigo VU1: isso valida compilação e política de fallback no host, não cobertura AOT do jogo. A execução 42150853233 confirmou que o builder copia ps2_vu1_neon_compat.h para a árvore Waffle e aplica a seleção NEON/ SSE no header; o build compilou no host x86-64 e, portanto, verificou o ramo SSE. O smoke NDK ARM64 separado passou na execução 42150765223. O runtime Waffle completo ainda não foi compilado para Android ARM64.
+A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. A execução 42150329023 compilou ps2_recomp, ps2_iop e ps2_runtime no host, verificando os perfis estritos. A execução 42150853233 validou a cópia do shim NEON e a seleção condicional no header Waffle no host x86-64. O smoke Android ARM64 separado passou em 42150765223. Em seguida, a execução 42152175783 compilou com sucesso o alvo estático ps2_runtime e suas dependências para arm64-v8a usando NDK 30.0.16248370/API 28; a checagem do compile database confirmou o perfil estrito IOP/VU1 e a ausência de iop_cpu.cpp e das fontes diferenciais PCSX2. O runner NativeActivity não foi construído. A mesma execução concluiu a compilação do APK Debug FORGE. Nenhuma ISO/ELF, IRX ou microcódigo do jogo foi usada.
+
+
+
+## Build cruzado do runtime para Android
+
+O comando --android-runtime-only prepara a mesma cópia privada do PS2Recomp/Waffle e aplica as políticas estritas IOP/VU1 e a seleção SSE2NEON/FPCR para ARM64. Em seguida, configura o CMake com o toolchain do NDK e compila apenas ps2_runtime e suas dependências estáticas para arm64-v8a, android-28, c++_shared. O alvo ps2EntryRunner (NativeActivity/Raylib) não é compilado nem vinculado; a aplicação continua usando a própria FORGE/GowGameActivity.
+
+Na CI Android, o workflow chama:
+
+**python tools/build_recompiler_host.py --android-runtime-only --work-dir "$RUNNER_TEMP/gowport-android-runtime"**
+
+A execução 42152175783 usou o NDK 30.0.16248370 e terminou com sucesso para o runtime ARM64 e para o APK Debug. As verificações do builder confirmaram PS2X_VU1_NATIVE_ONLY=1, ausência de iop_cpu.cpp e ausência das fontes diferenciais PCSX2.
+
+**Limite desta etapa:** a biblioteca estática é produzida na pasta de trabalho privada do CI e ainda não é importada nem ligada ao android-game. Não há ponte JNI para criar/dirigir PS2Runtime, não há VFS conectado ao SAF e não existe sessão de jogo. A próxima etapa é materializar os arquivos estáticos necessários num diretório de build privado e ligar as bibliotecas ao target Android existente, preservando o lifecycle de GameActivity.
 
 ## Dependências do host
 
@@ -79,7 +93,8 @@ O alvo ps2xRecomp também declara um include privado para ps2xRuntime/include. P
 - Não gera nem compila os módulos IRX do jogo (compila somente o núcleo de serviços ps2_iop e o bloqueio de fallback).
 - Não captura nem gera microprogramas VU1.
 - Não compila o C++ produzido para ARM64.
-- Não compila ps2_runtime para Android NDK; a build Waffle feita aqui é host/Linux x86-64. O smoke NEON compila a camada de compatibilidade isoladamente no APK, mas não equivale ao runtime completo.
+- Não gera os arquivos C++ a partir do ELF privado do usuário.
+- Não liga a biblioteca estática produzida à aplicação FORGE nem implementa a ponte JNI/GowGameActivity.
 - Não conecta o runtime à GowGameActivity.
 - Não implementa GS/Vulkan, áudio Android, controles ou cache/VFS.
 - Não prova boot ou gameplay.
