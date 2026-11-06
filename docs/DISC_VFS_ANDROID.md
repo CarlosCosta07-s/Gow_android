@@ -102,7 +102,9 @@ O contrato do runtime Waffle/KIexter também inclui `ps2x::iop::DiscSource::open
 
 **[VERIFICADO NA CI, run `42235192717`] Reparo da instalação:** quando a validação de uma instalação existente falha, o FORGE oferece uma reinstalação com confirmação explícita. A imagem é reaberta e sua identidade é comparada antes de remover a pasta anterior. O JNI fecha o provider `cdRoot` e chama `removeIsoDiscInstallation()`, que aceita somente um componente de nome seguro no diretório privado `installations`, rejeita um caminho final que seja symlink e remove conteúdo por descritores de diretório com `openat`/`O_NOFOLLOW`. Os testes sintéticos confirmam que symlinks internos são removidos sem seguir o destino, caminhos com traversal são recusados e arquivos irmãos permanecem intactos. A CI passou pelos testes host, compilou o APK Debug ARM64 e publicou o artefato. O uso da tela de reparo ainda precisa ser testado em aparelho.
 
-**[NÃO IMPLEMENTADO]** As verificações anteriores não inicializam `PS2Runtime`, não chamam `loadELF()`/`run()` e não exercitam o dispatcher CDVD que pertence a uma sessão real. O runtime base ainda depende da inicialização host Raylib para gráficos/áudio; a Activity Android não está conectada a um runner PS2 jogável. Nenhuma ISO real, ELF real ou sequência de boot foi testada nesta etapa.
+**[VERIFICADO NA CI, run `42243707680`] Núcleo PS2 headless:** `initializeCoreHeadless()` foi integrado ao runtime Waffle preparado e é chamado a partir de `android_main()` pelo novo C ABI. A etapa inicializa a memória e sincroniza EE/IOP/VU sem janela, captura de contexto, áudio Raylib ou execução guest. O perfil Android usa `GSNullBackend`; `initialize()` desktop está bloqueado, `loadELF()` exige núcleo inicializado e `run()` permanece desabilitado até existir apresentação GS/áudio Android e código AOT privado. A CI passou pela preparação da árvore, verificador estático, testes host/VFS e build ARM64. Isso ainda não comprova que a inicialização funciona em um aparelho real.
+
+**[NÃO IMPLEMENTADO]** O runtime ainda não chama `loadELF()` nem executa guest; o CDVD exercitado até agora é probe isolado ou teste sintético, não a sessão do jogo. O backend GS/Vulkan e o áudio Android ainda não estão conectados. Nenhuma ISO real, ELF real ou sequência de boot foi testada nesta etapa.
 
 A auditoria do contrato de referência e o formato dos metadados estão em [DISC_RUNTIME_AUDIT.md](DISC_RUNTIME_AUDIT.md).
 
@@ -112,7 +114,7 @@ A auditoria do contrato de referência e o formato dos metadados estão em [DISC
 2. Medir em aparelho o tempo, o I/O e o impacto térmico da verificação SHA-256 integral; qualquer cache futuro precisará de invalidação segura sem deixar de detectar corrupção.
 3. Disponibilizar os IRX no layout esperado e instrumentar os caminhos de arquivo e CDVD usados durante o boot.
 4. Iniciar uma sessão real do runtime e confirmar chamadas `sceCdRead` originadas pelo código do jogo; o dispatcher `IopCdvd` já é chamado pelo `IopEmulator`, mas ainda não há execução de guest.
-5. Adaptar a inicialização do PS2Runtime para GameActivity, separando GS, áudio e serviços que hoje dependem de Raylib.
+5. Implementar e conectar os adaptadores GS/Vulkan e áudio Android ao núcleo headless; depois ligar `loadELF()` e a execução guest quando os módulos e o AOT estiverem disponíveis.
 6. Gerar/compilar o C++ privado do ELF e ligar `loadELF()` ao runner Android.
 7. Integrar GS/Vulkan e apresentar a primeira imagem real.
 
