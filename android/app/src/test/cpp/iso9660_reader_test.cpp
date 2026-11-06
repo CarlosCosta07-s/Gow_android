@@ -1,5 +1,6 @@
 #include "iso9660_reader.h"
 #include "iso9660_installer.h"
+#include "sha256.h"
 
 #include <algorithm>
 #include <array>
@@ -213,6 +214,113 @@ bool testDualLayerDiscLayout() {
         return false;
     }
 
+    const std::string abc = "abc";
+    gow::disc::Sha256 sha;
+    sha.update(abc.data(), abc.size());
+    if (gow::disc::sha256Hex(sha.finish()) !=
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") {
+        std::fclose(file);
+        std::cerr << "FAIL: SHA-256 known-answer test failed\\n";
+        return false;
+    }
+
+    char privateRootTemplate[] = "/tmp/gow-disc-integrity-XXXXXX";
+    char *privateRoot = ::mkdtemp(privateRootTemplate);
+    if (privateRoot == nullptr) {
+        std::fclose(file);
+        std::cerr << "FAIL: could not create disc integrity fixture root\\n";
+        return false;
+    }
+
+    const std::string root(privateRoot);
+    const auto installed = gow::disc::installIsoDisc(
+        reader, root, "gow-integrity-good");
+    const std::filesystem::path goodDisc =
+        std::filesystem::path(root) / "gow-integrity-good" / "disc";
+    const auto goodIntegrity = gow::disc::verifyIsoDiscIntegrity(goodDisc.string());
+    if (!installed.success || !goodIntegrity.valid ||
+        goodIntegrity.verifiedFiles != 5u || goodIntegrity.verifiedBytes == 0u) {
+        std::filesystem::remove_all(root);
+        reader.close();
+        std::fclose(file);
+        std::cerr << "FAIL: dual-layer installation integrity verification failed: "
+                  << installed.error << " / " << goodIntegrity.error << '\\n';
+        return false;
+    }
+
+    // Same-size content changes must be caught by the digest, not only by size.
+    const std::filesystem::path nestedFile = goodDisc / "LOWDIR" / "LOWNEST.BIN";
+    {
+        std::fstream tamper(nestedFile, std::ios::in | std::ios::out | std::ios::binary);
+        char original = 0;
+        if (!tamper || !tamper.get(original)) {
+            std::filesystem::remove_all(root);
+            reader.close();
+            std::fclose(file);
+            std::cerr << "FAIL: could not open integrity tamper fixture\\n";
+            return false;
+        }
+        tamper.seekp(0);
+        tamper.put(static_cast<char>(original ^ 0x5Au));
+        tamper.flush();
+    }
+    const auto tamperedIntegrity = gow::disc::verifyIsoDiscIntegrity(goodDisc.string());
+    if (tamperedIntegrity.valid ||
+        tamperedIntegrity.error.find("SHA-256 mismatch") == std::string::npos) {
+        std::filesystem::remove_all(root);
+        reader.close();
+        std::fclose(file);
+        std::cerr << "FAIL: same-size file corruption was not detected: "
+                  << tamperedIntegrity.error << '\\n';
+        return false;
+    }
+
+    const auto missingInstall = gow::disc::installIsoDisc(
+        reader, root, "gow-integrity-missing");
+    const std::filesystem::path missingDisc =
+        std::filesystem::path(root) / "gow-integrity-missing" / "disc";
+    std::filesystem::remove(missingDisc / "HIGH.BIN");
+    const auto missingIntegrity = gow::disc::verifyIsoDiscIntegrity(missingDisc.string());
+    if (!missingInstall.success || missingIntegrity.valid ||
+        missingIntegrity.error.find("HIGH.BIN") == std::string::npos) {
+        std::filesystem::remove_all(root);
+        reader.close();
+        std::fclose(file);
+        std::cerr << "FAIL: missing ISO file was not detected: "
+                  << missingIntegrity.error << '\\n';
+        return false;
+    }
+
+    const auto symlinkInstall = gow::disc::installIsoDisc(
+        reader, root, "gow-integrity-symlink");
+    const std::filesystem::path symlinkDisc =
+        std::filesystem::path(root) / "gow-integrity-symlink" / "disc";
+    const std::filesystem::path outsideFile =
+        std::filesystem::path(root).parent_path() /
+        (std::filesystem::path(root).filename().string() + "-outside.bin");
+    {
+        std::ofstream outside(outsideFile, std::ios::binary);
+        outside << "outside";
+    }
+    std::filesystem::remove(symlinkDisc / "HIGH.BIN");
+    std::error_code symlinkError;
+    std::filesystem::create_symlink(
+        outsideFile, symlinkDisc / "HIGH.BIN", symlinkError);
+    const auto symlinkIntegrity = gow::disc::verifyIsoDiscIntegrity(symlinkDisc.string());
+    if (!symlinkInstall.success || symlinkError || symlinkIntegrity.valid ||
+        symlinkIntegrity.error.find("HIGH.BIN") == std::string::npos ||
+        !std::filesystem::is_regular_file(outsideFile)) {
+        std::filesystem::remove_all(root);
+        std::filesystem::remove(outsideFile);
+        reader.close();
+        std::fclose(file);
+        std::cerr << "FAIL: integrity verification followed or accepted a symlink: "
+                  << symlinkIntegrity.error << '\\n';
+        return false;
+    }
+
+    std::filesystem::remove_all(root);
+    std::filesystem::remove(outsideFile);
     reader.close();
     std::fclose(file);
     return true;

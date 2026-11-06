@@ -69,4 +69,13 @@ bool removeIsoDiscInstallation(
     const std::string &installationDirectoryName,
     std::string *error = nullptr);
 
+struct IsoDiscIntegrityResult {
+    bool valid = false;
+    size_t verifiedFiles = 0u;
+    uint64_t verifiedBytes = 0u;
+    std::string error;
+};
+
+IsoDiscIntegrityResult verifyIsoDiscIntegrity(const std::string &discRoot);
+
 } // namespace gow::disc

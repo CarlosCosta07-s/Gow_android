@@ -79,6 +79,7 @@ public final class MainActivity extends AppCompatActivity {
             String privateRoot, String installationDirectoryName);
 
     private static native boolean nativeSetCdRootDirectory(String privateCdRoot);
+    private static native String nativeVerifyDiscIntegrity(String privateCdRoot);
     private static native String nativeValidateCdRootElf(String relativePath);
     private static native String nativePrepareRuntimeIoPaths(String bootRelativePath);
     private static native String nativeValidateDiscSource(String bootRelativePath);
@@ -793,10 +794,15 @@ public final class MainActivity extends AppCompatActivity {
                             && new File(cdRoot, ".disc_meta").isFile();
             boolean cdRootReady = metadataReady
                     && nativeSetCdRootDirectory(cdRoot.getAbsolutePath());
-            String installedBootPath = bootPath;
-            String runtimePathValidation = cdRootReady
-                    ? nativePrepareRuntimeIoPaths(installedBootPath)
+            String integrityValidation = cdRootReady
+                    ? nativeVerifyDiscIntegrity(cdRoot.getAbsolutePath())
                     : "O provider cdRoot não conseguiu abrir a pasta privada.";
+            boolean integrityValid = integrityValidation != null
+                    && integrityValidation.startsWith("OK:");
+            String installedBootPath = bootPath;
+            String runtimePathValidation = integrityValid
+                    ? nativePrepareRuntimeIoPaths(installedBootPath)
+                    : "A verificação SHA-256 do disco precisa passar antes de configurar IoPaths.";
             boolean runtimePathValid = runtimePathValidation != null
                     && runtimePathValidation.startsWith("OK:");
             String elfValidation = runtimePathValid
@@ -813,13 +819,16 @@ public final class MainActivity extends AppCompatActivity {
             boolean iopCdvdValid = iopCdvdValidation != null
                     && iopCdvdValidation.startsWith("OK:");
             boolean installationValid =
-                    runtimePathValid && elfValid && discValid && iopCdvdValid;
+                    integrityValid && runtimePathValid && elfValid && discValid && iopCdvdValid;
             String detail = installationValid
-                    ? "IoPaths do runtime: " + runtimePathValidation.substring(4).trim()
+                    ? "Integridade: " + integrityValidation.substring(4).trim()
+                            + ". IoPaths do runtime: " + runtimePathValidation.substring(4).trim()
                             + ". Executável: " + elfValidation.substring(4).trim()
                             + ". Fonte CD/DVD: " + discValidation.substring(4).trim()
                             + ". CDVD/IOP: " + iopCdvdValidation.substring(4).trim() + "."
-                    : "IoPaths: " + runtimePathValidation + "\nELF: " + elfValidation
+                    : "Integridade SHA-256: " + integrityValidation
+                            + "\nIoPaths: " + runtimePathValidation
+                            + "\nELF: " + elfValidation
                             + "\nDiscSource: " + discValidation
                             + "\nCDVD/IOP: " + iopCdvdValidation;
             String runtimeStatus = installationValid
@@ -927,6 +936,13 @@ public final class MainActivity extends AppCompatActivity {
                         new File(finalInstallation, "disc").getAbsolutePath())) {
                     failure = "Os arquivos foram publicados, mas o provider cdRoot não conseguiu abrir a pasta privada.";
                 } else {
+                    String integrityValidation = nativeVerifyDiscIntegrity(
+                            new File(finalInstallation, "disc").getAbsolutePath());
+                    if (integrityValidation == null || !integrityValidation.startsWith("OK:")) {
+                        failure = "Os arquivos foram publicados, mas a verificação SHA-256 da instalação falhou: "
+                                + (integrityValidation == null
+                                    ? "resposta nativa vazia." : integrityValidation);
+                    } else {
                     String runtimePathValidation = nativePrepareRuntimeIoPaths(bootPath);
                     if (runtimePathValidation == null || !runtimePathValidation.startsWith("OK:")) {
                         failure = "A instalação foi publicada, mas PS2Runtime não aceitou o caminho físico "
@@ -951,13 +967,15 @@ public final class MainActivity extends AppCompatActivity {
                                             + (iopCdvdValidation == null
                                                 ? "resposta nativa vazia." : iopCdvdValidation);
                                 } else {
-                                    preparedElfSummary = runtimePathValidation.substring(4).trim()
+                                    preparedElfSummary = integrityValidation.substring(4).trim()
+                                            + " · " + runtimePathValidation.substring(4).trim()
                                             + " · " + elfValidation.substring(4).trim()
                                             + " · " + discValidation.substring(4).trim()
                                             + " · " + iopCdvdValidation.substring(4).trim();
                                 }
                             }
                         }
+                    }
                     }
                 }
             } catch (IOException | SecurityException | ErrnoException exception) {

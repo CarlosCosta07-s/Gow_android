@@ -106,6 +106,7 @@ jobs:
             android/app/src/main/cpp/iso9660_reader.cpp \
             android/app/src/main/cpp/iso9660_disc_layout.cpp \
             android/app/src/main/cpp/iso9660_installer.cpp \
+            android/app/src/main/cpp/sha256.cpp \
             -Iandroid/app/src/main/cpp \
             -o "$RUNNER_TEMP/iso9660-reader-test"
           "$RUNNER_TEMP/iso9660-reader-test"
@@ -115,6 +116,7 @@ jobs:
             android/app/src/main/cpp/iso9660_reader.cpp \
             android/app/src/main/cpp/iso9660_disc_layout.cpp \
             android/app/src/main/cpp/iso9660_installer.cpp \
+            android/app/src/main/cpp/sha256.cpp \
             "$GOW_RUNTIME_DIR/ps2xIOP/src/disc_source.cpp" \
             "$GOW_RUNTIME_DIR/ps2xIOP/src/ps2_path.cpp" \
             "$GOW_RUNTIME_DIR/ps2xIOP/src/emulator/imports/iop_cdvd.cpp" \

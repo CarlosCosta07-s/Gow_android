@@ -270,6 +270,39 @@ Java_org_gowandroid_app_MainActivity_nativeSetCdRootDirectory(
 }
 
 extern "C" JNIEXPORT jstring JNICALL
+Java_org_gowandroid_app_MainActivity_nativeVerifyDiscIntegrity(
+    JNIEnv *env, jclass, jstring privateCdRoot) {
+    auto makeResult = [env](const std::string &message) -> jstring {
+        return env->NewStringUTF(message.c_str());
+    };
+    try {
+        std::string rootPath;
+        if (!copyJavaString(env, privateCdRoot, rootPath) || rootPath.empty()) {
+            return makeResult("A raiz privada cdRoot está vazia ou inválida.");
+        }
+        const gow::disc::IsoDiscIntegrityResult result =
+            gow::disc::verifyIsoDiscIntegrity(rootPath);
+        if (!result.valid) {
+            return makeResult(result.error.empty()
+                ? "A instalação não passou na verificação SHA-256."
+                : result.error);
+        }
+        char summary[192]{};
+        std::snprintf(
+            summary, sizeof(summary),
+            "OK: %zu arquivos verificados · %llu bytes SHA-256",
+            result.verifiedFiles,
+            static_cast<unsigned long long>(result.verifiedBytes));
+        return makeResult(summary);
+    } catch (const std::exception &exception) {
+        return makeResult(
+            std::string("Falha interna na verificação SHA-256: ") + exception.what());
+    } catch (...) {
+        return makeResult("Falha desconhecida na verificação SHA-256.");
+    }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
 Java_org_gowandroid_app_MainActivity_nativeValidateDiscSource(
     JNIEnv *env, jclass, jstring bootRelativePath) {
     auto makeResult = [env](const std::string &message) -> jstring {

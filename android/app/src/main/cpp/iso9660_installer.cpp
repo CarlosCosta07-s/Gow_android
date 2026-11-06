@@ -1,12 +1,15 @@
 #include "iso9660_installer.h"
 #include "iso9660_disc_layout.h"
+#include "sha256.h"
 
 #include <algorithm>
 #include <array>
 #include <cerrno>
 #include <cctype>
+#include <charconv>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
 #include <dirent.h>
 #include <fcntl.h>
 #include <limits>
@@ -26,6 +29,10 @@ constexpr size_t kCopyBufferSize = 64u * 1024u;
 constexpr size_t kMaxManifestFiles = 65536u;
 constexpr size_t kMaxRelativePathLength = 1024u;
 constexpr size_t kMaxPathComponentLength = 255u;
+constexpr char kIntegrityManifestName[] = ".gow_disc_integrity";
+constexpr char kIntegrityManifestHeader[] = "GOW-DISC-INTEGRITY\t1\n";
+constexpr size_t kMaxIntegrityManifestBytes = 64u * 1024u * 1024u;
+constexpr size_t kMaxIntegrityEntries = kMaxManifestFiles + 2u;
 
 struct ResolvedInstallFile {
     IsoFile source{};
@@ -157,6 +164,186 @@ bool writeAll(int fd, const uint8_t *bytes, size_t size) {
         if (count == 0) return false;
         written += static_cast<size_t>(count);
     }
+    return true;
+}
+
+struct IntegrityEntry {
+    std::string path;
+    uint64_t size = 0u;
+    std::string sha256;
+};
+
+bool isReservedDiscPath(const std::string &path) {
+    std::string folded;
+    folded.reserve(path.size());
+    for (const unsigned char ch : path)
+        folded.push_back(static_cast<char>(std::toupper(ch)));
+    return folded == ".DISC_LAYOUT" || folded == ".DISC_META" ||
+           folded == ".GOW_DISC_INTEGRITY";
+}
+
+uint64_t estimatedIntegrityManifestBytes(
+    const std::vector<ResolvedInstallFile> &files,
+    uint64_t layoutBytes, uint64_t metadataBytes) {
+    uint64_t total = sizeof(kIntegrityManifestHeader) - 1u;
+    auto add = [&total](uint64_t value) {
+        if (value > std::numeric_limits<uint64_t>::max() - total) return false;
+        total += value;
+        return true;
+    };
+    for (const auto &file : files) {
+        if (file.destinationPath.size() < 5u) return std::numeric_limits<uint64_t>::max();
+        const size_t pathLength = file.destinationPath.size() - 5u;
+        const size_t digits = std::to_string(file.source.size).size();
+        if (!add(67u + static_cast<uint64_t>(digits) + pathLength))
+            return std::numeric_limits<uint64_t>::max();
+    }
+    if (!add(67u + std::to_string(layoutBytes).size() + std::strlen(".disc_layout")) ||
+        !add(67u + std::to_string(metadataBytes).size() + std::strlen(".disc_meta")))
+        return std::numeric_limits<uint64_t>::max();
+    return total;
+}
+
+int openRegularRelativeAt(int rootFd, const std::string &relativePath) {
+    std::vector<std::string> parts;
+    if (!splitRelativePath(relativePath, parts)) return -1;
+    int currentFd = ::dup(rootFd);
+    if (currentFd < 0) return -1;
+    for (size_t i = 0u; i + 1u < parts.size(); ++i) {
+        const int nextFd = ::openat(
+            currentFd, parts[i].c_str(),
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+        ::close(currentFd);
+        if (nextFd < 0) return -1;
+        currentFd = nextFd;
+    }
+    const int fileFd = ::openat(
+        currentFd, parts.back().c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    ::close(currentFd);
+    if (fileFd < 0) return -1;
+    struct stat status {};
+    if (::fstat(fileFd, &status) != 0 || !S_ISREG(status.st_mode)) {
+        ::close(fileFd);
+        return -1;
+    }
+    return fileFd;
+}
+
+bool hashFileDescriptor(int fd, uint64_t expectedSize,
+                        std::string &digest, std::string &error) {
+    struct stat before {};
+    if (::fstat(fd, &before) != 0 || !S_ISREG(before.st_mode) ||
+        before.st_size < 0 ||
+        static_cast<uint64_t>(before.st_size) != expectedSize) {
+        error = "The file is not regular or its size differs from the manifest.";
+        return false;
+    }
+    Sha256 hash;
+    std::array<uint8_t, kCopyBufferSize> buffer{};
+    uint64_t totalRead = 0u;
+    while (true) {
+        const ssize_t count = ::read(fd, buffer.data(), buffer.size());
+        if (count < 0) {
+            if (errno == EINTR) continue;
+            error = "A file could not be read during SHA-256 verification.";
+            return false;
+        }
+        if (count == 0) break;
+        const size_t bytes = static_cast<size_t>(count);
+        if (totalRead > expectedSize || bytes > expectedSize - totalRead) {
+            error = "A file grew while its SHA-256 hash was calculated.";
+            return false;
+        }
+        hash.update(buffer.data(), bytes);
+        totalRead += static_cast<uint64_t>(bytes);
+    }
+    if (totalRead != expectedSize) {
+        error = "A file changed size while its SHA-256 hash was calculated.";
+        return false;
+    }
+    struct stat after {};
+    if (::fstat(fd, &after) != 0 || before.st_dev != after.st_dev ||
+        before.st_ino != after.st_ino || before.st_size != after.st_size ||
+        before.st_mtime != after.st_mtime) {
+        error = "A file changed during SHA-256 verification.";
+        return false;
+    }
+    digest = sha256Hex(hash.finish());
+    return true;
+}
+
+bool hashRelativeFileAt(int rootFd, const std::string &relativePath,
+                        uint64_t &size, std::string &digest,
+                        std::string &error) {
+    const int fd = openRegularRelativeAt(rootFd, relativePath);
+    if (fd < 0) {
+        error = "Could not safely open integrity file: " + relativePath;
+        return false;
+    }
+    struct stat status {};
+    if (::fstat(fd, &status) != 0 || status.st_size < 0) {
+        ::close(fd);
+        error = "Could not inspect integrity file: " + relativePath;
+        return false;
+    }
+    size = static_cast<uint64_t>(status.st_size);
+    const bool success = hashFileDescriptor(fd, size, digest, error);
+    ::close(fd);
+    if (!success) error = relativePath + ": " + error;
+    return success;
+}
+
+bool writeDiscIntegrityManifest(
+    int stageFd, std::vector<IntegrityEntry> &entries,
+    uint64_t &manifestBytes, std::string &error) {
+    const int discFd = ::openat(
+        stageFd, "disc", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (discFd < 0) {
+        error = "Could not open the extracted disc directory for integrity metadata.";
+        return false;
+    }
+    for (const char *metadataPath : {".disc_layout", ".disc_meta"}) {
+        IntegrityEntry entry;
+        entry.path = metadataPath;
+        if (!hashRelativeFileAt(discFd, entry.path, entry.size, entry.sha256, error)) {
+            ::close(discFd);
+            return false;
+        }
+        entries.push_back(std::move(entry));
+    }
+
+    const int manifestFd = ::openat(
+        discFd, kIntegrityManifestName,
+        O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
+    if (manifestFd < 0) {
+        ::close(discFd);
+        error = "Could not create the private SHA-256 integrity manifest.";
+        return false;
+    }
+    uint64_t writtenBytes = 0u;
+    auto writeText = [&](const std::string &text) {
+        if (!writeAll(manifestFd,
+                      reinterpret_cast<const uint8_t *>(text.data()), text.size()))
+            return false;
+        writtenBytes += static_cast<uint64_t>(text.size());
+        return true;
+    };
+    bool success = writeText(kIntegrityManifestHeader);
+    for (const auto &entry : entries) {
+        if (!success) break;
+        const std::string line = entry.sha256 + "\t" +
+            std::to_string(entry.size) + "\t" + entry.path + "\n";
+        success = writeText(line);
+    }
+    if (success && ::fsync(manifestFd) != 0) success = false;
+    if (::close(manifestFd) != 0) success = false;
+    if (success && ::fsync(discFd) != 0) success = false;
+    ::close(discFd);
+    if (!success) {
+        error = "Could not write or synchronize the SHA-256 integrity manifest.";
+        return false;
+    }
+    manifestBytes = writtenBytes;
     return true;
 }
 
@@ -349,6 +536,7 @@ IsoInstallResult installIsoManifestImpl(
         return result;
     }
     const uint64_t extractedBytes = result.totalBytes;
+    uint64_t integrityManifestExpectedBytes = 0u;
     if ((discLayout == nullptr) != (metadataInfo == nullptr)) {
         result.error = "The disc layout and measured metadata must be supplied together.";
         return result;
@@ -367,6 +555,18 @@ IsoInstallResult installIsoManifestImpl(
             return result;
         }
         result.totalBytes += metadataInfo->metadataFileBytes;
+        integrityManifestExpectedBytes =
+            estimatedIntegrityManifestBytes(
+                resolved, metadataInfo->layoutFileBytes,
+                metadataInfo->metadataFileBytes);
+        if (integrityManifestExpectedBytes ==
+                std::numeric_limits<uint64_t>::max() ||
+            integrityManifestExpectedBytes >
+                std::numeric_limits<uint64_t>::max() - result.totalBytes) {
+            result.error = "The SHA-256 integrity manifest size overflows the supported range.";
+            return result;
+        }
+        result.totalBytes += integrityManifestExpectedBytes;
     }
 
     const int rootFd = ::open(privateRoot.c_str(),
@@ -435,6 +635,8 @@ IsoInstallResult installIsoManifestImpl(
     notifyProgress(result, progressCallback, userData, keepGoing);
     std::array<uint8_t, kCopyBufferSize> buffer{};
     bool copySucceeded = keepGoing;
+    std::vector<IntegrityEntry> integrityEntries;
+    if (discLayout != nullptr) integrityEntries.reserve(resolved.size() + 2u);
 
     for (const auto &entry : resolved) {
         if (!copySucceeded) break;
@@ -465,6 +667,7 @@ IsoInstallResult installIsoManifestImpl(
 
         uint64_t fileOffset = 0u;
         bool fileSucceeded = true;
+        Sha256 fileHash;
         while (fileOffset < entry.source.size) {
             const uint64_t remaining = entry.source.size - fileOffset;
             const size_t request = static_cast<size_t>(
@@ -479,6 +682,8 @@ IsoInstallResult installIsoManifestImpl(
                 break;
             }
 
+            if (discLayout != nullptr)
+                fileHash.update(buffer.data(), bytesRead);
             fileOffset += static_cast<uint64_t>(bytesRead);
             result.copiedBytes += static_cast<uint64_t>(bytesRead);
             notifyProgress(result, progressCallback, userData, keepGoing);
@@ -504,6 +709,14 @@ IsoInstallResult installIsoManifestImpl(
         if (!fileSucceeded) {
             copySucceeded = false;
             break;
+        }
+
+        if (discLayout != nullptr) {
+            IntegrityEntry integrityEntry;
+            integrityEntry.path = entry.destinationPath.substr(5u);
+            integrityEntry.size = entry.source.size;
+            integrityEntry.sha256 = sha256Hex(fileHash.finish());
+            integrityEntries.push_back(std::move(integrityEntry));
         }
 
         ++result.completedFiles;
@@ -545,8 +758,33 @@ IsoInstallResult installIsoManifestImpl(
                 result.cancelled = true;
             }
         } else {
-            result.copiedBytes = result.totalBytes;
+            result.copiedBytes =
+                extractedBytes + metadataInfo->layoutFileBytes +
+                metadataInfo->metadataFileBytes;
         }
+    }
+
+    if (copySucceeded && discLayout != nullptr) {
+        uint64_t manifestBytes = 0u;
+        std::string integrityError;
+        if (!writeDiscIntegrityManifest(
+                stageFd, integrityEntries, manifestBytes, integrityError)) {
+            copySucceeded = false;
+            result.error = integrityError.empty()
+                ? "Could not create the SHA-256 integrity manifest."
+                : integrityError;
+        } else if (manifestBytes != integrityManifestExpectedBytes ||
+                   integrityEntries.size() != resolved.size() + 2u) {
+            copySucceeded = false;
+            result.error = "The SHA-256 integrity manifest differs from its installation plan.";
+        } else {
+            result.copiedBytes += manifestBytes;
+        }
+    }
+
+    if (copySucceeded && result.copiedBytes != result.totalBytes) {
+        copySucceeded = false;
+        result.error = "The installed byte count does not match the complete installation plan.";
     }
 
     if (copySucceeded && ::fsync(stageFd) != 0) {
@@ -644,6 +882,178 @@ bool removeIsoDiscInstallation(
     return true;
 }
 
+IsoDiscIntegrityResult verifyIsoDiscIntegrity(const std::string &discRoot) {
+    IsoDiscIntegrityResult result;
+    if (discRoot.empty()) {
+        result.error = "The private disc root is empty.";
+        return result;
+    }
+
+    const int rootFd = ::open(
+        discRoot.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (rootFd < 0) {
+        result.error = "Could not safely open the private disc root.";
+        return result;
+    }
+
+    const int manifestFd = ::openat(
+        rootFd, kIntegrityManifestName, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (manifestFd < 0) {
+        ::close(rootFd);
+        result.error = "The SHA-256 integrity manifest is missing or is not a regular file.";
+        return result;
+    }
+    struct stat manifestStatus {};
+    if (::fstat(manifestFd, &manifestStatus) != 0 ||
+        !S_ISREG(manifestStatus.st_mode) || manifestStatus.st_size < 0 ||
+        static_cast<uint64_t>(manifestStatus.st_size) > kMaxIntegrityManifestBytes) {
+        ::close(manifestFd);
+        ::close(rootFd);
+        result.error = "The SHA-256 integrity manifest has an invalid type or size.";
+        return result;
+    }
+
+    FILE *manifest = ::fdopen(manifestFd, "r");
+    if (manifest == nullptr) {
+        ::close(manifestFd);
+        ::close(rootFd);
+        result.error = "Could not read the SHA-256 integrity manifest.";
+        return result;
+    }
+
+    std::array<char, 1200> lineBuffer{};
+    if (::fgets(lineBuffer.data(), static_cast<int>(lineBuffer.size()), manifest) == nullptr ||
+        std::string(lineBuffer.data()) != kIntegrityManifestHeader) {
+        std::fclose(manifest);
+        ::close(rootFd);
+        result.error = "The SHA-256 integrity manifest header or version is unsupported.";
+        return result;
+    }
+
+    std::unordered_set<std::string> seenPaths;
+    seenPaths.reserve(1024u);
+    bool sawLayout = false;
+    bool sawMetadata = false;
+    bool parseSucceeded = true;
+    while (::fgets(lineBuffer.data(), static_cast<int>(lineBuffer.size()), manifest) != nullptr) {
+        const size_t lineLength = std::strlen(lineBuffer.data());
+        if (lineLength < 68u || lineLength >= lineBuffer.size() - 1u ||
+            lineBuffer[lineLength - 1u] != '\n') {
+            result.error = "The SHA-256 integrity manifest contains a malformed or overlong entry.";
+            parseSucceeded = false;
+            break;
+        }
+
+        std::string line(lineBuffer.data(), lineLength - 1u);
+        const size_t firstTab = line.find('\t');
+        const size_t secondTab = firstTab == std::string::npos
+            ? std::string::npos : line.find('\t', firstTab + 1u);
+        if (firstTab != 64u || secondTab == std::string::npos ||
+            secondTab == firstTab + 1u || secondTab + 1u >= line.size()) {
+            result.error = "The SHA-256 integrity manifest entry fields are invalid.";
+            parseSucceeded = false;
+            break;
+        }
+
+        const std::string expectedDigest = line.substr(0u, firstTab);
+        for (const unsigned char ch : expectedDigest) {
+            if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'))) {
+                result.error = "The SHA-256 integrity manifest contains an invalid digest.";
+                parseSucceeded = false;
+                break;
+            }
+        }
+        if (!parseSucceeded) break;
+
+        const std::string sizeText =
+            line.substr(firstTab + 1u, secondTab - firstTab - 1u);
+        uint64_t expectedSize = 0u;
+        const auto parsed = std::from_chars(
+            sizeText.data(), sizeText.data() + sizeText.size(), expectedSize);
+        if (parsed.ec != std::errc{} ||
+            parsed.ptr != sizeText.data() + sizeText.size()) {
+            result.error = "The SHA-256 integrity manifest contains an invalid file size.";
+            parseSucceeded = false;
+            break;
+        }
+
+        const std::string relativePath = line.substr(secondTab + 1u);
+        if (relativePath == kIntegrityManifestName) {
+            result.error = "The SHA-256 integrity manifest cannot list itself.";
+            parseSucceeded = false;
+            break;
+        }
+        std::vector<std::string> pathParts;
+        if (!splitRelativePath(relativePath, pathParts)) {
+            result.error = "The SHA-256 integrity manifest contains an unsafe file path.";
+            parseSucceeded = false;
+            break;
+        }
+        const std::string pathKey = foldedPath(pathParts);
+        if (!seenPaths.emplace(pathKey).second) {
+            result.error = "The SHA-256 integrity manifest contains a duplicate file path.";
+            parseSucceeded = false;
+            break;
+        }
+        if (pathParts.size() == 1u && pathParts[0] == ".disc_layout")
+            sawLayout = true;
+        if (pathParts.size() == 1u && pathParts[0] == ".disc_meta")
+            sawMetadata = true;
+        if (result.verifiedFiles >= kMaxIntegrityEntries) {
+            result.error = "The SHA-256 integrity manifest exceeds its file-count limit.";
+            parseSucceeded = false;
+            break;
+        }
+
+        const int fileFd = openRegularRelativeAt(rootFd, relativePath);
+        if (fileFd < 0) {
+            result.error = "An integrity file is missing, not regular, or uses a symlink: " +
+                           relativePath;
+            parseSucceeded = false;
+            break;
+        }
+        std::string actualDigest;
+        std::string hashError;
+        const bool hashed = hashFileDescriptor(
+            fileFd, expectedSize, actualDigest, hashError);
+        ::close(fileFd);
+        if (!hashed) {
+            result.error = relativePath + ": " + hashError;
+            parseSucceeded = false;
+            break;
+        }
+        if (actualDigest != expectedDigest) {
+            result.error = "SHA-256 mismatch: " + relativePath;
+            parseSucceeded = false;
+            break;
+        }
+        if (expectedSize >
+            std::numeric_limits<uint64_t>::max() - result.verifiedBytes) {
+            result.error = "The verified installation size overflows the supported range.";
+            parseSucceeded = false;
+            break;
+        }
+        result.verifiedBytes += expectedSize;
+        ++result.verifiedFiles;
+    }
+
+    if (parseSucceeded && std::ferror(manifest) != 0) {
+        result.error = "An I/O error occurred while reading the SHA-256 integrity manifest.";
+        parseSucceeded = false;
+    }
+    std::fclose(manifest);
+    ::close(rootFd);
+
+    if (!parseSucceeded) return result;
+    if (!sawLayout || !sawMetadata || result.verifiedFiles < 3u) {
+        result.error = "The SHA-256 integrity manifest is incomplete or lacks disc metadata.";
+        return result;
+    }
+    result.valid = true;
+    return result;
+}
+
+
 IsoInstallResult installIsoManifest(
     const Iso9660Reader &reader,
     const std::vector<IsoInstallFile> &manifest,
@@ -669,6 +1079,13 @@ IsoInstallResult installIsoDisc(
             failure.error = "Could not enumerate the ISO9660 disc layout.";
         }
         return failure;
+    }
+
+    for (const auto &file : layout.files) {
+        if (isReservedDiscPath(file.path)) {
+            failure.error = "The ISO contains a path reserved for private disc metadata.";
+            return failure;
+        }
     }
 
     std::vector<IsoInstallFile> manifest;

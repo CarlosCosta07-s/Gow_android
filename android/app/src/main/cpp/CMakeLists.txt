@@ -22,6 +22,7 @@ add_library(android-game SHARED
     android_pad_bridge.cpp
     iso9660_reader.cpp
     iso9660_installer.cpp
+    sha256.cpp
     iso9660_disc_layout.cpp
     cdroot_vfs.cpp
     ps2_elf_validator.cpp
