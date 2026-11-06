@@ -288,3 +288,16 @@ Cobertura atual exercitada em `android_gs_vulkan_backend_test.cpp`:
 `tools/compare_gs_scene.py` compara duas imagens PPM P6 com dimensões idênticas e produz MAE, RMSE, PSNR, erro máximo por canal e porcentagem de pixels dentro da tolerância; opcionalmente grava um mapa de diferenças. Os limiares padrão são parâmetros iniciais para inspeção, não critérios definitivos de compatibilidade.
 
 **[PENDENTE — CENA REAL]** O runtime ainda mantém `PS2Runtime::run()` bloqueado e a tabela AOT pública vazia. Portanto, ainda não existe captura comprovada do God of War real no Android. A captura local só será gerada quando o runtime entregar um frame; a validação visual real exige o ELF/AOT privado do usuário, boot real em aparelho e uma referência da mesma cena, resolução e momento.
+
+
+## Worker EE separado, pré-validação AOT e build ARM64 — 06/11/2026
+
+**[VERIFICADO NA CI HOST 42274965500]** A preparação local da árvore Waffle agora adiciona um worker EE Android independente do ciclo de eventos/apresentação da GameActivity. O worker exige núcleo inicializado, scheduler criado, PC válido e função AOT registrada antes de iniciar; a thread executa o scheduler, enquanto a GameActivity permanece responsável por eventos e apresentação. O método permanece sem chamada em android_main(), logo o APK público não começa gameplay automaticamente.
+
+**[ENCERRAMENTO SEGURO]** stopGuestExecutionAndroid() solicita parada e faz join() antes da destruição dos subsistemas. O caminho não usa detach(); uma tentativa de destruir o runtime a partir da própria thread encerra de forma explícita com std::terminate(), evitando uma thread destacada que pudesse continuar acessando this. O checker Android verifica esse contrato.
+
+**[PRÉ-VALIDAÇÃO AOT]** tools/build_android_game.py agora rejeita tabela de funções vazia, registros ausentes, endereços desalinhados/fora da faixa, slots inconsistentes/duplicados e entrypoint do ELF sem função registrada. Fixtures host cobrem tabela válida, vazia, entrypoint ausente e slot incorreto. Isso evita gastar tempo compilando um APK que o loader recusaria; ainda não foi executado com o ELF privado do usuário.
+
+**[VERIFICADO NA CI]** Host run 42274965500 compilou o recompiler e o runtime Waffle sob as políticas estritas; Android run 42274999877 passou pelo preparo do runtime, checker de lifecycle, testes sintéticos de captura/comparação, I/O/disco/VFS e build Debug ARM64. Artefato gow-android-arm64-shell ID 13532807788 (6.200.631 bytes). Nenhum ELF, ISO, IRX, microcódigo ou C++ gerado do jogo foi fornecido à CI.
+
+**[AINDA NÃO É BOOT]** A tabela AOT pública permanece vazia. Nenhum ELF real foi carregado, nenhum worker EE foi iniciado com código do jogo, nenhuma cadeia de boot/IRX/VU1 foi exercitada e nenhuma cena real foi capturada. O próximo marco é gerar e validar localmente o AOT do ELF do usuário, incluindo cobertura dos microprogramas VU1 e módulos IRX necessários; em seguida ligar o worker apenas após os serviços de boot, GS/presenter e áudio estarem prontos.
