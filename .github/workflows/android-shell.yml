@@ -113,8 +113,14 @@ jobs:
             android/app/src/main/cpp/iso9660_installer.cpp \
             "$GOW_RUNTIME_DIR/ps2xIOP/src/disc_source.cpp" \
             "$GOW_RUNTIME_DIR/ps2xIOP/src/ps2_path.cpp" \
+            "$GOW_RUNTIME_DIR/ps2xIOP/src/emulator/imports/iop_cdvd.cpp" \
+            "$GOW_RUNTIME_DIR/ps2xIOP/src/emulator/core/iop_memory.cpp" \
+            "$GOW_RUNTIME_DIR/ps2xIOP/src/emulator/core/iop_kernel.cpp" \
+            "$GOW_RUNTIME_DIR/ps2xIOP/src/emulator/core/sound_engine.cpp" \
+            "$GOW_RUNTIME_DIR/ps2xIOP/src/emulator/core/memory_card.cpp" \
             -Iandroid/app/src/main/cpp \
             -I"$GOW_RUNTIME_DIR/ps2xIOP/include" \
+            -I"$GOW_RUNTIME_DIR/ps2xIOP/src" \
             -o "$RUNNER_TEMP/iso9660-disc-layout-test"
           "$RUNNER_TEMP/iso9660-disc-layout-test"
 

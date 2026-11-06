@@ -4,6 +4,11 @@
 #include "iso9660_installer.h"
 #include "iso9660_reader.h"
 #include <ps2x/iop/disc_source.h>
+#include "emulator/core/iop_cpu.h"
+#include "emulator/core/iop_kernel.h"
+#include "emulator/core/iop_memory.h"
+#include "emulator/imports/iop_cdvd.h"
+#include "ps2x/iop/iop_host.h"
 
 #include <algorithm>
 #include <array>
@@ -269,6 +274,151 @@ int testMeasureAndWrite() {
     return 0;
 }
 
+class SyntheticIopHost final : public ps2x::iop::IopHost {
+public:
+    explicit SyntheticIopHost(std::string cdRoot) : cdRoot_(std::move(cdRoot)) {}
+
+    bool readGuest(uint32_t, void *, size_t) const override { return false; }
+    bool writeGuest(uint32_t, const void *, size_t) override { return false; }
+    bool zeroGuest(uint32_t, size_t) override { return false; }
+    bool normalizeGuestAddress(uint32_t, uint32_t &normalized) const override {
+        normalized = 0u;
+        return false;
+    }
+    uint32_t allocateIopHandle(ps2x::iop::IopHandleKind) override { return nextHandle_++; }
+    uint32_t allocateGuest(uint32_t, uint32_t) override { return 0u; }
+    void freeGuest(uint32_t) override {}
+    void audioCommand(uint32_t, uint32_t, ps2x::iop::GuestBuffer,
+                      ps2x::iop::GuestBuffer) override {}
+    std::string hostPath(ps2x::iop::HostPathKind kind) const override {
+        return kind == ps2x::iop::HostPathKind::CdRoot ? cdRoot_ : std::string{};
+    }
+    std::string translateGuestPath(std::string_view) const override { return {}; }
+    uint64_t openHostFile(std::string_view) override { return 0u; }
+    bool hostFileSize(uint64_t, uint64_t &) const override { return false; }
+    bool readHostFile(uint64_t, uint64_t, void *, size_t, size_t &bytesRead) override {
+        bytesRead = 0u;
+        return false;
+    }
+    void closeHostFile(uint64_t) override {}
+    int32_t memoryCard(const ps2x::iop::MemoryCardRequest &) override { return -1; }
+    bool hasGuestFunction(uint32_t) const override { return false; }
+    bool invokeGuestFunction(uint64_t, uint32_t, uint32_t, uint32_t,
+                             uint32_t, uint32_t, uint32_t *) override {
+        return false;
+    }
+    void log(ps2x::iop::LogLevel, std::string_view) override {}
+
+private:
+    std::string cdRoot_;
+    uint32_t nextHandle_ = 1u;
+};
+
+bool testIopCdvdDispatch(const fs::path &discRoot, std::string &error) {
+    using namespace ps2x::iop::detail;
+    SyntheticIopHost host(discRoot.string());
+    IopMemory memory;
+    IopKernel kernel(memory);
+    IopCdvd cdvd(host, memory, kernel);
+
+    constexpr uint32_t kReadBuffer = 0x4000u;
+    constexpr uint32_t kPathBuffer = 0x6000u;
+    constexpr uint32_t kSearchResult = 0x7000u;
+    constexpr uint32_t kSectorBytes = static_cast<uint32_t>(kSector);
+
+    if (!memory.zeroRam(kReadBuffer, 2u * kSectorBytes)) {
+        error = "Could not prepare owned IOP RAM for sceCdRead.";
+        return false;
+    }
+
+    IopCpuState readCpu{};
+    readCpu.gpr[4] = 22u;
+    readCpu.gpr[5] = 1u;
+    readCpu.gpr[6] = kReadBuffer;
+    if (!cdvd.dispatchImport(6u, readCpu) || readCpu.gpr[2] != 1u) {
+        error = "IopCdvd sceCdRead failed for a layer-0 file extent.";
+        return false;
+    }
+
+    std::array<uint8_t, kSector> readBack{};
+    if (!memory.readRam(kReadBuffer, readBack.data(), readBack.size()) ||
+        std::memcmp(readBack.data(), lowPayload().data(), readBack.size()) != 0) {
+        error = "IopCdvd sceCdRead returned bytes that differ from the layer-0 ISO extent.";
+        return false;
+    }
+
+    if (!memory.zeroRam(kReadBuffer, kSectorBytes)) {
+        error = "Could not prepare IOP RAM for the layer-1 sceCdRead.";
+        return false;
+    }
+    IopCpuState layer1Cpu{};
+    layer1Cpu.gpr[4] = 38u;
+    layer1Cpu.gpr[5] = 1u;
+    layer1Cpu.gpr[6] = kReadBuffer;
+    if (!cdvd.dispatchImport(6u, layer1Cpu) || layer1Cpu.gpr[2] != 1u) {
+        error = "IopCdvd sceCdRead failed for a layer-1 file extent.";
+        return false;
+    }
+
+    std::array<uint8_t, kSector> layer1Bytes{};
+    if (!memory.readRam(kReadBuffer, layer1Bytes.data(), layer1Bytes.size()) ||
+        layer1Bytes[0] != 0xD1u || layer1Bytes[1] != 0xD2u ||
+        layer1Bytes[2] != 0xD3u) {
+        error = "IopCdvd sceCdRead returned incorrect bytes for layer 1.";
+        return false;
+    }
+
+    constexpr char kGuestPath[] = "cdrom0:\\LOWDIR\\LOWNEST.BIN;1";
+    if (!memory.writeRam(kPathBuffer, kGuestPath, sizeof(kGuestPath)) ||
+        !memory.zeroRam(kSearchResult, 32u)) {
+        error = "Could not prepare IOP RAM for sceCdSearchFile.";
+        return false;
+    }
+
+    IopCpuState searchCpu{};
+    searchCpu.gpr[4] = kSearchResult;
+    searchCpu.gpr[5] = kPathBuffer;
+    if (!cdvd.dispatchImport(10u, searchCpu) || searchCpu.gpr[2] != 1u) {
+        error = "IopCdvd sceCdSearchFile failed for the nested ISO path.";
+        return false;
+    }
+
+    std::array<uint8_t, 32u> searchResult{};
+    if (!memory.readRam(kSearchResult, searchResult.data(), searchResult.size())) {
+        error = "Could not read the sceCdSearchFile result.";
+        return false;
+    }
+    const uint32_t foundLsn =
+        static_cast<uint32_t>(searchResult[0]) |
+        (static_cast<uint32_t>(searchResult[1]) << 8u) |
+        (static_cast<uint32_t>(searchResult[2]) << 16u) |
+        (static_cast<uint32_t>(searchResult[3]) << 24u);
+    const uint32_t foundSize =
+        static_cast<uint32_t>(searchResult[4]) |
+        (static_cast<uint32_t>(searchResult[5]) << 8u) |
+        (static_cast<uint32_t>(searchResult[6]) << 16u) |
+        (static_cast<uint32_t>(searchResult[7]) << 24u);
+    if (foundLsn != 25u || foundSize != 1u) {
+        error = "IopCdvd sceCdSearchFile did not return the original nested-file LSN and size.";
+        return false;
+    }
+
+    if (!memory.zeroRam(kReadBuffer, 2u * kSectorBytes)) {
+        error = "Could not prepare IOP RAM for the out-of-range CDVD read.";
+        return false;
+    }
+    IopCpuState invalidCpu{};
+    invalidCpu.gpr[4] = 63u;
+    invalidCpu.gpr[5] = 2u;
+    invalidCpu.gpr[6] = kReadBuffer;
+    if (!cdvd.dispatchImport(6u, invalidCpu) || invalidCpu.gpr[2] != 0u) {
+        error = "IopCdvd accepted a read that crosses the end of the disc.";
+        return false;
+    }
+
+    return true;
+}
+
 int testInstalledDiscMatchesWaffleDiscSource() {
     Fixture f;
     std::string why;
@@ -348,6 +498,12 @@ int testInstalledDiscMatchesWaffleDiscSource() {
     if (disc->readSectors(63u, 2u, beyondDisc.data())) {
         fs::remove_all(privateRoot, ec);
         return fail("Waffle DiscSource accepted a read that crosses the disc end");
+    }
+
+    std::string iopError;
+    if (!testIopCdvdDispatch(discRoot, iopError)) {
+        fs::remove_all(privateRoot, ec);
+        return fail("IopCdvd synthetic dispatch: " + iopError);
     }
 
     fs::remove_all(privateRoot, ec);
@@ -548,6 +704,6 @@ int main() {
         }
         std::cout << "ok - " << c.name << '\n';
     }
-    std::cout << "iso9660 disc layout tests passed\n";
+    std::cout << "iso9660 disc layout and IOP CDVD integration tests passed\n";
     return 0;
 }
