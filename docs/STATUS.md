@@ -329,3 +329,26 @@ A extração usa buffer de 1 MiB e atualiza o callback de progresso/cancelamento
 - `tools/build_android_game.py` limita o Gradle a um worker; o CMake Android usa um job pool de compilação nativa configurável, padrão `1`.
 - O objetivo é reduzir picos de memória ao compilar o runtime e as unidades C++ geradas pelo PS2Recomp. A CI dos commits `c022047`, `182e8bc` e `6fb6377` ainda precisa concluir antes de marcar essa parte como verificada.
 
+
+
+## [VERIFICADO NAS CI ANDROID #346–#349] Exportação privada do ELF para AOT — 06/11/2026
+
+- A tela FORGE disponibiliza `EXPORTAR ELF PARA BUILD AOT` apenas para a imagem NTSC-U cujo `SYSTEM.CNF` aponta para `SCUS_973.99` e quando existe a instalação privada com o manifesto de integridade.
+- A ação usa o seletor Android `CreateDocument` e copia somente o executável ELF, não a ISO nem os demais arquivos do disco. Antes da cópia, a ponte nativa valida o ELF32/MIPS; o app compara caminho, tamanho e SHA-256 com a entrada correspondente de `.gow_disc_integrity` e calcula novamente o hash durante a exportação.
+- A exportação não faz uma segunda verificação integral dos gigabytes do disco. Isso não substitui a verificação completa usada pelo fluxo de inicialização; serve apenas para obter a entrada privada do recompilador host.
+- Cópias incompletas ou com hash diferente tentam remover o destino SAF e avisam quando o provedor não permite a remoção. O botão exige o nome exato `SCUS_973.99`, usado pelo perfil NTSC-U do host recompiler.
+- A seleção de outro disco e a instalação/verificação ficam bloqueadas enquanto a exportação está em andamento. A compilação Android dessa funcionalidade passou nas CI #346, #347, #348 e #349.
+- **[PENDENTE]** Executar a exportação em aparelho com uma instalação real e usar o ELF privado no `tools/build_android_game.py`. A CI pública não recebe o ELF, C++ AOT ou ISO.
+
+## [VERIFICADO] Limites de paralelismo do build local AOT — 06/11/2026
+
+- `GOW_BUILD_JOBS` controla os builds CMake host (padrão 1; permitido 1–16); Gradle local usa um worker e o CMake Android usa pool nativo padrão de 1 job.
+- O host recompiler passou nas CI #90 e #91; o APK ARM64 compilou nas Android shell #343 e #344 com os limites de memória ativados.
+
+## [VERIFICADO POR INSPEÇÃO DOS APKs] Assinatura Debug entre execuções — 06/11/2026
+
+- Certificados SHA-256 foram extraídos dos APKs das CI #339, #344, #347, #348 e #349. Os fingerprints diferem entre execuções: os runners geram chaves Debug efêmeras, portanto esses APKs não são atualizações assinadas pela mesma identidade.
+- `android/app/build.gradle` e `.github/workflows/android-shell.yml` agora aceitam uma chave Debug persistente por meio de quatro GitHub Actions Secrets. Sem esses Secrets, o build mantém o fallback Debug padrão e o APK fica marcado no log como não compatível com atualização entre execuções.
+- A Android shell #352 passou após corrigir a configuração Gradle. A CI #353 adiciona a verificação `apksigner` e a impressão do fingerprint no resumo; ainda falta configurar e validar os Secrets com uma chave privada do mantenedor. Os APKs antigos não mudam retroativamente de assinatura.
+- Não desinstalar um APK Debug antigo apenas para instalar uma execução diferente: isso apaga o armazenamento privado, incluindo a instalação do disco. A migração/backup dessa instalação ainda não foi implementada.
+
