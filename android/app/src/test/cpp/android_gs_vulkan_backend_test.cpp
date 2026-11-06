@@ -391,6 +391,10 @@ int main() {
             vertex.r = 128u; vertex.g = 128u; vertex.b = 128u; vertex.a = 128u;
         }
         backend.Submit(t8hSprite);
+        const uint32_t t8hRawIndex = backend.ReadVram(
+            GS_PSM_T8H, 480u, 1u, 0u, 0u);
+        require(t8hRawIndex == 1u,
+                "T8H VRAM read did not return the stored high-byte index.");
 
         GSPresentationRequest presentation{};
         presentation.pmode = 1u;
@@ -470,9 +474,17 @@ int main() {
                 t4hhPixel[2] == 255u && t4hhPixel[3] == 255u,
                 "T4HH did not read the upper nibble of the high-byte plane.");
         const auto t8hPixel = pixelAt(16u, 24u);
+        if (!(t8hPixel[0] == 0u && t8hPixel[1] == 255u &&
+              t8hPixel[2] == 255u && t8hPixel[3] == 255u)) {
+            std::cerr << "T8H sampled RGBA="
+                      << static_cast<unsigned>(t8hPixel[0]) << ','
+                      << static_cast<unsigned>(t8hPixel[1]) << ','
+                      << static_cast<unsigned>(t8hPixel[2]) << ','
+                      << static_cast<unsigned>(t8hPixel[3]) << '\\n';
+        }
         require(t8hPixel[0] == 0u && t8hPixel[1] == 255u &&
                 t8hPixel[2] == 255u && t8hPixel[3] == 255u,
-                "T8H did not sample the high-byte texture index and resolve its CLUT color.");
+                "T8H did not resolve CLUT index one from its high-byte plane.");
         const auto t8hBottomRight = pixelAt(19u, 27u);
         require(t8hBottomRight[0] == 255u && t8hBottomRight[1] == 255u &&
                 t8hBottomRight[2] == 255u && t8hBottomRight[3] == 255u,
