@@ -31,7 +31,7 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Implementar no launcher a leitura de SYSTEM.CNF e a identificação inicial de SCUS_973.99/SCES_531.33.
 - [x] Implementar leitor ISO9660 por FD e fixture ISO sintética, com testes host na CI.
 - [x] Compilar a ponte híbrida C ABI/JNI e o provider temporário `gowdisc:/` no runtime privado (Android run `42161298942`, host run `42161298950`); essa implementação é transitória e não será o caminho final após a decisão BT3.
-- [ ] Implementar enumeração completa e segura da árvore ISO9660 para o instalador BT3.
+- [x] Implementar listagem segura de diretórios ISO9660 (`listDirectory`), com limites de tamanho/quantidade e fixture sintética cobrindo raiz, subdiretório, metadados e traversal (etapa host passou no run `42163257138`; APK ainda em execução na verificação desta revisão).
 - [x] Compilar o parser SYSTEM.CNF pela CI (run `42142814087`).
 - [ ] Validar essa leitura com imagens de teste do usuário em aparelho Android.
 - [ ] Diagnosticar permissão, formato e região.
