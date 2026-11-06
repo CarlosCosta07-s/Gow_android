@@ -119,7 +119,8 @@ def main() -> int:
     )
     for required in (
         "nativeSetActivityReference(this)",
-        "nativeClearActivityReference()",
+        "nativeClearActivityReference(this)",
+        "nativeClearActivityReference(GowGameActivity activity)",
         "protected void onDestroy()",
         "createNativeStatusOverlay()",
         "onNativeRuntimeStatus(String message, boolean isError)",
