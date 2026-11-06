@@ -73,12 +73,14 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 - A CI inclui dois microcódigos sintéticos: um vazio e outro com instrução lower não suportada que gera callLower. Ambos são rejeitados pelo gate; nenhum usa microcódigo do jogo.
 - A trava PS2X_VU1_NATIVE_ONLY já compilou no runtime host (run 42150329023). A opção --strict ainda não foi executada com capturas reais; o runtime interromperá a execução no primeiro bloco não coberto. Ainda falta ligar os arquivos AOT gerados ao target Android.
 
-## [PREPARADO, COM COMPILAÇÃO NDK] Camada SIMD NEON para VU1
+## [VERIFICADO] Runtime Waffle ARM64 e camada SIMD NEON
 
-- Foi criado port/kiexter/vu1/ps2_vu1_neon_compat.h para mapear a API SSE usada pelos blocos nativos VU1 para intrínsecos ARM NEON, incluindo operações vetoriais, máscaras, shuffle/blend, conversões e um mapeamento inicial MXCSR -> FPCR/FPSR.
-- Foi adicionado vu1_neon_compat_smoke.cpp ao alvo android-game. A execução Android shell 42150765223 compilou o APK Debug arm64-v8a com esse arquivo de smoke, usando o NDK 30.0.16248370.
-- Esse teste comprova que o cabeçalho e as chamadas de intrínsecos compilam no NDK ARM64; não executa a função smoke nem prova equivalência numérica, precisão de arredondamento ou runtime VU1 em aparelho. A execução host 42150853233 também comprovou que o builder aplica a seleção condicional no header Waffle, mas compilou o ramo SSE (x86-64), não o ramo NEON do runtime completo.
-- O builder privado agora copia o shim para a árvore Waffle e modifica ps2_vu1_native.h para escolher NEON em __aarch64__/__ARM_NEON e SSE em x86-64. A execução host 42150853233 aplicou essa transformação e recompilou ps2_runtime pelo ramo SSE. Ainda falta compilar o runtime Waffle completo com NDK ARM64 e executar testes de equivalência de lanes, NaN, signed zero, conversão e FPCR/FPSR.
+- Foi criado port/kiexter/vu1/ps2_vu1_neon_compat.h para mapear a API SSE usada pela VU1 para NEON e para manter o controle de arredondamento usando FPCR/FPSR no Android.
+- No runtime Waffle, o shim tem dois modos: smoke isolado usa as implementações NEON próprias; o runtime completo usa sse2neon para a API SSE2 mais ampla de EE/VU0, e o shim sobrescreve MAX/MIN e o mapeamento de CSR para FPCR/FPSR.
+- O worker GS e ps2_runtime.cpp também selecionam o shim em ARM64, evitando includes diretos x86-only de xmmintrin.h.
+- A execução Android shell 42152175783 compilou ps2_runtime e suas dependências estáticas com Android NDK 30.0.16248370, ABI arm64-v8a e API 28. O compile database confirmou PS2X_VU1_NATIVE_ONLY=1 e excluiu iop_cpu.cpp e as fontes diferenciais PCSX2. O runner NativeActivity do Waffle não foi construído.
+- A mesma execução concluiu BUILD SUCCESSFUL para o APK Debug FORGE. O arquivo de smoke NEON continua incluído no alvo android-game, mas não é executado em runtime.
+- Isso comprova compilação ARM64 do runtime e do shell, não equivalência numérica bit-exata, execução em aparelho, ligação do runtime ao APK, chamada JNI ou gameplay. O runtime permanece como biblioteca estática produzida em workspace privado e não está integrado à GowGameActivity.
 
 ## [PREPARADO, NÃO TESTADO] Geração do C++ do jogo
 
@@ -91,7 +93,7 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 
 - Geração do C++ do ELF privado com PS2Recomp (o executável host foi compilado, mas o ELF ainda não foi processado).
 - Compilação do código gerado para Android ARM64.
-- Runtime Waffle compilado e adaptado ao Android NDK/ARM64 (o runtime host já compila; o smoke NEON compila, mas o target completo ainda não).
+- Ligação do runtime Waffle estático ao alvo android-game/Gradle e integração da API nativa com GowGameActivity (o runtime e o shell compilam separadamente, mas ainda não estão ligados entre si).
 - Geração VU1 AOT cobrindo todos os microprogramas usados pelo jogo; o gate --strict foi testado com entradas sintéticas, ainda sem capturas reais.
 - Geração AOT dos módulos IRX necessários e teste da proteção com IRX real; a proteção foi compilada sem esses módulos, mas ainda não foi executada.
 - Runner conectado à `GowGameActivity` mantendo o FORGE como launcher.
@@ -103,8 +105,8 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 
 1. Validar em aparelho o parser `SYSTEM.CNF` com a imagem NTSC-U do usuário.
 2. Executar e validar o pipeline host criado para PS2Recomp, usando o ELF NTSC-U correto e mantendo a saída privada.
-3. Integrar o runtime Waffle ao target Android, aplicar o shim NEON a ps2_vu1_native.h e provar compilação NDK do runtime real.
-4. Adaptar runner, lifecycle, leitura/cache do disco, áudio e entrada para Android.
+3. Integrar e vincular a biblioteca estática Waffle já compilada para arm64-v8a ao alvo android-game, mantendo a Activity FORGE/GowGameActivity.
+4. Implementar a ponte JNI e o lifecycle entre GowGameActivity e o runtime; adaptar VFS/cache do disco, áudio e entrada para Android.
 5. Reaproveitar frontend GS/formatos portáveis e implementar o backend Vulkan Android.
 6. Executar VU1 e IRX necessários por AOT, sem fallback interpretado.
 7. Atingir boot, primeira imagem, menus e primeiro combate.
