@@ -2,6 +2,12 @@
 
 Uma fase só será considerada concluída quando houver código, build e evidência que satisfaçam os critérios de aceitação. O projeto será desenvolvido na branch `main`, com alterações pequenas e testáveis.
 
+## Prioridade de desenvolvimento
+
+A prioridade é fazer God of War funcionar antes de iniciar otimização fina para aparelhos modestos. O foco imediato é completar a recompilação ARM64, o runtime e os serviços PS2 necessários, integrar o GS/Vulkan, alcançar o boot real, apresentar a primeira imagem e validar menu, novo jogo e primeiro combate.
+
+A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (código nativo/AOT, Vulkan e I/O local), mas tuning de FPS, perfis gráficos, cache/prefetch e ajustes térmicos ficam adiados até existir gameplay funcional e uma linha de base mensurável. Black for Android é a referência para essa etapa posterior, documentada em [ANDROID_LOW_END_OPTIMIZATION.md](ANDROID_LOW_END_OPTIMIZATION.md).
+
 ## Fase 0 — Fundação e auditoria
 
 - [x] Criar repositório público.
@@ -101,7 +107,7 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 
 **Aceitação:** áudio/vídeo sincronizados e saves persistentes, testados após fechar e reabrir o app.
 
-## Fase 7 — Compatibilidade e otimização
+## Fase 7 — Compatibilidade e otimização (após gameplay funcional)
 
 - [ ] Testar áreas, transições, checkpoints, mortes e carregamentos em aparelhos de classes diferentes.
 - [ ] Medir FPS médio, 1% low, distribuição de frame time, CPU/GPU, memória/PSS, I/O e temperatura em sessões curtas e prolongadas.
@@ -111,7 +117,7 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - [ ] Testar GPUs e drivers ARM64 Vulkan diferentes, incluindo throttling térmico.
 - [ ] Corrigir regressões e preparar instalação/documentação.
 
-**Diretrizes:** [Otimização para celulares modestos](ANDROID_LOW_END_OPTIMIZATION.md).
+**Referência futura:** [Black for Android](https://github.com/RanggaCasper/Black-Android). **Plano:** [Otimização para celulares modestos](ANDROID_LOW_END_OPTIMIZATION.md). Esta fase só começa depois de boot, menu, novo jogo e primeiro combate funcionarem.
 
 **Aceitação:** progresso validado nos aparelhos publicados na matriz de compatibilidade; limitações descritas sem promessas não testadas.
 
