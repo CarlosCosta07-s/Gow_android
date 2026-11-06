@@ -54,6 +54,7 @@ public final class GowGameActivity extends GameActivity {
     private static native boolean nativeRequestGsSceneCapture();
 
     private static final int REQUEST_EXPORT_AOT_CAPTURES = 0x474F;
+    private static final int REQUEST_EXPORT_RUNTIME_LOG = 0x4750;
 
     private TextView nativeStatusView;
     private String pendingNativeStatus;
@@ -193,6 +194,20 @@ public final class GowGameActivity extends GameActivity {
                     Gravity.BOTTOM | Gravity.START);
             exportLayout.setMargins(dp(16), 0, 0, dp(20));
             content.addView(exportAotButton, exportLayout);
+
+            Button exportLogButton = new Button(this);
+            exportLogButton.setText("Exportar log");
+            exportLogButton.setAllCaps(false);
+            exportLogButton.setTextSize(12.0f);
+            exportLogButton.setContentDescription(
+                    "Exportar o log privado e limitado da tentativa de boot para diagnóstico");
+            exportLogButton.setOnClickListener(view -> beginRuntimeLogExport());
+            FrameLayout.LayoutParams logLayout = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            logLayout.setMargins(dp(8), 0, dp(8), dp(20));
+            content.addView(exportLogButton, logLayout);
         }
     }
 
@@ -255,6 +270,89 @@ public final class GowGameActivity extends GameActivity {
                     output.add(current);
                 }
             }
+        }
+    }
+
+    private File privateRuntimeLogFile() {
+        return new File(getFilesDir(), "gow-runtime.log");
+    }
+
+    private void beginRuntimeLogExport() {
+        File logFile = privateRuntimeLogFile();
+        if (!logFile.isFile() || Files.isSymbolicLink(logFile.toPath())) {
+            Toast.makeText(
+                    this,
+                    "Ainda não há log privado de runtime. Abra Verificar runtime primeiro.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (logFile.length() > 2L * 1024L * 1024L) {
+            Toast.makeText(
+                    this,
+                    "O log excedeu o limite de exportação e precisa ser inspecionado localmente.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TITLE, "gow-runtime.log");
+        try {
+            startActivityForResult(intent, REQUEST_EXPORT_RUNTIME_LOG);
+        } catch (Exception exception) {
+            android.util.Log.e(
+                    "GowGameActivity",
+                    "Could not open the document picker for the private runtime log.",
+                    exception);
+            Toast.makeText(
+                    this,
+                    "Não foi possível abrir o seletor de destino do log.",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void exportRuntimeLog(Uri destination) {
+        File logFile = privateRuntimeLogFile();
+        if (!logFile.isFile() || Files.isSymbolicLink(logFile.toPath())
+                || logFile.length() > 2L * 1024L * 1024L) {
+            Toast.makeText(
+                    this,
+                    "O log privado não está disponível ou excedeu o limite seguro.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            OutputStream raw = getContentResolver().openOutputStream(destination, "w");
+            if (raw == null) throw new IOException("O provedor não abriu o destino do log.");
+            try (BufferedInputStream input = new BufferedInputStream(
+                        new FileInputStream(logFile));
+                 BufferedOutputStream output = new BufferedOutputStream(raw)) {
+                byte[] buffer = new byte[16 * 1024];
+                int count;
+                long copied = 0L;
+                while ((count = input.read(buffer)) != -1) {
+                    copied += count;
+                    if (copied > 2L * 1024L * 1024L) {
+                        throw new IOException("O log mudou durante a exportação e ultrapassou 2 MiB.");
+                    }
+                    output.write(buffer, 0, count);
+                }
+                output.flush();
+            }
+            Toast.makeText(
+                    this,
+                    "Log privado exportado. Mantenha o arquivo local e compartilhe somente para diagnóstico.",
+                    Toast.LENGTH_LONG).show();
+        } catch (Exception exception) {
+            android.util.Log.e(
+                    "GowGameActivity",
+                    "Private runtime log export failed.",
+                    exception);
+            Toast.makeText(
+                    this,
+                    "Falha ao exportar o log: " + exception.getMessage(),
+                    Toast.LENGTH_LONG).show();
         }
     }
 
@@ -340,13 +438,14 @@ public final class GowGameActivity extends GameActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQUEST_EXPORT_AOT_CAPTURES
-                || resultCode != RESULT_OK || data == null) {
-            return;
-        }
+        if (resultCode != RESULT_OK || data == null) return;
         Uri destination = data.getData();
         if (destination == null) return;
-        exportAotCaptures(destination);
+        if (requestCode == REQUEST_EXPORT_AOT_CAPTURES) {
+            exportAotCaptures(destination);
+        } else if (requestCode == REQUEST_EXPORT_RUNTIME_LOG) {
+            exportRuntimeLog(destination);
+        }
     }
 
     private GradientDrawable createStatusBackground(boolean isError) {
