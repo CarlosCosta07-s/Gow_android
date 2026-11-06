@@ -295,7 +295,7 @@ def generate_native_aot(
     if head_values:
         heads_file = work / "vu1n_heads_combined.txt"
         heads_file.write_text(
-            "".join(f"{head:04x}\\n" for head in sorted(head_values)),
+            "".join(f"{head:04x}\n" for head in sorted(head_values)),
             encoding="ascii",
         )
     for tool in (vu1_generator, iop_generator):
