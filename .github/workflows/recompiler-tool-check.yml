@@ -97,7 +97,7 @@ jobs:
       - name: Install desktop runtime build dependencies for strict VU1 compile check
         run: |
           sudo apt-get update
-          sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+          sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev libgl1-mesa-dev libglx-dev libopengl-dev libegl-dev libegl1-mesa-dev
 
       - name: Build pinned host recompiler without game files
         run: python tools/build_recompiler_host.py --build-only --work-dir /tmp/gowport
