@@ -23,7 +23,7 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - [x] Adicionar tela inicial e seletor SAF para a imagem do usuário.
 - [x] Solicitar permissão persistente de leitura e validar o descritor primário ISO9660 do setor 16.
 - [x] Implementar no launcher a leitura de SYSTEM.CNF e a identificação inicial de SCUS_973.99/SCES_531.33.
-- [x] Implementar leitor nativo ISO9660 com busca de arquivos por caminho e leitura aleatória por descritor; teste de imagem sintética na CI. A ponte do leitor para o VFS IOP permanece pendente.
+- [x] Implementar leitor ISO9660 por FD, provider C ABI e patch privado do PS2IopHostAdapter/PS2Vfs para open/size/read/close em cdrom0:; build Android e host aprovados. A passagem do FD pelo launcher e o teste com ISO real ainda estão pendentes.
 - [x] Compilar o parser SYSTEM.CNF pela CI (run `42142814087`).
 - [ ] Validar essa leitura com imagens de teste do usuário em aparelho Android.
 - [ ] Diagnosticar permissão, formato e região.
@@ -58,10 +58,10 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 
 - [ ] Selecionar e importar os módulos portáveis do runtime Waffle/KIexter (EE, memória, scheduler, stubs e serviços usados pelo título).
 - [x] Adaptar o runner nativo para AndroidX GameActivity/NDK, ligar `ps2_runtime` ao alvo `android-game` e preservar o MainActivity FORGE (smoke apenas de construção/destruição; sem iniciar o runtime).
-- [ ] Implementar passagem segura do descritor SAF do usuário para o runtime nativo, mantendo o handle durante toda a sessão.
+- [ ] Conectar o descritor SAF já recebido pelo GowGameActivity ao fluxo JOGAR do MainActivity quando o runtime estiver pronto, mantendo o handle durante toda a sessão.
 - [ ] Implementar instalação híbrida inspirada no Dragon Rage BT4: permissão SAF persistente, cache privado do ELF original e somente arquivos pequenos de boot comprovadamente necessários; manter os dados grandes na ISO.
 - [ ] Transferir um descritor ISO válido do GowGameActivity para o código nativo com ownership explícito e encerramento seguro.
-- [ ] Ligar `Iso9660Reader` ao `PS2IopHostAdapter` como provider de `cdrom0:` (open/size/read/close por caminho e offset), sem extrair a ISO inteira.
+- [x] Ligar `Iso9660Reader` ao `PS2IopHostAdapter`/`PS2Vfs` como provider compilável de `cdrom0:` (open/size/read/close por caminho e offset), sem extrair a ISO inteira; validar com ISO real ainda pendente.
 - [ ] Validar acesso aleatório, revogação da permissão SAF, pausa/retorno e troca de imagem em aparelho Android.
 - [ ] Ligar código recompilado, overrides de God of War e serviços mínimos de boot.
 - [ ] Resolver CD/DVD, IRX, SIF, DMA e cadeia inicial de execução.
