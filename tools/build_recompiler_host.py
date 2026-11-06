@@ -329,6 +329,18 @@ def main() -> int:
         "select NEON FPCR/FPSR state support for the threaded GS worker",
     )
 
+    runtime_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_runtime.cpp"
+    replace_exactly_once(
+        runtime_cpp,
+        "#include <xmmintrin.h>\n",
+        "#if defined(__aarch64__) && defined(__ARM_NEON)\n"
+        '#include "runtime/ps2_vu1_neon_compat.h"\n'
+        "#else\n"
+        "#include <xmmintrin.h>\n"
+        "#endif\n",
+        "select sse2neon plus ARM FPCR/FPSR shim for the EE/VU0 runtime",
+    )
+
     # Strict VU1 policy: never fall back to the cycle-exact interpreter.
     vu_core = recompiler_source / "ps2xRuntime/src/lib/vu/ps2_vu1_core.cpp"
     replace_exactly_once(
