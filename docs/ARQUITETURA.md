@@ -8,6 +8,14 @@ Criar uma aplicação nativa para Android que execute *God of War* (PS2, 2005) p
 
 O produto final não será um emulador genérico nem dependerá de interpretação/JIT do Emotion Engine como caminho de execução do jogo. A aplicação não incluirá a ISO ou os dados proprietários do jogo.
 
+## Referências externas e independência de implementação
+
+Black for Android e Dragon Rage foram indicados pelo mantenedor exclusivamente como referências de engenharia. Servem para estudar decisões de arquitetura, integração Android, importação de dados e opções expostas ao usuário; não são bases de código para este projeto.
+
+Não importar, copiar ou transplantar código-fonte, trechos, assets, binários, scripts de build ou dependências desses dois ports. Os componentes de Gow_android — incluindo o leitor ISO9660, integração Android, VFS, runtime e backend GS/Vulkan — devem ser implementados e adaptados especificamente para a arquitetura do PlayStation 2. Referências externas não substituem análise dos contratos do PS2.
+
+Isso não altera as dependências de código efetivamente selecionadas e auditadas separadamente para o port (Waffle/KIexster e PS2Recomp), cujas revisões, licenças e créditos permanecem documentados.
+
 ## Alvo inicial
 
 - Plataforma exclusiva: Android.
