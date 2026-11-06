@@ -1210,7 +1210,7 @@ def main() -> int:
                 std::memcpy(&upper, vuCode + pc + 4u, sizeof(upper));
             }
             std::fprintf(stderr,
-                         "[VU1:native-required] exact-engine fallback blocked: pc=0x%04x lower=0x%08x upper=0x%08x cycle=%llu ebit=%u haltD=%u haltT=%u\n",
+                         "[VU1:native-required] exact-engine fallback blocked: pc=0x%04x lower=0x%08x upper=0x%08x cycle=%llu ebit=%u haltD=%u haltT=%u",
                          pc, lower, upper, static_cast<unsigned long long>(m_cycle),
                          m_state.ebit ? 1u : 0u, m_pendingHaltD ? 1u : 0u, m_pendingHaltT ? 1u : 0u);
             m_stopRequested = true;
