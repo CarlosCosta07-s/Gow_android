@@ -136,15 +136,26 @@ O SPU2/LIBSD deverá alimentar um mixer nativo e saída Android de baixa latênc
 
 Separar relógio da lógica, submissão GPU e apresentação. Avaliar Frame Pacing/Swappy do Android Game Development Kit. Prioridade: estabilidade e velocidade correta; metas de FPS só serão publicadas após medições em dispositivos e cenas identificados.
 
-## Estratégia de integração do runtime
+## Política de implementação própria
 
-A primeira base a integrar será a branch `android` de [CodeAbhi826/God-Of-War-Recomp](https://github.com/CodeAbhi826/God-Of-War-Recomp), após fixar um commit imutável e revisar os arquivos/licenças. Ela reúne PS2Recomp, runtime EE/IOP, hooks específicos do jogo, shell Android e pipeline de build ARM64. O próprio projeto declara GPL-3.0 e informa que deriva trabalho de Waffle565, PS2Recomp e PCSX2.
+**Não será importado código de outros ports ou emuladores.** Black para Android, Dragon Rage/Budokai Tenkaichi 3, CodeAbhi, KIexster, Waffle565, PS2Recomp e PCSX2 serão consultados somente como referências de engenharia. Não serão incorporados seus launchers, recompiladores, runtimes, renderizadores, intérpretes, shaders, hooks ou sistemas de controle.
 
-A integração deve preservar o `MainActivity` e a identidade FORGE deste repositório. A camada de runtime nativa será trazida de forma controlada, evitando substituir o launcher por outra interface. O backend GS/Vulkan Android ainda precisa ser concluído; a referência Android consultada não apresenta frames do jogo atualmente.
+O FORGE continuará sendo a interface e o inicializador. O código responsável por executar God of War será construído neste repositório, em módulos separados e com testes próprios. O fluxo inicial será:
 
-A referência desktop de Waffle565 é útil para estudar GS, VU1, IOP, áudio e saves, mas não pode ser transplantada como se fosse Android: sua aplicação desktop usa OpenGL e dependências de host. O port Android deve usar as implementações compatíveis com Android e completar as lacunas do renderer.
+1. **Imagem:** validar o ISO, ler `SYSTEM.CNF`, identificar a região/revisão e localizar o ELF de boot.
+2. **Recompilador próprio:** implementar decoder/analisador MIPS R5900, resolução de funções e geração de C++ para ARM64. O compilador do jogo será uma ferramenta de build; não fará interpretação/JIT durante a partida.
+3. **Runtime próprio:** implementar memória, registradores, exceções, threads e serviços do EE utilizados pelo jogo; construir as funções necessárias de IOP, CD/DVD, SIF, DMA, VIF e GIF em código nativo. As microprogramas VU1 serão traduzidos/gerados antecipadamente, sem fallback de interpretador no produto final.
+4. **Gráficos próprios:** implementar o frontend do Graphics Synthesizer e seu backend Vulkan Android, incluindo VRAM, transferências, texturas, CLUT, depth, alpha test, blending e sincronização.
+5. **Áudio e entrada próprios:** ligar SPU2/LIBSD à saída de áudio Android de baixa latência e mapear toque/gamepad para os comandos do DualShock 2.
+6. **Validação:** testar cada marco com checkpoints do boot, menus e cenas do próprio jogo; comparar imagens, estado e temporização em aparelho real.
 
-**Regra de execução final:** o código MIPS R5900 do jogo será recompilado estaticamente para C++/ARM64. Não haverá interpretador/JIT do EE no caminho de jogo, nem interpretador VU1 no resultado final; microprogramas VU1 deverão ser gerados/compilados antecipadamente. O pipeline que exige ELF e gera código derivado do jogo ficará privado; o repositório público não receberá ELF, IRX, dados de disco nem C++ gerado.
+As referências ajudam a formular critérios e identificar problemas típicos de ARM64, GPUs tile-based, memória, frame pacing, lifecycle, controles e instalação de dados. **Não são bases de código nem dependências do projeto.**
+
+### Dependências e APIs
+
+A prioridade será usar Android SDK/NDK, CMake, APIs nativas do Android, Vulkan e APIs de áudio/entrada fornecidas pelo sistema. Bibliotecas externas genéricas só serão consideradas quando houver necessidade técnica demonstrada, licença compatível e justificativa documentada. Isso é distinto de importar o código de um port de jogo; qualquer dependência nova será avaliada individualmente.
+
+O repositório não receberá ISO, ELF, IRX, arquivos extraídos, dados proprietários nem C++ gerado a partir do executável original. Insumos do usuário e artefatos derivados necessários à geração ficarão fora da CI pública e do Git.
 
 ## Estrutura lógica pretendida
 
@@ -156,7 +167,7 @@ recompiler/    Ferramentas de análise e recompilação estática
 port/          Configuração e overrides específicos de God of War
 tools/         Validação, diagnóstico e automação
 docs/          Arquitetura, estado, testes, roadmap e créditos
-third_party/   Dependências externas com versão e licença fixadas
+third_party/   Somente dependências externas aprovadas e justificadas, se necessárias
 ```
 
 Os diretórios de runtime/recompilação serão criados quando houver implementação real, testes e documentação. Não criaremos módulos vazios.
