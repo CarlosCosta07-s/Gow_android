@@ -257,8 +257,12 @@ jobs:
           APKSIGNER="$ANDROID_SDK_ROOT/build-tools/37.0.0/apksigner"
           test -x "$APKSIGNER"
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/gow-android-apk-signature.txt"
-          CERT_SHA256="$(awk -F': ' '/Signer #1 certificate SHA-256 digest:/ { print $2; exit }' "$RUNNER_TEMP/gow-android-apk-signature.txt")"
-          test -n "$CERT_SHA256"
+          CERT_SHA256="$(awk -F': ' '/certificate SHA-256 digest:/ { print $NF; exit }' "$RUNNER_TEMP/gow-android-apk-signature.txt")"
+          if [[ ! "$CERT_SHA256" =~ ^[[:xdigit:]]{64}$ ]]; then
+            echo "::error::Could not parse a valid SHA-256 certificate fingerprint from apksigner output."
+            cat "$RUNNER_TEMP/gow-android-apk-signature.txt"
+            exit 1
+          fi
           if [ -n "$GOW_ANDROID_DEBUG_KEYSTORE_BASE64" ]; then
             SIGNING_MODE="persistent GitHub Actions key"
           else
