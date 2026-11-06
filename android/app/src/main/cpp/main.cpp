@@ -5,6 +5,7 @@
 #include "android_cdroot_bridge.h"
 #include "android_frame_scaler.h"
 #include "android_gs_vulkan_backend.h"
+#include "android_gs_scene_capture.h"
 #include "android_gs_geometry.h"
 #include "gs_vulkan_primitive_shaders.h"
 #include "ps2_runtime.h"
@@ -58,6 +59,7 @@ PS2Runtime *gActiveRuntime = nullptr;
 bool gGsBackendAttached = false;
 std::atomic<bool> gGsUnsupportedStateWarned{false};
 std::atomic<bool> gGsRenderTargetWarned{false};
+bool gGsSceneCaptureAttempted = false;
 
 void reportRuntimeStatus(android_app *app, const char *message, bool failed) {
     if (app == nullptr || message == nullptr) {
@@ -1804,6 +1806,39 @@ extern "C" void android_main(android_app* app) {
                 uint32_t frameHeight = 0u;
                 if (runtime->gs().copyLatchedHostPresentationFrame(
                         framePixels, frameWidth, frameHeight)) {
+                    if (!gGsSceneCaptureAttempted) {
+                        gGsSceneCaptureAttempted = true;
+                        const ANativeActivity *activity = app->activity;
+                        const char *captureDirectory = activity != nullptr
+                            ? (activity->externalDataPath != nullptr
+                                ? activity->externalDataPath
+                                : activity->internalDataPath)
+                            : nullptr;
+                        if (captureDirectory != nullptr) {
+                            std::string capturePath(captureDirectory);
+                            if (!capturePath.empty() && capturePath.back() != '/') {
+                                capturePath.push_back('/');
+                            }
+                            capturePath += "gow_android_first_gs_frame.ppm";
+                            std::string captureError;
+                            if (gow::android::writeRgbaPpmCapture(
+                                    capturePath, framePixels, frameWidth,
+                                    frameHeight, captureError)) {
+                                __android_log_print(
+                                    ANDROID_LOG_INFO, kTag,
+                                    "Saved first GS scene capture: %s",
+                                    capturePath.c_str());
+                            } else {
+                                __android_log_print(
+                                    ANDROID_LOG_WARN, kTag,
+                                    "Could not save first GS scene capture: %s",
+                                    captureError.c_str());
+                            }
+                        } else {
+                            logMessage(ANDROID_LOG_WARN,
+                                "No app data directory is available for a GS scene capture");
+                        }
+                    }
                     gRenderer.submitFrame(
                         std::move(framePixels), frameWidth, frameHeight);
                 }
