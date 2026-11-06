@@ -84,3 +84,10 @@ Na CI `42252442268`, passaram o checker de lifecycle, os testes nativos/ISO/CDVD
 O comando `tools/build_android_game.py` prepara o build inteiro sem enviar dados do jogo: recebe somente `SCUS_973.99` fora do repositório, chama PS2Recomp, exporta C++/headers para `android/app/build/gow-generated-game/` e executa `gradlew assembleDebug`. O script recusa workspace dentro do repositório, staging não ignorado e revisão PAL com mapa NTSC-U. Consulte `docs/ANDROID_AOT_LOCAL_BUILD.md`.
 
 **Verificado na CI:** sintaxe, CLI, planejamento dos comandos, separação de caminhos privados, rejeição do perfil PAL e chamada do Gradle Wrapper Windows. **Não verificado:** execução com o ELF real, geração C++ do jogo real e compilação do APK com essa saída. As fixtures da CI não contêm dados do jogo.
+## Presenter RGBA→Vulkan — CIs 230/231
+
+O helper `android_frame_scaler.cpp` é testado em host para dimensões e tamanho de buffer, aspect-fit, letterboxing preto opaco, preservação de pixels e conversão RGBA→BGRA. O caminho Android, quando `GOW_ANDROID_ENABLE_VULKAN_SMOKE=ON`, usa um `VkBuffer` host-visible, `vkFlushMappedMemoryRanges` para memória não coerente e barriers `UNDEFINED/PRESENT → TRANSFER_DST → PRESENT` antes de `vkCmdCopyBufferToImage`.
+
+**[VERIFICADO NA CI]** Run `42255177609` (230): scaler host e APK ARM64 aprovados. Run `42255283925` (231): recompilação ARM64 após a invalidação do cache de upload em swapchain resize/recreate. Artefato `gow-android-arm64-shell` ID `13522097351`.
+
+**[NÃO TESTADO EM APARELHO]** O caminho permanece desligado por padrão; nenhuma imagem de God of War foi fornecida pelo backend GS. A implementação não prova render targets, rasterização, texturas, alpha/depth ou composição GS. Um clear/present ou cópia RGBA não conta como primeira imagem do jogo.
