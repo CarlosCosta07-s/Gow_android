@@ -26,6 +26,22 @@ def main() -> int:
     for path in (header_path, runtime_path, gs_path):
         require(path.is_file(), f"Prepared runtime file is missing: {path}")
 
+    project_root = Path(__file__).resolve().parents[1]
+    vu1_compat_source = project_root / "port/kiexter/vu1/ps2_vu1_neon_compat.h"
+    vu1_mapping_source = project_root / "port/kiexter/vu1/ps2_vu1_fpcr_mapping.h"
+    vu1_compat_target = root / "ps2xRuntime/include/runtime/ps2_vu1_neon_compat.h"
+    vu1_mapping_target = root / "ps2xRuntime/include/runtime/ps2_vu1_fpcr_mapping.h"
+    for source, target, description in (
+        (vu1_compat_source, vu1_compat_target, "NEON compatibility header"),
+        (vu1_mapping_source, vu1_mapping_target, "FPCR mapping header"),
+    ):
+        require(source.is_file(), f"Repository {description} is missing: {source}")
+        require(target.is_file(), f"Prepared runtime {description} is missing: {target}")
+        require(
+            source.read_bytes() == target.read_bytes(),
+            f"Prepared runtime {description} differs from the repository source.",
+        )
+
     header = header_path.read_text(encoding="utf-8")
     runtime = runtime_path.read_text(encoding="utf-8")
     gs = gs_path.read_text(encoding="utf-8")

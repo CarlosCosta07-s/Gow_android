@@ -449,13 +449,21 @@ def main() -> int:
 
     # Reuse the repository's ARM64 NEON shim for the SSE-style VU1 native block API.
     neon_compat_source = repo_root / "port/kiexter/vu1/ps2_vu1_neon_compat.h"
+    neon_mapping_source = repo_root / "port/kiexter/vu1/ps2_vu1_fpcr_mapping.h"
     if not neon_compat_source.is_file():
         raise RuntimeError(f"Required ARM64 VU1 compatibility header is missing: {neon_compat_source}")
+    if not neon_mapping_source.is_file():
+        raise RuntimeError(f"Required ARM64 VU1 FPCR mapping header is missing: {neon_mapping_source}")
     neon_compat_target = recompiler_source / "ps2xRuntime/include/runtime/ps2_vu1_neon_compat.h"
+    neon_mapping_target = recompiler_source / "ps2xRuntime/include/runtime/ps2_vu1_fpcr_mapping.h"
     native_header = recompiler_source / "ps2xRuntime/include/runtime/ps2_vu1_native.h"
     if not native_header.is_file():
         raise RuntimeError(f"Waffle VU1 native header is missing: {native_header}")
     shutil.copy2(neon_compat_source, neon_compat_target)
+    # The compatibility header includes this helper with a sibling include;
+    # copy both files into the prepared Waffle tree so Android CMake can compile
+    # every translation unit that consumes the VU1/GS FPCR compatibility layer.
+    shutil.copy2(neon_mapping_source, neon_mapping_target)
     replace_exactly_once(
         native_header,
         "#include <immintrin.h>\n",
