@@ -4,7 +4,7 @@
 **Branch de desenvolvimento:** `main`  
 **Objetivo:** port nativo de God of War (PS2, 2005) para Android ARM64, usando recompilação estática e runtime de serviços PS2 nativo; não é um emulador.
 
-**Atualização de diagnóstico local (06/11/2026):** foi adicionado o log privado `files/gow-runtime.log`, configurado pelo ciclo de boot Android, com gravação limitada a 2 MiB, proteção contra symlink e botão **Exportar log** no overlay Debug. O teste C++ de limite, rotação/truncamento e symlink passou localmente com `-Wall -Wextra -Werror`; a CI Android foi atualizada para executar o mesmo teste e precisa confirmar a compilação integrada. Esta melhoria facilita coletar os últimos estados/erros EE, IOP e VU1 no próprio telefone. **Não significa boot real nem cena gráfica validada.**
+**Atualização de diagnóstico local (06/11/2026):** foi adicionado o log privado `files/gow-runtime.log`, configurado pelo ciclo de boot Android, com gravação limitada a 2 MiB, proteção contra symlink e botão **Exportar log** no overlay Debug. O teste C++ de limite, truncamento controlado e symlink passou localmente com `-Wall -Wextra -Werror`; a CI Android foi atualizada para executar o mesmo teste e precisa confirmar a compilação integrada. Esta melhoria facilita coletar os últimos estados/erros EE, IOP e VU1 no próprio telefone. **Não significa boot real nem cena gráfica validada.**
 
 ## [DECISÃO ARQUITETURAL] Instalação BT3
 
