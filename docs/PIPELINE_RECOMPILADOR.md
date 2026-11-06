@@ -69,7 +69,7 @@ Na CI Android, o workflow chama:
 
 A execução 42152175783 usou o NDK 30.0.16248370 e terminou com sucesso para o runtime ARM64 e para o APK Debug. As verificações do builder confirmaram PS2X_VU1_NATIVE_ONLY=1, ausência de iop_cpu.cpp e ausência das fontes diferenciais PCSX2.
 
-**Limite desta etapa:** a biblioteca estática é produzida na pasta de trabalho privada do CI e ainda não é importada nem ligada ao android-game. Não há ponte JNI para criar/dirigir PS2Runtime, não há VFS conectado ao SAF e não existe sessão de jogo. A próxima etapa é materializar os arquivos estáticos necessários num diretório de build privado e ligar as bibliotecas ao target Android existente, preservando o lifecycle de GameActivity.
+**Estado atual:** a preparação privada do Waffle é exportada em `android/app/build/gow-runtime-source` (diretório ignorado pelo Git), consumida pelo CMake do aplicativo e ligada ao alvo `android-game`. O loop nativo GameActivity cria/destrói `PS2Runtime` sem chamar `initialize()`, `loadELF()` ou `run()`. As execuções Android `42159359100` e `42159363088` compilaram essa ligação. Não há VFS conectado ao SAF, C++ do ELF privado nem sessão de jogo; a CI não executa uma Activity num aparelho.
 
 ## Dependências do host
 
@@ -94,9 +94,11 @@ O alvo ps2xRecomp também declara um include privado para ps2xRuntime/include. P
 - Não captura nem gera microprogramas VU1.
 - Não compila o C++ produzido para ARM64.
 - Não gera os arquivos C++ a partir do ELF privado do usuário.
-- Não liga a biblioteca estática produzida à aplicação FORGE nem implementa a ponte JNI/GowGameActivity.
-- Não conecta o runtime à GowGameActivity.
-- Não implementa GS/Vulkan, áudio Android, controles ou cache/VFS.
+- Não gera automaticamente o C++ do jogo sem que o usuário forneça seu ELF privado.
+- Não conecta o VFS aos descritores SAF nem monta a imagem ISO como dispositivo de CD/DVD do runtime.
+- Não inicializa o runtime, carrega o ELF em memória guest, executa instruções recompiladas ou inicia a sessão do jogo.
+- Não implementa o backend GS/Vulkan, presenter Android, áudio Android, overlay visual de toque ou tela de opções dentro do jogo.
+- Não comprova boot ou gameplay.
 - Não prova boot ou gameplay.
 
 O primeiro resultado esperado é um conjunto não vazio de fontes C++ gerados em generated/, incluindo register_functions.cpp, ps2_recompiled_functions.h e ps2_recompiled_stubs.h. Com --export-game-cpp-dir, o script copia somente fontes e cabeçalhos para android/app/build/gow-generated-game (diretório ignorado pelo Git). O CMake Android detecta esse conjunto, inclui recursivamente os .cpp gerados no alvo android-game e desativa a tabela vazia de shell; sem código gerado completo, mantém a tabela vazia de zero slots. O build com código gerado ainda depende do ELF privado do usuário e precisa ser validado separadamente, sem publicar o ELF nem o C++ gerado.
