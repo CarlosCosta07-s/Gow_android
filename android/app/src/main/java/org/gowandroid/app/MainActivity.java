@@ -121,6 +121,7 @@ public final class MainActivity extends AppCompatActivity {
     private String selectedDiscSerial;
     private String selectedDiscBootPath;
     private boolean installingDisc;
+    private boolean exportingElf;
     private volatile boolean cancelDiscInstallRequested;
     private String preparedElfSummary;
 
@@ -746,6 +747,7 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void onPlayPressed() {
+        if (exportingElf) return;
         if (selectedDiscUri == null) {
             new AlertDialog.Builder(this)
                     .setTitle("Nenhuma imagem selecionada")
@@ -978,7 +980,7 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void startFullDiscInstall(boolean repairExisting) {
-        if (installingDisc || selectedDiscUri == null
+        if (installingDisc || exportingElf || selectedDiscUri == null
                 || selectedDiscBootPath == null || !selectedDiscValid) {
             return;
         }
@@ -1262,14 +1264,14 @@ public final class MainActivity extends AppCompatActivity {
         File cdRoot = privateDiscRootForSelectedGame();
         boolean ready = selectedDiscValid && ntScU && cdRoot != null
                 && new File(cdRoot, ".gow_disc_integrity").isFile()
-                && !installingDisc;
+                && !installingDisc && !exportingElf;
         exportElfButton.setEnabled(ready);
         exportElfButton.setAlpha(ready ? 1f : 0.5f);
     }
 
     private void confirmAotElfExport() {
         refreshExportElfButtonState();
-        if (exportElfButton == null || !exportElfButton.isEnabled()) {
+        if (exportingElf || exportElfButton == null || !exportElfButton.isEnabled()) {
             new AlertDialog.Builder(this)
                     .setTitle("ELF ainda não disponível")
                     .setMessage("Instale e valide primeiro a imagem NTSC-U com o executável SCUS_973.99.")
@@ -1330,11 +1332,21 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void onElfExportDestinationSelected(Uri destination) {
-        if (destination == null || installingDisc || selectedDiscBootPath == null) return;
+        if (destination == null || installingDisc || exportingElf
+                || selectedDiscBootPath == null) return;
         final String bootPath = selectedDiscBootPath;
         final File cdRoot = privateDiscRootForSelectedGame();
         if (cdRoot == null) return;
-        exportElfButton.setEnabled(false);
+        exportingElf = true;
+        refreshExportElfButtonState();
+        if (selectDiscButton != null) {
+            selectDiscButton.setEnabled(false);
+            selectDiscButton.setAlpha(0.5f);
+        }
+        if (installDiscButton != null) {
+            installDiscButton.setEnabled(false);
+            installDiscButton.setAlpha(0.5f);
+        }
         discStatus.setText("Validando e exportando SCUS_973.99 para o local escolhido...");
         discStatus.setTextColor(COLOR_MUTED);
         ioExecutor.execute(() -> {
@@ -1395,6 +1407,15 @@ public final class MainActivity extends AppCompatActivity {
             final String finalFailure = failure;
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
+                exportingElf = false;
+                if (selectDiscButton != null) {
+                    selectDiscButton.setEnabled(true);
+                    selectDiscButton.setAlpha(1f);
+                }
+                if (installDiscButton != null) {
+                    installDiscButton.setEnabled(true);
+                    installDiscButton.setAlpha(1f);
+                }
                 refreshExportElfButtonState();
                 if (finalFailure == null) {
                     discStatus.setText("SCUS_973.99 exportado e conferido por SHA-256. O ELF permanece sob seu controle local.");
@@ -1483,7 +1504,7 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void onDiscSelected(Uri uri) {
-        if (uri == null) {
+        if (uri == null || exportingElf) {
             return;
         }
 
