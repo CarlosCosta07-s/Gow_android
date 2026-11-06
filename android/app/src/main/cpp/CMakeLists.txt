@@ -55,18 +55,50 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
 
     target_sources(android-game PRIVATE runtime_link_bridge.cpp)
 
-    # The empty table is a shell-only link scaffold. Turn this option OFF when
-    # private C++ generated from the user's PS2 ELF is added to the Android target.
-    option(GOW_ANDROID_EMPTY_RECOMPILED_TABLE
-        "Link an empty function table until private game code is generated" ON)
-    if(GOW_ANDROID_EMPTY_RECOMPILED_TABLE)
-        set(GOW_EMPTY_TABLE_SOURCE
-            "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/src/lib/android_recompiled_table_placeholder.cpp")
-        if(NOT EXISTS "${GOW_EMPTY_TABLE_SOURCE}")
+    # PS2Recomp outputs remain private and are staged under android/app/build,
+    # which is ignored by Git. Its individual-function output may be nested.
+    set(GOW_ANDROID_GENERATED_GAME_DIR
+        "${CMAKE_CURRENT_LIST_DIR}/../../../build/gow-generated-game"
+        CACHE PATH "Private PS2Recomp-generated C++ for the user's own PS2 ELF")
+    file(GLOB_RECURSE GOW_ANDROID_GENERATED_GAME_SOURCES
+        CONFIGURE_DEPENDS "${GOW_ANDROID_GENERATED_GAME_DIR}/*.cpp")
+
+    if(GOW_ANDROID_GENERATED_GAME_SOURCES)
+        foreach(required_file
+            register_functions.cpp
+            ps2_recompiled_functions.h
+            ps2_recompiled_stubs.h)
+            if(NOT EXISTS "${GOW_ANDROID_GENERATED_GAME_DIR}/${required_file}")
+                message(FATAL_ERROR
+                    "Generated PS2 game-code staging is incomplete: missing ${required_file}. "
+                    "Re-run the private PS2Recomp export.")
+            endif()
+        endforeach()
+
+        # A real generated table replaces the zero-slot shell-only table.
+        set(GOW_ANDROID_EMPTY_RECOMPILED_TABLE OFF CACHE BOOL
+            "Link an empty function table until private game code is generated" FORCE)
+        target_sources(android-game PRIVATE ${GOW_ANDROID_GENERATED_GAME_SOURCES})
+        target_include_directories(android-game PRIVATE "${GOW_ANDROID_GENERATED_GAME_DIR}")
+        set_property(GLOBAL APPEND PROPERTY JOB_POOLS gow_recompiled_compile=2)
+        set_property(TARGET android-game PROPERTY JOB_POOL_COMPILE gow_recompiled_compile)
+        message(STATUS "FORGE Android target includes private PS2Recomp game C++.")
+    else()
+        option(GOW_ANDROID_EMPTY_RECOMPILED_TABLE
+            "Link an empty function table until private game code is generated" ON)
+        if(GOW_ANDROID_EMPTY_RECOMPILED_TABLE)
+            set(GOW_EMPTY_TABLE_SOURCE
+                "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/src/lib/android_recompiled_table_placeholder.cpp")
+            if(NOT EXISTS "${GOW_EMPTY_TABLE_SOURCE}")
+                message(FATAL_ERROR
+                    "Shell function-table stub is missing. Re-run --prepare-android-runtime.")
+            endif()
+            target_sources(android-game PRIVATE "${GOW_EMPTY_TABLE_SOURCE}")
+        else()
             message(FATAL_ERROR
-                "Shell function-table stub is missing. Re-run --prepare-android-runtime.")
+                "GOW_ANDROID_EMPTY_RECOMPILED_TABLE is OFF, but no private generated game C++ "
+                "was found in ${GOW_ANDROID_GENERATED_GAME_DIR}.")
         endif()
-        target_sources(android-game PRIVATE "${GOW_EMPTY_TABLE_SOURCE}")
     endif()
 
     target_include_directories(android-game PRIVATE
