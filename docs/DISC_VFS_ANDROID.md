@@ -79,7 +79,7 @@ O script `tools/build_recompiler_host.py` foi alterado para que a árvore Waffle
 
 O runtime define `paths.cdRoot` para `gowcdroot:/` quando o provider privado está aberto. O código antigo de patch que roteava `gowdisc:/` para o leitor ISO foi substituído nessa preparação. O bridge ISO continua presente como leitor/importador, mas deixa de ser o provider previsto para gameplay.
 
-**Limite:** o patch só modifica o runtime privado em `android/app/build/gow-runtime-source` durante a preparação. Isso ainda não significa que o PS2Runtime está sendo iniciado pela Activity nem que os serviços do jogo estejam abrindo arquivos pelo VFS durante um boot real. A execução e a CI precisam validar que as âncoras do patch ainda correspondem à revisão fixada.
+**Verificação de compilação:** o patch de preparação foi compilado no build host estrito sem arquivos do jogo (run `42186655605`) e o target Android ARM64 que consome a árvore preparada compilou (run `42187116530`). **Limite:** isso confirma a compilação do provider e do adaptador, não que o PS2Runtime esteja sendo iniciado pela Activity nem que os serviços do jogo estejam abrindo arquivos pelo VFS durante um boot real.
 
 ## 6. Próximas etapas
 
