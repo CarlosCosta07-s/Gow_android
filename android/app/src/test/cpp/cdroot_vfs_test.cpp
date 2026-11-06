@@ -1,4 +1,5 @@
 #include "cdroot_vfs.h"
+#include "ps2_elf_validator.h"
 
 #include <array>
 #include <cstdint>
@@ -25,6 +26,53 @@ bool writeFile(const std::filesystem::path &path,
     stream.write(reinterpret_cast<const char *>(bytes.data()),
                  static_cast<std::streamsize>(bytes.size()));
     return stream.good();
+}
+
+void writeU16Le(std::vector<uint8_t> &bytes, size_t offset, uint16_t value) {
+    bytes[offset] = static_cast<uint8_t>(value & 0xFFu);
+    bytes[offset + 1u] = static_cast<uint8_t>((value >> 8u) & 0xFFu);
+}
+
+void writeU32Le(std::vector<uint8_t> &bytes, size_t offset, uint32_t value) {
+    bytes[offset] = static_cast<uint8_t>(value & 0xFFu);
+    bytes[offset + 1u] = static_cast<uint8_t>((value >> 8u) & 0xFFu);
+    bytes[offset + 2u] = static_cast<uint8_t>((value >> 16u) & 0xFFu);
+    bytes[offset + 3u] = static_cast<uint8_t>((value >> 24u) & 0xFFu);
+}
+
+std::vector<uint8_t> makeSyntheticElf(bool validMagic, bool entryCovered) {
+    std::vector<uint8_t> bytes(88u, 0u);
+    if (validMagic) {
+        bytes[0] = 0x7Fu;
+        bytes[1] = 'E';
+        bytes[2] = 'L';
+        bytes[3] = 'F';
+    }
+    bytes[4] = 1u; // ELFCLASS32
+    bytes[5] = 1u; // ELFDATA2LSB
+    bytes[6] = 1u; // EV_CURRENT
+    writeU16Le(bytes, 16u, 2u); // ET_EXEC
+    writeU16Le(bytes, 18u, 8u); // EM_MIPS
+    writeU32Le(bytes, 20u, 1u); // EV_CURRENT
+    writeU32Le(bytes, 24u, entryCovered ? 0x00100000u : 0x00200000u);
+    writeU32Le(bytes, 28u, 52u); // e_phoff
+    writeU16Le(bytes, 40u, 52u); // e_ehsize
+    writeU16Le(bytes, 42u, 32u); // e_phentsize
+    writeU16Le(bytes, 44u, 1u);  // e_phnum
+
+    writeU32Le(bytes, 52u, 1u); // PT_LOAD
+    writeU32Le(bytes, 56u, 84u); // p_offset
+    writeU32Le(bytes, 60u, 0x00100000u); // p_vaddr
+    writeU32Le(bytes, 64u, 0x00100000u); // p_paddr
+    writeU32Le(bytes, 68u, 4u); // p_filesz
+    writeU32Le(bytes, 72u, 8u); // p_memsz
+    writeU32Le(bytes, 76u, 5u); // p_flags
+    writeU32Le(bytes, 80u, 16u); // p_align
+    bytes[84] = 0x11u;
+    bytes[85] = 0x22u;
+    bytes[86] = 0x33u;
+    bytes[87] = 0x44u;
+    return bytes;
 }
 } // namespace
 
@@ -203,6 +251,48 @@ int main() {
         std::filesystem::remove_all(root);
         std::filesystem::remove(outsideFile);
         return fail("cdRoot selected one of two ambiguous ISO-normalized names");
+    }
+
+    const std::filesystem::path validElfPath = dataDirectory / "BOOT.ELF;1";
+    const std::filesystem::path badMagicElfPath = dataDirectory / "BAD-MAGIC.ELF";
+    const std::filesystem::path badEntryElfPath = dataDirectory / "BAD-ENTRY.ELF";
+    if (!writeFile(validElfPath, makeSyntheticElf(true, true)) ||
+        !writeFile(badMagicElfPath, makeSyntheticElf(false, true)) ||
+        !writeFile(badEntryElfPath, makeSyntheticElf(true, false))) {
+        vfs.close();
+        std::filesystem::remove_all(root);
+        std::filesystem::remove(outsideFile);
+        return fail("could not create synthetic PS2 ELF fixtures");
+    }
+
+    gow::disc::Ps2ElfInfo elfInfo{};
+    if (!gow::disc::validatePs2Elf(vfs, "data/boot.elf", elfInfo, &error) ||
+        elfInfo.fileSize != 88u ||
+        elfInfo.entryPoint != 0x00100000u ||
+        elfInfo.programHeaderCount != 1u ||
+        elfInfo.loadableSegmentCount != 1u) {
+        vfs.close();
+        std::filesystem::remove_all(root);
+        std::filesystem::remove(outsideFile);
+        return fail("private cdRoot did not validate a case-insensitive versioned PS2 ELF: " + error);
+    }
+
+    gow::disc::Ps2ElfInfo rejectedElfInfo{};
+    if (gow::disc::validatePs2Elf(vfs, "DATA/BAD-MAGIC.ELF",
+                                  rejectedElfInfo, &error) ||
+        error.find("magic") == std::string::npos) {
+        vfs.close();
+        std::filesystem::remove_all(root);
+        std::filesystem::remove(outsideFile);
+        return fail("private cdRoot accepted a boot ELF with invalid magic");
+    }
+    if (gow::disc::validatePs2Elf(vfs, "DATA/BAD-ENTRY.ELF",
+                                  rejectedElfInfo, &error) ||
+        error.find("entry point") == std::string::npos) {
+        vfs.close();
+        std::filesystem::remove_all(root);
+        std::filesystem::remove(outsideFile);
+        return fail("private cdRoot accepted an ELF entry point outside PT_LOAD");
     }
 
     vfs.closeFile(file.handle);
