@@ -15,6 +15,7 @@
 #include <vector>
 
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <unistd.h>
 
 namespace gow::disc {
@@ -216,7 +217,11 @@ bool removeDirectoryContentsAt(int parentFd, const char *name) {
 }
 
 bool ensureDirectoryAt(int parentFd, const std::string &name, int &directoryFd) {
-    if (::mkdirat(parentFd, name.c_str(), 0700) != 0 && errno != EEXIST) {
+    const bool created = ::mkdirat(parentFd, name.c_str(), 0700) == 0;
+    if (!created && errno != EEXIST) {
+        return false;
+    }
+    if (created && ::fsync(parentFd) != 0) {
         return false;
     }
     directoryFd = ::openat(parentFd, name.c_str(),
@@ -295,6 +300,27 @@ IsoInstallResult installIsoManifest(
         return result;
     }
 
+    struct statvfs storageInfo {};
+    if (::fstatvfs(rootFd, &storageInfo) != 0 ||
+        storageInfo.f_frsize == 0u) {
+        ::close(rootFd);
+        result.error = "Could not query available private storage.";
+        return result;
+    }
+    const uint64_t availableBlocks =
+        static_cast<uint64_t>(storageInfo.f_bavail);
+    const uint64_t blockSize =
+        static_cast<uint64_t>(storageInfo.f_frsize);
+    const uint64_t availableBytes =
+        availableBlocks > std::numeric_limits<uint64_t>::max() / blockSize
+            ? std::numeric_limits<uint64_t>::max()
+            : availableBlocks * blockSize;
+    if (result.totalBytes > availableBytes) {
+        ::close(rootFd);
+        result.error = "Insufficient private storage for the selected ISO files.";
+        return result;
+    }
+
     const std::string stageName = "." + finalDirectoryName + ".staging";
     struct stat finalStatus {};
     if (::fstatat(rootFd, finalDirectoryName.c_str(), &finalStatus,
@@ -354,8 +380,8 @@ IsoInstallResult installIsoManifest(
 
         const int outputFd = ::openat(parentFd, leaf.c_str(),
             O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
-        ::close(parentFd);
         if (outputFd < 0) {
+            ::close(parentFd);
             result.error = "Could not create an extracted file in staging.";
             copySucceeded = false;
             break;
@@ -390,7 +416,15 @@ IsoInstallResult installIsoManifest(
             fileSucceeded = false;
             result.error = "Could not flush an extracted file to private storage.";
         }
-        ::close(outputFd);
+        if (fileSucceeded && ::fsync(parentFd) != 0) {
+            fileSucceeded = false;
+            result.error = "Could not flush an extracted file's parent directory.";
+        }
+        if (::close(outputFd) != 0 && fileSucceeded) {
+            fileSucceeded = false;
+            result.error = "Could not close an extracted file cleanly.";
+        }
+        ::close(parentFd);
         if (!fileSucceeded) {
             copySucceeded = false;
             break;
