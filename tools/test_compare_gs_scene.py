@@ -17,6 +17,7 @@ class CompareGsSceneTests(unittest.TestCase):
         self.assertEqual(metrics["mae"], 0.0)
         self.assertEqual(metrics["rmse"], 0.0)
         self.assertEqual(metrics["matching_pixels_percent"], 100.0)
+        self.assertIsNone(metrics["psnr_db"])
 
     def test_tolerance_is_evaluated_per_pixel(self) -> None:
         reference = bytes([10, 20, 30, 100, 110, 120])
