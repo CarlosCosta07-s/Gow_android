@@ -1,7 +1,10 @@
 #include "android_gs_scene_capture.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <fstream>
+#include <iterator>
 #include <iostream>
 #include <stdexcept>
 #include <string>
