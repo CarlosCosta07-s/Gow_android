@@ -120,3 +120,14 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 - A tabela g_ps2RecompiledFunctionTable ligada nesta etapa é explicitamente vazia (zero slots). Ela resolve apenas o contrato de link do shell enquanto não existe C++ gerado a partir do ELF privado do usuário.
 - A conclusão do build não prova boot, rendering GS, áudio, controles ou gameplay. Nenhum ELF, IRX, microcódigo ou dado de jogo foi adicionado ao repositório.
 - A construção/inicialização do objeto PS2Runtime e a integração do seu ciclo de vida com GameActivity ainda precisam de um smoke test controlado; PS2Runtime::initialize() não deve ser chamado antes da substituição dos adaptadores desktop de janela, gráficos e áudio.
+
+## [IMPLEMENTADO; CI PENDENTE] Ciclo GameActivity e ponte Android de controle
+
+- O código nativo cria o objeto PS2Runtime no início do android_main e o destrói ao encerrar a atividade. Este é um smoke de construção/destruição, não inicialização do runtime nem execução do jogo.
+- O perfil Android define PS2X_ANDROID_LIFECYCLE_MANAGED; a preparação privada protege o destrutor para não consultar IsAudioDeviceReady() sem inicialização do áudio Raylib.
+- Eventos físicos de gamepad e teclado são recebidos por android_app::onInputEvent e convertidos para o formato ativo-baixo/analógico do DualShock 2. Porta 0/slot 0 é a primeira implementação.
+- A ponte contém deadzone, sensibilidade, inversão dos eixos e fontes virtuais de toque para permitir que o futuro overlay injete o mesmo estado do controle físico.
+- Rumbling/haptics Android, overlay gráfico de toque e UI de remapeamento ainda não estão implementados.
+- A CI precisa compilar esta alteração. Não há teste físico automatizado de gamepad nem prova de que GameActivity executou o smoke em aparelho.
+
+**Bloqueio preservado:** PS2Runtime::initialize(), loadELF() e run() continuam sem chamada no Android. O host Raylib/OpenGL ainda não foi substituído pelos adaptadores GS/Vulkan e áudio Android, e a tabela de funções recompiladas continua vazia.
