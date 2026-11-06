@@ -171,7 +171,105 @@ def main() -> int:
         "IOP strict-mode preprocessor close",
     )
 
+    # Keep exception entry semantics available to native AOT code without constructing IopCpuCore.
+    replace_exactly_once(
+        iop_cpp,
+        """        bool iequals(std::string_view lhs, std::string_view rhs)
+        {
+            if (lhs.size() != rhs.size())
+                return false;
+            for (size_t i = 0; i < lhs.size(); ++i)
+            {
+                if (std::tolower(static_cast<unsigned char>(lhs[i])) !=
+                    std::tolower(static_cast<unsigned char>(rhs[i])))
+                    return false;
+            }
+            return true;
+        }
+
+    }
+
+    class IopEmulator::Impl""",
+        """        bool iequals(std::string_view lhs, std::string_view rhs)
+        {
+            if (lhs.size() != rhs.size())
+                return false;
+            for (size_t i = 0; i < lhs.size(); ++i)
+            {
+                if (std::tolower(static_cast<unsigned char>(lhs[i])) !=
+                    std::tolower(static_cast<unsigned char>(rhs[i])))
+                    return false;
+            }
+            return true;
+        }
+
+        void raiseIopException(IopCpuState &cpu, uint32_t code, uint32_t faultPc, bool delaySlot,
+                               std::optional<uint32_t> badAddress = std::nullopt)
+        {
+            uint32_t cause = cpu.cop0[13] & ~0x7Cu;
+            cause |= (code & 0x1Fu) << 2u;
+            if (delaySlot)
+            {
+                cause |= 0x80000000u;
+                cpu.cop0[14] = faultPc - 4u;
+            }
+            else
+            {
+                cause &= ~0x80000000u;
+                cpu.cop0[14] = faultPc;
+            }
+            cpu.cop0[13] = cause;
+            if (badAddress)
+                cpu.cop0[8] = *badAddress;
+            const uint32_t status = cpu.cop0[12];
+            cpu.cop0[12] = (status & ~0x3Fu) | ((status << 2u) & 0x3Fu);
+            cpu.pc = (status & (1u << 22u)) ? 0xBFC00180u : 0x80000080u;
+            cpu.branchPending = false;
+            cpu.pendingLoad = false;
+            cpu.exception = true;
+        }
+
+    }
+
+    class IopEmulator::Impl""",
+        "standalone IOP exception entry helper",
+    )
+    replace_exactly_once(
+        iop_cpp,
+        "              ioman(memory),\n              cpuCore(memory),\n              imports(memory),",
+        "              ioman(memory),\n#if !defined(PS2X_IOP_NATIVE_ONLY)\n              cpuCore(memory),\n#endif\n              imports(memory),",
+        "conditional IOP interpreter construction",
+    )
+    replace_exactly_once(
+        iop_cpp,
+        "            cpuCore.raiseException(cpu, 0u, cpu.pc, false);",
+        "            raiseIopException(cpu, 0u, cpu.pc, false);",
+        "independent IOP exception call",
+    )
+    replace_exactly_once(
+        iop_cpp,
+        "        IopCpuCore cpuCore;\n",
+        "#if !defined(PS2X_IOP_NATIVE_ONLY)\n        IopCpuCore cpuCore;\n#endif\n",
+        "conditional IOP interpreter member",
+    )
+
     iop_cmake = recompiler_source / "ps2xIOP/CMakeLists.txt"
+    replace_exactly_once(
+        iop_cmake,
+        "    src/emulator/core/iop_cpu.cpp\n",
+        "",
+        "exclude IOP guest interpreter from unconditional source list",
+    )
+    replace_exactly_once(
+        iop_cmake,
+        "    src/modules/gow_stub_services.cpp\n)\n\n# GOW-Port: IRX modules compiled ahead of time",
+        "    src/modules/gow_stub_services.cpp\n)\n\n"
+        "if(NOT PS2X_IOP_NATIVE_ONLY)\n"
+        "    target_sources(ps2_iop PRIVATE src/emulator/core/iop_cpu.cpp)\n"
+        "endif()\n\n"
+        "# GOW-Port: IRX modules compiled ahead of time",
+        "conditionally compile IOP interpreter only in non-strict builds",
+    )
     replace_exactly_once(
         iop_cmake,
         'option(PS2X_IOP_BUILD_TESTS "Build ps2xIOP emulator smoke tests" OFF)\n',
