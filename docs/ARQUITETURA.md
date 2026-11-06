@@ -182,3 +182,10 @@ Os diretórios de runtime/recompilação serão criados quando houver implementa
 O script tools/build_recompiler_host.py prepara o PS2Recomp na revisão fixada pelo KIexster, aplica o patch-base do runtime e compila somente a ferramenta host ps2_recomp. O ELF e os arquivos C++ produzidos permanecem em uma pasta privada fora do repositório. O Android NDK será usado em uma etapa separada para compilar o código gerado e o runtime adaptado.
 
 O procedimento, dependências, versões fixadas e a triagem dos patches estão documentados em [PIPELINE_RECOMPILADOR.md](PIPELINE_RECOMPILADOR.md). A seleção lógica dos módulos do runtime está em [BASE_KIEXTER.md](BASE_KIEXTER.md). A preparação do script ainda não equivale a uma compilação verificada.
+
+
+### Revisão Waffle fixada para integração
+
+A seleção do runtime usa como referência o commit Waffle 49ca62c1d20b4659c61df6286c54e86edf411012, apontado pela documentação do KIexter para o patch-base de runtime. Não devemos misturar fontes de snapshots posteriores da branch runtime sem revalidar os contratos.
+
+A revisão também deixa explícitos dois requisitos adicionais: ps2xIOP combina módulos IRX gerados por AOT com um núcleo CPU IOP interpretado, e o runner Android upstream ainda depende da organização Raylib/NativeActivity. A integração FORGE vai precisar de um alvo Android próprio, sem o runner de desktop e sem os fallbacks de CPU.
