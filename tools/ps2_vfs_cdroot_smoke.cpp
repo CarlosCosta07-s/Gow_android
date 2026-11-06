@@ -18,7 +18,7 @@ namespace {
 gow::disc::CdRootVfs g_cdRoot;
 
 int fail(const char *message) {
-    std::cerr << "FAIL: " << message << '\\n';
+    std::cerr << "FAIL: " << message << '\n';
     return 1;
 }
 
@@ -35,7 +35,7 @@ bool writeFixture(const std::filesystem::path &path,
 extern "C" uint64_t gowAndroidCdRootOpenFile(
     const char *path, uint64_t *fileSize) noexcept {
     if (fileSize != nullptr) *fileSize = 0u;
-    if (path == nullptr || path[0] == '\\0' || fileSize == nullptr) return 0u;
+    if (path == nullptr || path[0] == '\0' || fileSize == nullptr) return 0u;
 
     gow::disc::CdRootFile file{};
     if (!g_cdRoot.openFile(path, file, nullptr)) return 0u;
