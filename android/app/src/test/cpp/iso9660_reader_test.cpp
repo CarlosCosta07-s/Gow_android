@@ -275,6 +275,32 @@ bool testDualLayerDiscLayout() {
         return false;
     }
 
+    struct CancelAfterFirstFile {
+        size_t calls = 0u;
+    } cancelContext;
+    const auto cancelAfterFirstFile =
+        [](const gow::disc::IsoDiscIntegrityProgress &progress, void *userData) {
+            auto *context = static_cast<CancelAfterFirstFile *>(userData);
+            ++context->calls;
+            return progress.completedFiles == 0u;
+        };
+    const auto cancelInstall = gow::disc::installIsoDisc(
+        reader, root, "gow-integrity-cancel");
+    const std::filesystem::path cancelDisc =
+        std::filesystem::path(root) / "gow-integrity-cancel" / "disc";
+    const auto cancelledIntegrity = gow::disc::verifyIsoDiscIntegrity(
+        cancelDisc.string(), cancelAfterFirstFile, &cancelContext);
+    if (!cancelInstall.success || cancelledIntegrity.valid ||
+        !cancelledIntegrity.cancelled || cancelContext.calls < 2u ||
+        cancelledIntegrity.verifiedBytes == 0u) {
+        std::filesystem::remove_all(root);
+        reader.close();
+        std::fclose(file);
+        std::cerr << "FAIL: integrity cancellation approved or did not stop verification: "
+                  << cancelledIntegrity.error << '\n';
+        return false;
+    }
+
     const auto missingInstall = gow::disc::installIsoDisc(
         reader, root, "gow-integrity-missing");
     const std::filesystem::path missingDisc =

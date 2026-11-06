@@ -79,7 +79,8 @@ public final class MainActivity extends AppCompatActivity {
             String privateRoot, String installationDirectoryName);
 
     private static native boolean nativeSetCdRootDirectory(String privateCdRoot);
-    private static native String nativeVerifyDiscIntegrity(String privateCdRoot);
+    private static native String nativeVerifyDiscIntegrity(
+            String privateCdRoot, InstallProgressCallback progressCallback);
     private static native String nativeValidateCdRootElf(String relativePath);
     private static native String nativePrepareRuntimeIoPaths(String bootRelativePath);
     private static native String nativeValidateDiscSource(String bootRelativePath);
@@ -770,6 +771,173 @@ public final class MainActivity extends AppCompatActivity {
                 .show();
     }
 
+    private void verifyExistingInstallationAsync(
+            File finalInstallation, String bootPath) {
+        if (installingDisc) return;
+
+        installingDisc = true;
+        cancelDiscInstallRequested = false;
+        showDiscInstallProgressDialog(
+                "Verificando instalação existente",
+                "Lendo o manifesto de integridade SHA-256...");
+        if (installDiscButton != null) {
+            installDiscButton.setEnabled(false);
+            installDiscButton.setText("VERIFICANDO...");
+            installDiscButton.setAlpha(0.6f);
+        }
+        discStatus.setText("Verificando a integridade dos arquivos instalados...");
+        discStatus.setTextColor(COLOR_MUTED);
+
+        ioExecutor.execute(() -> {
+            String integrityValidation;
+            String runtimePathValidation = "A verificação SHA-256 precisa passar antes de configurar IoPaths.";
+            String elfValidation = "A validação de IoPaths precisa passar antes de validar o ELF.";
+            String discValidation = "A validação ELF precisa passar antes de abrir o DiscSource.";
+            String iopCdvdValidation = "A validação DiscSource precisa passar antes do probe CDVD do IOP.";
+            boolean cancelled = false;
+            try {
+                File cdRoot = new File(finalInstallation, "disc");
+                integrityValidation = nativeVerifyDiscIntegrity(
+                        cdRoot.getAbsolutePath(), createIntegrityProgressCallback());
+                cancelled = integrityValidation != null
+                        && integrityValidation.startsWith("CANCELLED:");
+                boolean integrityValid = integrityValidation != null
+                        && integrityValidation.startsWith("OK:");
+                boolean cdRootReady = integrityValid
+                        && nativeSetCdRootDirectory(cdRoot.getAbsolutePath());
+                if (!integrityValid) {
+                    if (cancelled) {
+                        runtimePathValidation = "A verificação foi cancelada pelo usuário.";
+                    } else {
+                        runtimePathValidation = "A integridade SHA-256 precisa passar antes de configurar IoPaths.";
+                    }
+                } else if (!cdRootReady) {
+                    runtimePathValidation = "O provider cdRoot não conseguiu abrir a pasta privada.";
+                } else {
+                    runtimePathValidation = nativePrepareRuntimeIoPaths(bootPath);
+                    if (runtimePathValidation != null && runtimePathValidation.startsWith("OK:")) {
+                        elfValidation = nativeValidateCdRootElf(bootPath);
+                        if (elfValidation != null && elfValidation.startsWith("OK:")) {
+                            discValidation = nativeValidateDiscSource(bootPath);
+                            if (discValidation != null && discValidation.startsWith("OK:")) {
+                                iopCdvdValidation = nativeValidateIopCdvd(bootPath);
+                            }
+                        }
+                    }
+                }
+            } catch (RuntimeException exception) {
+                integrityValidation = "Falha durante a verificação: " + safeMessage(exception);
+            }
+
+            final String finalIntegrity = integrityValidation;
+            final String finalRuntimePath = runtimePathValidation;
+            final String finalElf = elfValidation;
+            final String finalDisc = discValidation;
+            final String finalCdvd = iopCdvdValidation;
+            final boolean finalCancelled = cancelled
+                    || (cancelDiscInstallRequested
+                        && finalIntegrity != null
+                        && finalIntegrity.startsWith("CANCELLED:"));
+            final boolean installationValid =
+                    finalIntegrity != null && finalIntegrity.startsWith("OK:")
+                    && finalRuntimePath != null && finalRuntimePath.startsWith("OK:")
+                    && finalElf != null && finalElf.startsWith("OK:")
+                    && finalDisc != null && finalDisc.startsWith("OK:")
+                    && finalCdvd != null && finalCdvd.startsWith("OK:");
+            runOnUiThread(() -> finishExistingInstallationValidation(
+                    installationValid, finalCancelled, finalIntegrity,
+                    finalRuntimePath, finalElf, finalDisc, finalCdvd));
+        });
+    }
+
+    private InstallProgressCallback createIntegrityProgressCallback() {
+        final int[] lastPercent = {-1};
+        return (totalBytes, verifiedBytes, completedFiles, totalFiles) -> {
+            if (cancelDiscInstallRequested) return false;
+            int percent = totalBytes <= 0L ? 0
+                    : (int) Math.min(100L, (verifiedBytes * 100L) / totalBytes);
+            if (percent != lastPercent[0]) {
+                lastPercent[0] = percent;
+                final String progressText = totalFiles <= 0
+                        ? "Verificando SHA-256: " + percent + "%"
+                        : percent + "% · " + completedFiles + "/" + totalFiles + " arquivos verificados";
+                runOnUiThread(() -> {
+                    if (!isFinishing() && !isDestroyed()
+                            && discInstallProgressBar != null) {
+                        discStatus.setText("Verificando integridade: " + progressText);
+                        discInstallProgressBar.setProgress(percent);
+                        if (discInstallProgressText != null) {
+                            discInstallProgressText.setText(progressText);
+                        }
+                    }
+                });
+            }
+            return !cancelDiscInstallRequested;
+        };
+    }
+
+    private void finishExistingInstallationValidation(
+            boolean installationValid, boolean cancelled,
+            String integrityValidation, String runtimePathValidation,
+            String elfValidation, String discValidation, String iopCdvdValidation) {
+        if (isFinishing() || isDestroyed()) return;
+        if (discInstallDialog != null) {
+            discInstallDialog.dismiss();
+            discInstallDialog = null;
+        }
+        discInstallProgressBar = null;
+        discInstallProgressText = null;
+        installingDisc = false;
+        if (installDiscButton != null) {
+            installDiscButton.setEnabled(true);
+            installDiscButton.setAlpha(1f);
+            installDiscButton.setText("DISCO INSTALADO");
+            installDiscButton.setContentDescription("Verificar instalação existente");
+        }
+
+        if (cancelled) {
+            discStatus.setText("Verificação de integridade cancelada; nenhum arquivo foi alterado.");
+            new AlertDialog.Builder(this)
+                    .setTitle("Verificação cancelada")
+                    .setMessage("A leitura SHA-256 foi interrompida. A instalação não foi aprovada nem modificada. Você pode verificar novamente.")
+                    .setPositiveButton("Continuar", null)
+                    .show();
+            return;
+        }
+
+        String detail = installationValid
+                ? "Integridade: " + integrityValidation.substring(4).trim()
+                        + ". IoPaths do runtime: " + runtimePathValidation.substring(4).trim()
+                        + ". Executável: " + elfValidation.substring(4).trim()
+                        + ". Fonte CD/DVD: " + discValidation.substring(4).trim()
+                        + ". CDVD/IOP: " + iopCdvdValidation.substring(4).trim() + "."
+                : "Integridade SHA-256: " + integrityValidation
+                        + "\nIoPaths: " + runtimePathValidation
+                        + "\nELF: " + elfValidation
+                        + "\nDiscSource: " + discValidation
+                        + "\nCDVD/IOP: " + iopCdvdValidation;
+        String runtimeStatus = installationValid
+                ? "DiscSource e o dispatcher CDVD do IOP passaram na verificação privada; o runtime de gameplay ainda não foi iniciado."
+                : "A instalação não será utilizada enquanto a validação falhar. Você pode solicitar uma reinstalação dos arquivos desta revisão.";
+        AlertDialog.Builder resultDialog = new AlertDialog.Builder(this)
+                .setTitle(installationValid
+                        ? "Instalação do disco verificada"
+                        : "Instalação existente incompleta")
+                .setMessage("A pasta de instalação já existe no armazenamento privado. "
+                        + detail + "\n\n" + runtimeStatus);
+        if (installationValid) {
+            discStatus.setText("Integridade e fontes de disco verificadas. O boot ainda não foi iniciado.");
+            resultDialog.setPositiveButton("Continuar", null);
+        } else {
+            discStatus.setText("A instalação precisa ser reparada antes de qualquer execução.");
+            resultDialog
+                    .setPositiveButton("Reinstalar", (dialog, which) ->
+                            confirmInstallationRepair())
+                    .setNegativeButton("Cancelar", null);
+        }
+        resultDialog.show();
+    }
+
     private void startFullDiscInstall() {
         startFullDiscInstall(false);
     }
@@ -788,69 +956,7 @@ public final class MainActivity extends AppCompatActivity {
         final File finalInstallation = new File(installationRoot, installationName);
 
         if (finalInstallation.exists() && !repairExisting) {
-            File cdRoot = new File(finalInstallation, "disc");
-            boolean metadataReady =
-                    new File(cdRoot, ".disc_layout").isFile()
-                            && new File(cdRoot, ".disc_meta").isFile();
-            boolean cdRootReady = metadataReady
-                    && nativeSetCdRootDirectory(cdRoot.getAbsolutePath());
-            String integrityValidation = cdRootReady
-                    ? nativeVerifyDiscIntegrity(cdRoot.getAbsolutePath())
-                    : "O provider cdRoot não conseguiu abrir a pasta privada.";
-            boolean integrityValid = integrityValidation != null
-                    && integrityValidation.startsWith("OK:");
-            String installedBootPath = bootPath;
-            String runtimePathValidation = integrityValid
-                    ? nativePrepareRuntimeIoPaths(installedBootPath)
-                    : "A verificação SHA-256 do disco precisa passar antes de configurar IoPaths.";
-            boolean runtimePathValid = runtimePathValidation != null
-                    && runtimePathValidation.startsWith("OK:");
-            String elfValidation = runtimePathValid
-                    ? nativeValidateCdRootElf(installedBootPath)
-                    : "A configuração de IoPaths do PS2Runtime precisa passar antes de validar o ELF.";
-            boolean elfValid = elfValidation != null && elfValidation.startsWith("OK:");
-            String discValidation = elfValid
-                    ? nativeValidateDiscSource(installedBootPath)
-                    : "A validação ELF precisa passar antes de abrir o DiscSource.";
-            boolean discValid = discValidation != null && discValidation.startsWith("OK:");
-            String iopCdvdValidation = discValid
-                    ? nativeValidateIopCdvd(installedBootPath)
-                    : "A validação DiscSource precisa passar antes do probe CDVD do IOP.";
-            boolean iopCdvdValid = iopCdvdValidation != null
-                    && iopCdvdValidation.startsWith("OK:");
-            boolean installationValid =
-                    integrityValid && runtimePathValid && elfValid && discValid && iopCdvdValid;
-            String detail = installationValid
-                    ? "Integridade: " + integrityValidation.substring(4).trim()
-                            + ". IoPaths do runtime: " + runtimePathValidation.substring(4).trim()
-                            + ". Executável: " + elfValidation.substring(4).trim()
-                            + ". Fonte CD/DVD: " + discValidation.substring(4).trim()
-                            + ". CDVD/IOP: " + iopCdvdValidation.substring(4).trim() + "."
-                    : "Integridade SHA-256: " + integrityValidation
-                            + "\nIoPaths: " + runtimePathValidation
-                            + "\nELF: " + elfValidation
-                            + "\nDiscSource: " + discValidation
-                            + "\nCDVD/IOP: " + iopCdvdValidation;
-            String runtimeStatus = installationValid
-                    ? "DiscSource e o dispatcher CDVD do IOP passaram na verificação privada; o runtime de gameplay ainda não foi iniciado."
-                    : "A instalação não será utilizada enquanto a validação falhar. Você pode solicitar uma reinstalação dos arquivos desta revisão.";
-            AlertDialog.Builder resultDialog = new AlertDialog.Builder(this)
-                    .setTitle(installationValid
-                            ? "Instalação do disco verificada"
-                            : "Instalação existente incompleta")
-                    .setMessage(
-                            "A pasta de instalação já existe no armazenamento privado. "
-                                    + detail + "\n\n"
-                                    + runtimeStatus);
-            if (installationValid) {
-                resultDialog.setPositiveButton("Continuar", null);
-            } else {
-                resultDialog
-                        .setPositiveButton("Reinstalar", (dialog, which) ->
-                                confirmInstallationRepair())
-                        .setNegativeButton("Cancelar", null);
-            }
-            resultDialog.show();
+            verifyExistingInstallationAsync(finalInstallation, bootPath);
             return;
         }
 
@@ -937,7 +1043,8 @@ public final class MainActivity extends AppCompatActivity {
                     failure = "Os arquivos foram publicados, mas o provider cdRoot não conseguiu abrir a pasta privada.";
                 } else {
                     String integrityValidation = nativeVerifyDiscIntegrity(
-                            new File(finalInstallation, "disc").getAbsolutePath());
+                            new File(finalInstallation, "disc").getAbsolutePath(),
+                            createIntegrityProgressCallback());
                     if (integrityValidation == null || !integrityValidation.startsWith("OK:")) {
                         failure = "Os arquivos foram publicados, mas a verificação SHA-256 da instalação falhou: "
                                 + (integrityValidation == null
@@ -1007,12 +1114,17 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void showDiscInstallProgressDialog() {
+        showDiscInstallProgressDialog(
+                "Preparando instalação do disco", "Analisando a estrutura do disco...");
+    }
+
+    private void showDiscInstallProgressDialog(String title, String initialMessage) {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(20), dp(14), dp(20), dp(8));
 
         discInstallProgressText = text(
-                "Analisando a estrutura do disco...", 10, COLOR_MUTED,
+                initialMessage, 10, COLOR_MUTED,
                 Typeface.create("sans-serif", Typeface.NORMAL));
         content.addView(discInstallProgressText, matchWrap());
 
@@ -1026,7 +1138,7 @@ public final class MainActivity extends AppCompatActivity {
         content.addView(discInstallProgressBar, progressParams);
 
         discInstallDialog = new AlertDialog.Builder(this)
-                .setTitle("Preparando instalação do disco")
+                .setTitle(title)
                 .setView(content)
                 .setNegativeButton("Cancelar", null)
                 .create();
@@ -1038,7 +1150,7 @@ public final class MainActivity extends AppCompatActivity {
                 cancelDiscInstallRequested = true;
                 cancelButton.setEnabled(false);
                 if (discInstallProgressText != null) {
-                    discInstallProgressText.setText("Cancelando e limpando os arquivos temporários...");
+                    discInstallProgressText.setText("Cancelando a operação com segurança...");
                 }
             });
         });

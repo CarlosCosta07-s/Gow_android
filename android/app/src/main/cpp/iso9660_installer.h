@@ -69,13 +69,28 @@ bool removeIsoDiscInstallation(
     const std::string &installationDirectoryName,
     std::string *error = nullptr);
 
+struct IsoDiscIntegrityProgress {
+    uint64_t totalBytes = 0u;
+    uint64_t verifiedBytes = 0u;
+    size_t completedFiles = 0u;
+    size_t totalFiles = 0u;
+};
+
+using IsoDiscIntegrityProgressCallback =
+    bool (*)(const IsoDiscIntegrityProgress &progress, void *userData);
+
 struct IsoDiscIntegrityResult {
     bool valid = false;
+    bool cancelled = false;
     size_t verifiedFiles = 0u;
     uint64_t verifiedBytes = 0u;
+    uint64_t totalBytes = 0u;
     std::string error;
 };
 
-IsoDiscIntegrityResult verifyIsoDiscIntegrity(const std::string &discRoot);
+IsoDiscIntegrityResult verifyIsoDiscIntegrity(
+    const std::string &discRoot,
+    IsoDiscIntegrityProgressCallback progressCallback = nullptr,
+    void *userData = nullptr);
 
 } // namespace gow::disc

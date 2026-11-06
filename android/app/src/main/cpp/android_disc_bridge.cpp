@@ -41,6 +41,32 @@ std::string g_cdRootPath;
 std::unordered_map<uint64_t, gow::disc::IsoFile> g_openFiles;
 uint64_t g_nextHandle = 1u;
 
+struct JniIntegrityProgressContext {
+    JNIEnv *env = nullptr;
+    jobject callback = nullptr;
+    jmethodID method = nullptr;
+};
+
+bool forwardIntegrityProgress(
+    const gow::disc::IsoDiscIntegrityProgress &progress, void *userData) {
+    auto *context = static_cast<JniIntegrityProgressContext *>(userData);
+    if (context == nullptr || context->env == nullptr ||
+        context->callback == nullptr || context->method == nullptr) {
+        return false;
+    }
+    const jboolean keepGoing = context->env->CallBooleanMethod(
+        context->callback, context->method,
+        static_cast<jlong>(progress.totalBytes),
+        static_cast<jlong>(progress.verifiedBytes),
+        static_cast<jint>(progress.completedFiles),
+        static_cast<jint>(progress.totalFiles));
+    if (context->env->ExceptionCheck()) {
+        context->env->ExceptionClear();
+        return false;
+    }
+    return keepGoing == JNI_TRUE;
+}
+
 bool setDiscDescriptor(int descriptor) noexcept {
     std::lock_guard<std::mutex> lock(g_discMutex);
     g_openFiles.clear();
@@ -271,7 +297,7 @@ Java_org_gowandroid_app_MainActivity_nativeSetCdRootDirectory(
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_gowandroid_app_MainActivity_nativeVerifyDiscIntegrity(
-    JNIEnv *env, jclass, jstring privateCdRoot) {
+    JNIEnv *env, jclass, jstring privateCdRoot, jobject progressCallback) {
     auto makeResult = [env](const std::string &message) -> jstring {
         return env->NewStringUTF(message.c_str());
     };
@@ -280,8 +306,36 @@ Java_org_gowandroid_app_MainActivity_nativeVerifyDiscIntegrity(
         if (!copyJavaString(env, privateCdRoot, rootPath) || rootPath.empty()) {
             return makeResult("A raiz privada cdRoot está vazia ou inválida.");
         }
+
+        JniIntegrityProgressContext progressContext;
+        jclass callbackClass = nullptr;
+        if (progressCallback != nullptr) {
+            callbackClass = env->GetObjectClass(progressCallback);
+            if (callbackClass == nullptr) {
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                return makeResult("Não foi possível preparar o callback de progresso SHA-256.");
+            }
+            progressContext.env = env;
+            progressContext.callback = progressCallback;
+            progressContext.method = env->GetMethodID(
+                callbackClass, "onProgress", "(JJII)Z");
+            if (progressContext.method == nullptr) {
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                env->DeleteLocalRef(callbackClass);
+                return makeResult("O callback Java de progresso SHA-256 tem uma assinatura inválida.");
+            }
+        }
+
         const gow::disc::IsoDiscIntegrityResult result =
-            gow::disc::verifyIsoDiscIntegrity(rootPath);
+            gow::disc::verifyIsoDiscIntegrity(
+                rootPath,
+                progressCallback != nullptr ? forwardIntegrityProgress : nullptr,
+                progressCallback != nullptr ? &progressContext : nullptr);
+        if (callbackClass != nullptr) env->DeleteLocalRef(callbackClass);
+
+        if (result.cancelled) {
+            return makeResult("CANCELLED: A verificação SHA-256 foi cancelada.");
+        }
         if (!result.valid) {
             return makeResult(result.error.empty()
                 ? "A instalação não passou na verificação SHA-256."

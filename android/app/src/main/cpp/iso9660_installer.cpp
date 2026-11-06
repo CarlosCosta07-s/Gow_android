@@ -229,8 +229,11 @@ int openRegularRelativeAt(int rootFd, const std::string &relativePath) {
     return fileFd;
 }
 
-bool hashFileDescriptor(int fd, uint64_t expectedSize,
-                        std::string &digest, std::string &error) {
+bool hashFileDescriptor(
+    int fd, uint64_t expectedSize, std::string &digest, std::string &error,
+    IsoDiscIntegrityProgress &progress,
+    IsoDiscIntegrityProgressCallback progressCallback, void *userData,
+    bool &cancelled) {
     struct stat before {};
     if (::fstat(fd, &before) != 0 || !S_ISREG(before.st_mode) ||
         before.st_size < 0 ||
@@ -241,6 +244,8 @@ bool hashFileDescriptor(int fd, uint64_t expectedSize,
     Sha256 hash;
     std::array<uint8_t, kCopyBufferSize> buffer{};
     uint64_t totalRead = 0u;
+    uint64_t lastNotification = progress.verifiedBytes;
+    constexpr uint64_t kProgressInterval = 1024u * 1024u;
     while (true) {
         const ssize_t count = ::read(fd, buffer.data(), buffer.size());
         if (count < 0) {
@@ -250,12 +255,28 @@ bool hashFileDescriptor(int fd, uint64_t expectedSize,
         }
         if (count == 0) break;
         const size_t bytes = static_cast<size_t>(count);
-        if (totalRead > expectedSize || bytes > expectedSize - totalRead) {
-            error = "A file grew while its SHA-256 hash was calculated.";
+        const uint64_t byteCount = static_cast<uint64_t>(bytes);
+        if (totalRead > expectedSize || byteCount > expectedSize - totalRead ||
+            progress.verifiedBytes > progress.totalBytes ||
+            byteCount > progress.totalBytes - progress.verifiedBytes) {
+            error = "A file grew or exceeded the integrity verification plan.";
             return false;
         }
         hash.update(buffer.data(), bytes);
-        totalRead += static_cast<uint64_t>(bytes);
+        totalRead += byteCount;
+        progress.verifiedBytes += byteCount;
+
+        const bool intervalReached =
+            progress.verifiedBytes - lastNotification >= kProgressInterval;
+        const bool finalChunk = progress.verifiedBytes == progress.totalBytes;
+        if (progressCallback != nullptr && (intervalReached || finalChunk)) {
+            if (!progressCallback(progress, userData)) {
+                cancelled = true;
+                error = "The SHA-256 integrity verification was cancelled.";
+                return false;
+            }
+            lastNotification = progress.verifiedBytes;
+        }
     }
     if (totalRead != expectedSize) {
         error = "A file changed size while its SHA-256 hash was calculated.";
@@ -287,7 +308,12 @@ bool hashRelativeFileAt(int rootFd, const std::string &relativePath,
         return false;
     }
     size = static_cast<uint64_t>(status.st_size);
-    const bool success = hashFileDescriptor(fd, size, digest, error);
+    IsoDiscIntegrityProgress progress;
+    progress.totalBytes = size;
+    progress.totalFiles = 1u;
+    bool cancelled = false;
+    const bool success = hashFileDescriptor(
+        fd, size, digest, error, progress, nullptr, nullptr, cancelled);
     ::close(fd);
     if (!success) error = relativePath + ": " + error;
     return success;
@@ -882,7 +908,10 @@ bool removeIsoDiscInstallation(
     return true;
 }
 
-IsoDiscIntegrityResult verifyIsoDiscIntegrity(const std::string &discRoot) {
+IsoDiscIntegrityResult verifyIsoDiscIntegrity(
+    const std::string &discRoot,
+    IsoDiscIntegrityProgressCallback progressCallback,
+    void *userData) {
     IsoDiscIntegrityResult result;
     if (discRoot.empty()) {
         result.error = "The private disc root is empty.";
@@ -930,6 +959,8 @@ IsoDiscIntegrityResult verifyIsoDiscIntegrity(const std::string &discRoot) {
         return result;
     }
 
+    std::vector<IntegrityEntry> entries;
+    entries.reserve(1024u);
     std::unordered_set<std::string> seenPaths;
     seenPaths.reserve(1024u);
     bool sawLayout = false;
@@ -999,42 +1030,19 @@ IsoDiscIntegrityResult verifyIsoDiscIntegrity(const std::string &discRoot) {
             sawLayout = true;
         if (pathParts.size() == 1u && pathParts[0] == ".disc_meta")
             sawMetadata = true;
-        if (result.verifiedFiles >= kMaxIntegrityEntries) {
+        if (entries.size() >= kMaxIntegrityEntries) {
             result.error = "The SHA-256 integrity manifest exceeds its file-count limit.";
             parseSucceeded = false;
             break;
         }
-
-        const int fileFd = openRegularRelativeAt(rootFd, relativePath);
-        if (fileFd < 0) {
-            result.error = "An integrity file is missing, not regular, or uses a symlink: " +
-                           relativePath;
-            parseSucceeded = false;
-            break;
-        }
-        std::string actualDigest;
-        std::string hashError;
-        const bool hashed = hashFileDescriptor(
-            fileFd, expectedSize, actualDigest, hashError);
-        ::close(fileFd);
-        if (!hashed) {
-            result.error = relativePath + ": " + hashError;
-            parseSucceeded = false;
-            break;
-        }
-        if (actualDigest != expectedDigest) {
-            result.error = "SHA-256 mismatch: " + relativePath;
-            parseSucceeded = false;
-            break;
-        }
         if (expectedSize >
-            std::numeric_limits<uint64_t>::max() - result.verifiedBytes) {
-            result.error = "The verified installation size overflows the supported range.";
+            std::numeric_limits<uint64_t>::max() - result.totalBytes) {
+            result.error = "The SHA-256 integrity manifest total size overflows the supported range.";
             parseSucceeded = false;
             break;
         }
-        result.verifiedBytes += expectedSize;
-        ++result.verifiedFiles;
+        result.totalBytes += expectedSize;
+        entries.push_back({relativePath, expectedSize, expectedDigest});
     }
 
     if (parseSucceeded && std::ferror(manifest) != 0) {
@@ -1042,17 +1050,76 @@ IsoDiscIntegrityResult verifyIsoDiscIntegrity(const std::string &discRoot) {
         parseSucceeded = false;
     }
     std::fclose(manifest);
-    ::close(rootFd);
 
-    if (!parseSucceeded) return result;
-    if (!sawLayout || !sawMetadata || result.verifiedFiles < 3u) {
+    if (!parseSucceeded) {
+        ::close(rootFd);
+        return result;
+    }
+    if (!sawLayout || !sawMetadata || entries.size() < 3u) {
+        ::close(rootFd);
         result.error = "The SHA-256 integrity manifest is incomplete or lacks disc metadata.";
         return result;
     }
-    result.valid = true;
+
+    IsoDiscIntegrityProgress progress;
+    progress.totalBytes = result.totalBytes;
+    progress.totalFiles = entries.size();
+    if (progressCallback != nullptr && !progressCallback(progress, userData)) {
+        ::close(rootFd);
+        result.cancelled = true;
+        result.error = "The SHA-256 integrity verification was cancelled.";
+        return result;
+    }
+
+    for (const auto &entry : entries) {
+        const int fileFd = openRegularRelativeAt(rootFd, entry.path);
+        if (fileFd < 0) {
+            result.error = "An integrity file is missing, not regular, or uses a symlink: " +
+                           entry.path;
+            ::close(rootFd);
+            return result;
+        }
+
+        std::string actualDigest;
+        std::string hashError;
+        const bool hashed = hashFileDescriptor(
+            fileFd, entry.size, actualDigest, hashError,
+            progress, progressCallback, userData, result.cancelled);
+        ::close(fileFd);
+        if (!hashed) {
+            result.error = entry.path + ": " + hashError;
+            ::close(rootFd);
+            result.verifiedBytes = progress.verifiedBytes;
+            return result;
+        }
+        if (actualDigest != entry.sha256) {
+            result.error = "SHA-256 mismatch: " + entry.path;
+            ::close(rootFd);
+            result.verifiedBytes = progress.verifiedBytes;
+            return result;
+        }
+
+        ++progress.completedFiles;
+        result.verifiedFiles = progress.completedFiles;
+        if (progressCallback != nullptr &&
+            !progressCallback(progress, userData)) {
+            result.cancelled = true;
+            result.error = "The SHA-256 integrity verification was cancelled.";
+            ::close(rootFd);
+            result.verifiedBytes = progress.verifiedBytes;
+            return result;
+        }
+    }
+
+    ::close(rootFd);
+    result.verifiedBytes = progress.verifiedBytes;
+    result.valid = result.verifiedFiles == progress.totalFiles &&
+                   result.verifiedBytes == result.totalBytes;
+    if (!result.valid && result.error.empty()) {
+        result.error = "The SHA-256 integrity verification ended with incomplete totals.";
+    }
     return result;
 }
-
 
 IsoInstallResult installIsoManifest(
     const Iso9660Reader &reader,
