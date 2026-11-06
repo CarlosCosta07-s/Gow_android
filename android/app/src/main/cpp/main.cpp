@@ -961,6 +961,11 @@ Java_org_gowandroid_app_GowGameActivity_nativeSetActivityReference(
     if (previousReference != nullptr) {
         env->DeleteGlobalRef(previousReference);
     }
+    {
+        std::lock_guard<std::mutex> lock(gBootPathMutex);
+        gBootRelativePath.clear();
+        gBootPathConfigurationReceived = false;
+    }
 }
 
 extern "C" JNIEXPORT void JNICALL
