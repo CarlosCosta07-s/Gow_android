@@ -27,9 +27,22 @@ class AndroidAotAdbCaptureSyncTests(unittest.TestCase):
             for name, data in entries:
                 info = tarfile.TarInfo(name)
                 info.size = len(data)
-                info.mode = 0o600
-                import io
-                archive.addfile(info, io.BytesIO(data))
+                info.mode = 0o700 if name in (
+                    "gow-aot-captures",
+                    "gow-aot-captures/vu1",
+                    "gow-aot-captures/iop",
+                ) else 0o600
+                if name in (
+                    "gow-aot-captures",
+                    "gow-aot-captures/vu1",
+                    "gow-aot-captures/iop",
+                ):
+                    info.type = tarfile.DIRTYPE
+                    info.size = 0
+                    archive.addfile(info)
+                else:
+                    import io
+                    archive.addfile(info, io.BytesIO(data))
 
     def test_private_capture_tree_is_converted_into_expected_zip(self) -> None:
         vu1 = bytes(16 * 1024)
