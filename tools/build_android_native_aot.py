@@ -323,8 +323,8 @@ def generate_native_aot(
                 f"VU1 AOT generator produced {len(vu1_sources)} parts; exactly 6 are required."
             )
         coverage = re.search(
-            r"\\[vu1n_gen\\] (\\d+)/(\\d+) valid images, (\\d+) distinct blocks, "
-            r"(\\d+) generated, (\\d+) unsupported, (\\d+) interpreter callouts",
+            r"\[vu1n_gen\] (\d+)/(\d+) valid images, (\d+) distinct blocks, "
+            r"(\d+) generated, (\d+) unsupported, (\d+) interpreter callouts",
             vu1_stdout,
         )
         if coverage is None or int(coverage.group(1)) == 0 or int(coverage.group(4)) == 0:
