@@ -181,7 +181,7 @@ Os diretórios de runtime/recompilação serão criados quando houver implementa
 
 O script tools/build_recompiler_host.py prepara o PS2Recomp na revisão fixada pelo KIexster, aplica o patch-base do runtime e compila somente a ferramenta host ps2_recomp. O ELF e os arquivos C++ produzidos permanecem em uma pasta privada fora do repositório. O Android NDK será usado em uma etapa separada para compilar o código gerado e o runtime adaptado.
 
-O procedimento, dependências, versões fixadas e a triagem dos patches estão documentados em [PIPELINE_RECOMPILADOR.md](PIPELINE_RECOMPILADOR.md). A seleção lógica dos módulos do runtime está em [BASE_KIEXTER.md](BASE_KIEXTER.md). A execução 42150329023 compilou os três alvos host com as verificações de fontes/defines descritas em PIPELINE_RECOMPILADOR.md. O smoke da camada NEON também passou na build Android shell 42150765223; isso ainda não equivale à integração do runtime Waffle no APK.
+O procedimento, dependências, versões fixadas e a triagem dos patches estão documentados em [PIPELINE_RECOMPILADOR.md](PIPELINE_RECOMPILADOR.md). A seleção lógica dos módulos do runtime está em [BASE_KIEXTER.md](BASE_KIEXTER.md). A execução 42150329023 compilou os três alvos host com as verificações de fontes/defines descritas em PIPELINE_RECOMPILADOR.md. A execução 42150853233 validou a cópia do shim NEON e a seleção condicional no header privado do Waffle, compilando o ramo SSE no host x86-64. O smoke da camada NEON passou no NDK Android arm64-v8a (42150765223). Ainda não compilamos o runtime Waffle completo pelo Android NDK nem o ligamos ao APK.
 
 
 ### Revisão Waffle fixada para integração
