@@ -474,12 +474,19 @@ def main() -> int:
 
     game_builder = (project_root / "tools/build_android_game.py").read_text(encoding="utf-8")
     for required in (
-        "--capture-bootstrap",
+        '"--iso"',
+        '"--generate-only"',
+        '"--plan-only"',
         "--aot-captures",
         "prepare_runtime_command",
+        "pull_private_aot_captures(",
         "GOW_ANDROID_CAPTURE_BOOTSTRAP",
     ):
-        require(required in game_builder, f"Android AOT build orchestration is missing: {required}")
+        require(required in game_builder, f"Android ISO-only AOT build orchestration is missing: {required}")
+    require(
+        "--capture-bootstrap" not in game_builder,
+        "First-boot AOT bootstrap must be automatic, not a user-selectable export/build mode.",
+    )
 
     print("Verified: Android PS2 core initialization is headless and uses a null GS backend.")
     print("Verified: the Android guest worker starts only after private AOT, GS backend and Vulkan surface gates pass.")
