@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from build_android_game import create_build_plan
+from build_android_game import _verify_generated_outputs, create_build_plan
 
 
 class AndroidGameBuildPlanTests(unittest.TestCase):
@@ -24,6 +24,78 @@ class AndroidGameBuildPlanTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def _make_generated_output(self, registration_source: str) -> Path:
+        generated = self.root / "android/app/build/gow-generated-game"
+        (generated / "functions").mkdir(parents=True, exist_ok=True)
+        (generated / "register_functions.cpp").write_text(
+            registration_source, encoding="utf-8"
+        )
+        (generated / "ps2_recompiled_functions.h").write_text(
+            "#pragma once\\n", encoding="utf-8"
+        )
+        (generated / "ps2_recompiled_stubs.h").write_text(
+            "#pragma once\\n", encoding="utf-8"
+        )
+        (generated / "functions/boot.cpp").write_text(
+            "void gow_boot() {}\\n", encoding="utf-8"
+        )
+        return generated
+
+    @staticmethod
+    def _valid_registration_source() -> str:
+        return """#include "ps2_runtime.h"
+extern const uint32_t g_ps2RecompiledFunctionTableBase = 0x00100000u;
+extern const uint32_t g_ps2RecompiledFunctionTableEnd = 0x00100008u;
+extern const uint32_t g_ps2RecompiledFunctionTableSlotCount = 2u;
+PS2Runtime::RecompiledFunction g_ps2RecompiledFunctionTable[2u] = {};
+namespace {
+struct GeneratedFunctionTableInitializer {
+    GeneratedFunctionTableInitializer() {
+        g_ps2RecompiledFunctionTable[0] = gow_boot; // 0x100000
+        g_ps2RecompiledFunctionTable[1] = gow_tick; // 0x100004
+    }
+};
+static const GeneratedFunctionTableInitializer g_generatedFunctionTableInitializer;
+}
+"""
+
+    def test_aot_verifier_accepts_entrypoint_and_registered_functions(self) -> None:
+        generated = self._make_generated_output(self._valid_registration_source())
+        summary = _verify_generated_outputs(
+            generated, expected_entry_point=0x00100000
+        )
+        self.assertEqual(summary.translation_units, 2)
+        self.assertEqual(summary.table_slots, 2)
+        self.assertEqual(summary.registered_functions, 2)
+        self.assertEqual(summary.entry_point, 0x00100000)
+
+    def test_aot_verifier_rejects_empty_function_table(self) -> None:
+        source = """#include "ps2_runtime.h"
+extern const uint32_t g_ps2RecompiledFunctionTableBase = 0x00100000u;
+extern const uint32_t g_ps2RecompiledFunctionTableEnd = 0x00100000u;
+extern const uint32_t g_ps2RecompiledFunctionTableSlotCount = 0u;
+PS2Runtime::RecompiledFunction g_ps2RecompiledFunctionTable[1u] = {};
+"""
+        generated = self._make_generated_output(source)
+        with self.assertRaisesRegex(RuntimeError, "function table is empty"):
+            _verify_generated_outputs(generated, expected_entry_point=0x00100000)
+
+    def test_aot_verifier_rejects_missing_entrypoint(self) -> None:
+        generated = self._make_generated_output(self._valid_registration_source())
+        with self.assertRaisesRegex(RuntimeError, "does not cover the ELF entry point"):
+            _verify_generated_outputs(
+                generated, expected_entry_point=0x00100008
+            )
+
+    def test_aot_verifier_rejects_wrong_slot_mapping(self) -> None:
+        source = self._valid_registration_source().replace(
+            "g_ps2RecompiledFunctionTable[0] = gow_boot; // 0x100000",
+            "g_ps2RecompiledFunctionTable[1] = gow_boot; // 0x100000",
+        )
+        generated = self._make_generated_output(source)
+        with self.assertRaisesRegex(RuntimeError, "maps 0x00100000 to slot 1"):
+            _verify_generated_outputs(generated, expected_entry_point=0x00100000)
 
     def test_plan_keeps_elf_workspace_and_generated_output_separate(self) -> None:
         plan = create_build_plan(
