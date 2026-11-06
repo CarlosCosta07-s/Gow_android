@@ -13,6 +13,11 @@ import com.google.androidgamesdk.GameActivity;
  * this Activity will be connected to the integrated PS2 runtime when ready.
  */
 public final class GowGameActivity extends GameActivity {
+    public static final String EXTRA_DISC_FD =
+            "org.gowandroid.app.extra.DISC_FD";
+
+    private static native boolean nativeSetDiscFileDescriptor(int descriptor);
+
     static {
         System.loadLibrary("android-game");
     }
@@ -20,6 +25,13 @@ public final class GowGameActivity extends GameActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        int discDescriptor = getIntent().getIntExtra(EXTRA_DISC_FD, -1);
+        if (discDescriptor >= 0 && !nativeSetDiscFileDescriptor(discDescriptor)) {
+            android.util.Log.e(
+                    "GowGameActivity",
+                    "Could not initialize the native ISO reader from the supplied descriptor.");
+        }
 
         getWindow().addFlags(
                 android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
