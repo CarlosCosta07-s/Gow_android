@@ -2,6 +2,7 @@ diff --git a/ps2xIOP/src/emulator/iop_emulator.cpp b/ps2xIOP/src/emulator/iop_em
 --- a/ps2xIOP/src/emulator/iop_emulator.cpp
 +++ b/ps2xIOP/src/emulator/iop_emulator.cpp
 @@ -510,1 +510,11 @@
+-            ++interpretedInstructions;
 +#if defined(PS2X_IOP_NATIVE_ONLY)
 +            std::ostringstream out;
 +            out << "[IOP:native-required] refusing fallback to interpreted IOP instruction"
@@ -12,17 +13,25 @@ diff --git a/ps2xIOP/src/emulator/iop_emulator.cpp b/ps2xIOP/src/emulator/iop_em
 +            cpu.stopped = true;
 +            return false;
 +#else
-             ++interpretedInstructions;
++            ++interpretedInstructions;
 @@ -526,1 +536,2 @@
              return running;
 +#endif
 diff --git a/ps2xIOP/CMakeLists.txt b/ps2xIOP/CMakeLists.txt
 --- a/ps2xIOP/CMakeLists.txt
 +++ b/ps2xIOP/CMakeLists.txt
-@@ -48,1 +48,6 @@
+@@ -5,1 +5,5 @@
+ option(PS2X_IOP_BUILD_TESTS "Build ps2xIOP emulator smoke tests" OFF)
++option(PS2X_IOP_NATIVE_ONLY "Reject interpreted IOP instructions without AOT coverage" OFF)
 +if(ANDROID)
-+    # Android final path: never fall back to the IOP guest-instruction interpreter.
++    set(PS2X_IOP_NATIVE_ONLY ON CACHE BOOL "" FORCE)
++endif()
+ 
+@@ -34,1 +38,6 @@
+ )
+ 
++if(PS2X_IOP_NATIVE_ONLY)
 +    target_compile_definitions(ps2_iop PRIVATE PS2X_IOP_NATIVE_ONLY=1)
 +endif()
 +
- target_compile_features(ps2_iop PUBLIC cxx_std_20)
+ # GOW-Port: IRX modules compiled ahead of time (tools/iop/iopn_gen.py)
