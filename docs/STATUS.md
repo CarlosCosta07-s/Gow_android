@@ -290,17 +290,19 @@ Cobertura atual exercitada em `android_gs_vulkan_backend_test.cpp`:
 **[PENDENTE — CENA REAL]** O runtime ainda mantém `PS2Runtime::run()` bloqueado e a tabela AOT pública vazia. Portanto, ainda não existe captura comprovada do God of War real no Android. A captura local só será gerada quando o runtime entregar um frame; a validação visual real exige o ELF/AOT privado do usuário, boot real em aparelho e uma referência da mesma cena, resolução e momento.
 
 
-## Worker EE separado, pré-validação AOT e build ARM64 — 06/11/2026
+## Worker EE separado, pré-validação AOT e tentativa de primeiro boot Android — 06/11/2026
 
-**[VERIFICADO NA CI HOST 42274965500]** A preparação local da árvore Waffle agora adiciona um worker EE Android independente do ciclo de eventos/apresentação da GameActivity. O worker exige núcleo inicializado, scheduler criado, PC válido e função AOT registrada antes de iniciar; a thread executa o scheduler, enquanto a GameActivity permanece responsável por eventos e apresentação. O método permanece sem chamada em android_main(), logo o APK público não começa gameplay automaticamente.
+**[VERIFICADO NA CI HOST 42274965500]** A preparação local da árvore Waffle adiciona um worker EE Android separado do ciclo de apresentação da GameActivity. O worker exige núcleo inicializado, scheduler criado, PC válido e função AOT registrada; executa o scheduler em uma thread própria e a GameActivity mantém a responsabilidade pela apresentação.
 
-**[ENCERRAMENTO SEGURO]** stopGuestExecutionAndroid() solicita parada e faz join() antes da destruição dos subsistemas. O caminho não usa detach(); uma tentativa de destruir o runtime a partir da própria thread encerra de forma explícita com std::terminate(), evitando uma thread destacada que pudesse continuar acessando this. O checker Android verifica esse contrato.
+**[ENCERRAMENTO SEGURO]** `stopGuestExecutionAndroid()` solicita parada e faz `join()` antes da destruição dos subsistemas. O caminho não usa `detach()`; destruir o runtime a partir da própria thread é tratado explicitamente como erro fatal, evitando uso de memória após destruição.
 
-**[PRÉ-VALIDAÇÃO AOT]** tools/build_android_game.py agora rejeita tabela de funções vazia, registros ausentes, endereços desalinhados/fora da faixa, slots inconsistentes/duplicados e entrypoint do ELF sem função registrada. Fixtures host cobrem tabela válida, vazia, entrypoint ausente e slot incorreto. Isso evita gastar tempo compilando um APK que o loader recusaria; ainda não foi executado com o ELF privado do usuário.
+**[PRÉ-VALIDAÇÃO AOT]** `tools/build_android_game.py` rejeita tabela vazia, registros ausentes, endereços desalinhados/fora da faixa, slots inconsistentes/duplicados e entrypoint do ELF sem função registrada. Fixtures host cobrem tabela válida, vazia, entrypoint ausente e slot incorreto. Isso evita gerar um APK que o loader recusaria; ainda não foi executado com o ELF privado do usuário.
 
-**[VERIFICADO NA CI]** Host run 42274965500 compilou o recompiler e o runtime Waffle sob as políticas estritas; Android run 42274999877 passou pelo preparo do runtime, checker de lifecycle, testes sintéticos de captura/comparação, I/O/disco/VFS e build Debug ARM64. Artefato gow-android-arm64-shell ID 13532807788 (6.200.631 bytes). Nenhum ELF, ISO, IRX, microcódigo ou C++ gerado do jogo foi fornecido à CI.
+**[VERIFICADO NAS CI ANTERIORES]** Host run `42274965500` compilou o recompiler e o runtime Waffle sob políticas estritas; Android run `42274999877` aprovou o preparo do runtime, checker de lifecycle, testes sintéticos de captura/comparação, I/O/disco/VFS e build Debug ARM64. Artefato `gow-android-arm64-shell` ID `13532807788`. Nenhum conteúdo privado do jogo foi fornecido à CI.
 
-**[AINDA NÃO É BOOT]** A tabela AOT pública permanece vazia. Nenhum ELF real foi carregado, nenhum worker EE foi iniciado com código do jogo, nenhuma cadeia de boot/IRX/VU1 foi exercitada e nenhuma cena real foi capturada. O próximo marco é gerar e validar localmente o AOT do ELF do usuário, incluindo cobertura dos microprogramas VU1 e módulos IRX necessários; em seguida ligar o worker apenas após os serviços de boot, GS/presenter e áudio estarem prontos.
+**[IMPLEMENTADO; CI #362 EM VALIDAÇÃO]** `android_main()` agora tenta iniciar o worker EE quando os gates de ELF/AOT privado, backend GS Android e surface/presenter Vulkan estão satisfeitos. A tentativa é silenciosa até existir saída AAudio. O bridge informa início/encerramento à GameActivity; o Logcat também registra o primeiro estado GS não suportado.
+
+**[AINDA NÃO É BOOT REAL]** O APK público continua com tabela AOT vazia. Nenhum ELF real foi recompilado, nenhum IRX ou microprograma VU1 real foi exportado/compilado e nenhuma sessão do jogo foi iniciada em aparelho. Portanto, o worker ainda não iniciou com código real de God of War. O próximo bloqueio externo é obter o ELF privado NTSC-U e produzir AOT do jogo, VU1 e IRX; então testar o boot no aparelho Android ARM64.
 
 
 ## Instalação com leitura mínima dos setores — 06/11/2026
@@ -358,7 +360,7 @@ A extração usa buffer de 1 MiB e atualiza o callback de progresso/cancelamento
 - **[DIAGNÓSTICO CONFIRMADO]** Na Android shell #355, as etapas de testes e `assembleDebug` terminaram com sucesso. A falha ocorreu exclusivamente em `Verify APK signature and print certificate`.
 - A saída real do `apksigner` do runner usou o formato `V2 Signer: certificate SHA-256 digest: <fingerprint>`; o parser anterior procurava somente `Signer #1 certificate SHA-256 digest:`. Assim, o APK estava assinado e verificável, mas a variável do fingerprint ficava vazia e o step encerrava com código 1.
 - **[CORREÇÃO ENVIADA À main]** Commit `786264d367ccf4ba79fdbc2a60b9ee0c8018a321` altera o parser para capturar o último campo após `: ` e exige exatamente 64 caracteres hexadecimais. Se o formato voltar a ser desconhecido, o step imprime a saída de diagnóstico e falha com mensagem explícita.
-- A execução #356 (`42290930731`) foi iniciada para validar a correção. Até esta revisão, ainda estava em andamento; não declarar APK publicado antes do resultado final.
+- **[VERIFICADO]** A execução #356 (`42290930731`) concluiu com sucesso: `assembleDebug`, `apksigner` e publicação do artefato `gow-android-arm64-shell` ID `13540251766`.
 - Os quatro secrets de assinatura persistente continuam não configurados. Na ausência deles, o runner usa uma chave Debug efêmera: o APK pode ser instalado numa instalação nova, mas não é garantido que atualize uma instalação criada por outra execução. Não desinstalar o app antigo enquanto os dados privados do disco não estiverem preservados.
 
 
