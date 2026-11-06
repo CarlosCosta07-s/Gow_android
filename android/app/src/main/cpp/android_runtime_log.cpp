@@ -1,5 +1,6 @@
 #include "android_runtime_log.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <mutex>
