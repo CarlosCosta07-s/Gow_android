@@ -248,3 +248,10 @@ O painel informa explicitamente que o jogo ainda não iniciou quando o núcleo h
 **Limitações explícitas:** o pipeline desenha cor sólida diretamente na surface Android, não em render targets GS por FBP/PSM. Texturas/CLUT não são amostradas; depth, alpha test, DATE, blending PS2, PABE, FBA, fog, dithering, masks avançadas e composição de DISPLAY/PMODE ainda não são rasterizados. A CI não executou a aplicação numa GPU física. `PS2Runtime::run()` continua bloqueado e a tabela AOT pública permanece vazia.
 
 **[EM VALIDAÇÃO HOST; AINDA NÃO APROVADO]** Runs `42259346530`/`42259354011` adicionaram um teste sintético de VRAM e transferência contra `GSTextureStore` e `ps2_gs_memory.cpp`. Não marque esse teste como aprovado até uma execução terminar com sucesso.
+## Adaptador de VRAM GS validado com GSTextureStore — CI 261
+
+**[VERIFICADO NA CI `42260019446`]** O teste host `android_gs_vulkan_backend_test.cpp` foi compilado contra `gs_texture_store.cpp` e `ps2_gs_memory.cpp` do Waffle. Passaram: escrita/leitura CT32 no mapa PS2, limpeza limitada pelo scissor, preservação de canal via FBMSK, transferência sintética HOST→LOCAL para dois pixels CT32 e snapshot de exatamente 4 MiB. O assert de transferência foi ajustado para o contrato real do Waffle: ao concluir, `totalPixels` volta a zero, `copiedPixels` fica em dois e `direction` retorna a 3 (idle).
+
+**Artefato:** `gow-android-arm64-shell`, ID `13524986210`, build Debug ARM64, expira em 13/11/2026. Run `42260019446` também aprovou o APK.
+
+**Limite:** esse teste valida a camada de memória/transferência, não rasterização correta de cenas. O pipeline ainda desenha lotes sólidos diretamente na surface; o passo seguinte é gravar primitivas em render targets FBP/PSM e produzir um `PresentationFrame` a partir do framebuffer selecionado.
