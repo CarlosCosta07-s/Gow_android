@@ -116,3 +116,10 @@ A fila tem limite por frame, é esvaziada quando a surface é perdida e o cache 
 **Não confundir com gameplay:** o caminho atual não cria render targets por FBP, não mapeia a VRAM para attachments, não amostra o resultado de `GSTextureStore::DecodeTextureRgba`, não implementa depth attachment, alpha test/DATE, equações AB/CD/FIX, PABE, FBA, fog, dithering ou composição PMODE/DISPLAY. Lotes são desenhados diretamente na surface e portanto não preservam o comportamento de múltiplos framebuffers do GS. `Present()` ainda não produz uma captura CPU e `PS2Runtime::run()` continua bloqueado.
 
 **Próxima etapa:** fechar e validar acesso/transferência à VRAM com testes host reais de `GSTextureStore`, depois implementar texture upload/sampling e render targets por FBP/PSM. Só depois entram os testes de alpha/depth/blending e composição de display.
+## 10. Teste host da memória GS/transferências — CI 261
+
+`android_gs_vulkan_backend_test.cpp` instancia `AndroidGSVulkanBackend` com 4 MiB sintéticos e o `GSTextureStore` real do Waffle. O teste usa o mapeamento de `ps2_gs_memory.cpp` e verifica CT32 Write/Read, `ClearFramebuffer()` dentro do scissor com FBMSK preservando um canal, transferência HOST→LOCAL de dois pixels e snapshot de 4 MiB. Na conclusão de transferência, o contrato Waffle deixa `totalPixels=0`, mantém `copiedPixels` concluídos e define `direction=3`.
+
+**Resultado:** CI `42260019446` aprovada; artefato Debug ARM64 `gow-android-arm64-shell` ID `13524986210`.
+
+Esse resultado prova a semântica de memória/transferência exercitada, mas não prova rasterização GS. `AndroidGSVulkanBackend::Submit()` ainda envia geometria sólida ao pipeline da surface; `Present()` ainda retorna vazio. A próxima mudança necessária é rasterizar em VRAM FBP/FBW/PSM, depois ler a saída pelo circuito DISPFB/DISPLAY/PMODE para construir um `PresentationFrame`.
