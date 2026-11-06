@@ -146,6 +146,7 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
     target_include_directories(android-game PRIVATE
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/include"
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/src/lib"
+        "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/src/lib/gs"
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/src/lib/gs/gpu"
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/src/lib/Kernel"
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xIOP/include"
