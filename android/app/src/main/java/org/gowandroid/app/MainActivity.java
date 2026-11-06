@@ -544,10 +544,7 @@ public final class MainActivity extends AppCompatActivity {
                 .setTitle("Configurações")
                 .setMessage(
                         "PLATAFORMA\nAndroid / ARM64\n\n"
-                                + "GRÁFICOS
-Vulkan (renderizador do jogo em desenvolvimento)
-
-"
+                                + "GRÁFICOS\nVulkan (renderizador do jogo em desenvolvimento)\n\n"
                                 + "INTERFACE\nFORGE\n\n"
                                 + "VERSÃO\n0.1.0-dev\n\n"
                                 + "As opções de resolução, controles e áudio serão adicionadas "
@@ -564,12 +561,10 @@ Vulkan (renderizador do jogo em desenvolvimento)
                                 + "construir um port nativo de God of War (2005) para Android.\n\n"
                                 + "A interface e a seleção de disco são etapas iniciais. O runtime "
                                 + "nativo e o renderizador do jogo ainda estão em desenvolvimento. "
-                                + "A validação gráfica será feita durante a execução do jogo.
-
-"
-                                + "Referências técnicas e créditos: CodeAbhi826, KIexster, "
-                                + "Waffle565, ran-j / PS2Recomp e PCSX2. Consulte "
-                                + "THIRD_PARTY_NOTICES.md no repositório.")
+                                + "A validação gráfica será feita durante a execução do jogo.\n\n"
+                                + "Referências de engenharia: Black para Android e Dragon Rage / "
+                                + "Budokai Tenkaichi 3. Os códigos desses projetos não foram incorporados. "
+                                + "Consulte THIRD_PARTY_NOTICES.md no repositório.")
                 .setPositiveButton("Fechar", null)
                 .show();
     }
