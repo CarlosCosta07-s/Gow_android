@@ -114,3 +114,36 @@ Artefato Debug ARM64: `gow-android-arm64-shell`, ID `13524986210`, expira em 13/
 Artefato: `gow-android-arm64-shell`, ID `13524359107`, expira em 13/11/2026.
 
 **Escopo do que foi provado:** caminho sintético GS→VRAM→CRTC→PresentationFrame→Vulkan. Não foi testado o jogo. Texturas/CLUT, Z, alpha/DATE, blending, fog, DISPLAY1+2/PMODE, áudio, AOT e boot real continuam pendentes.
+## Captura local e comparação de uma cena GS
+
+Quando o backend GS entregar o primeiro `PresentationFrame`, `GowGameActivity` salva uma captura PPM P6 chamada:
+
+`gow_android_first_gs_frame.ppm`
+
+O arquivo é gravado no diretório de arquivos externos da aplicação Android; se esse caminho não estiver disponível, usa o diretório interno. O Logcat registra o caminho completo:
+
+```bash
+adb logcat -s GowAndroid:I
+```
+
+Copie o caminho literal que aparecer na mensagem `Saved first GS scene capture`:
+
+```bash
+adb pull "<caminho completo mostrado no Logcat>" ./gow_android_first_gs_frame.ppm
+```
+
+A captura contém RGB compactado, sem o padding de stride interno do framebuffer. Para confrontá-la com uma captura de referência da mesma cena, resolução e instante:
+
+```bash
+python tools/compare_gs_scene.py \
+  --reference ./reference_scene.ppm \
+  --actual ./gow_android_first_gs_frame.ppm \
+  --tolerance 8 \
+  --min-matching-pixels 95 \
+  --max-mae 12 \
+  --diff ./gs_scene_diff.ppm
+```
+
+A ferramenta exige dimensões iguais. Ela informa MAE, RMSE, PSNR, erro máximo por canal e porcentagem de pixels dentro da tolerância; o PPM `--diff` realça diferenças. Os limiares acima são apenas uma configuração inicial para triagem. Para cada cena, registrar região, resolução, estado de interlace, frame/timing e diferenças esperadas antes de aprovar a comparação.
+
+**Limite:** a existência do caminho de captura e os testes sintéticos do gravador não comprovam uma captura de God of War. O runtime ainda não executa o ELF recompilado: a tabela AOT pública está vazia e `PS2Runtime::run()` permanece bloqueado. As imagens de referência e do jogo devem permanecer locais; não as enviar ao repositório nem à CI.
