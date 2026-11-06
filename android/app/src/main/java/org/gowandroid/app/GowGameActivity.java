@@ -26,6 +26,8 @@ public final class GowGameActivity extends GameActivity {
     private static native boolean nativeSetDiscFileDescriptor(int descriptor);
 
     private TextView nativeStatusView;
+    private String pendingNativeStatus;
+    private boolean pendingNativeStatusError;
 
     static {
         System.loadLibrary("android-game");
@@ -82,6 +84,14 @@ public final class GowGameActivity extends GameActivity {
         layout.setMargins(dp(16), dp(20), dp(16), 0);
         content.addView(status, layout);
         nativeStatusView = status;
+
+        if (pendingNativeStatus != null) {
+            nativeStatusView.setText(pendingNativeStatus);
+            nativeStatusView.setBackground(
+                    createStatusBackground(pendingNativeStatusError));
+            nativeStatusView.setVisibility(View.VISIBLE);
+            pendingNativeStatus = null;
+        }
     }
 
     private GradientDrawable createStatusBackground(boolean isError) {
@@ -102,7 +112,12 @@ public final class GowGameActivity extends GameActivity {
      */
     public void onNativeRuntimeStatus(String message, boolean isError) {
         runOnUiThread(() -> {
-            if (nativeStatusView == null || isFinishing() || isDestroyed()) {
+            if (isFinishing() || isDestroyed()) {
+                return;
+            }
+            if (nativeStatusView == null) {
+                pendingNativeStatus = message == null ? "" : message;
+                pendingNativeStatusError = isError;
                 return;
             }
             nativeStatusView.setText(message == null ? "" : message);
