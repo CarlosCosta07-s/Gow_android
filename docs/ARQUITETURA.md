@@ -175,3 +175,10 @@ third_party/   Somente dependências externas aprovadas e justificadas, se neces
 ```
 
 Os diretórios de runtime/recompilação serão criados quando houver implementação real, testes e documentação. Não criaremos módulos vazios.
+
+
+## Pipeline executável de geração host
+
+O script tools/build_recompiler_host.py prepara o PS2Recomp na revisão fixada pelo KIexster, aplica o patch-base do runtime e compila somente a ferramenta host ps2_recomp. O ELF e os arquivos C++ produzidos permanecem em uma pasta privada fora do repositório. O Android NDK será usado em uma etapa separada para compilar o código gerado e o runtime adaptado.
+
+O procedimento, dependências, versões fixadas e a triagem dos patches estão documentados em [PIPELINE_RECOMPILADOR.md](PIPELINE_RECOMPILADOR.md). A seleção lógica dos módulos do runtime está em [BASE_KIEXTER.md](BASE_KIEXTER.md). A preparação do script ainda não equivale a uma compilação verificada.
