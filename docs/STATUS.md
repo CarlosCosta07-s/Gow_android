@@ -19,20 +19,30 @@
 
 **Referência futura de otimização:** [Black for Android](https://github.com/RanggaCasper/Black-Android), documentada em [ANDROID_LOW_END_OPTIMIZATION.md](ANDROID_LOW_END_OPTIMIZATION.md). Não estamos adotando agora suas opções nem assumindo equivalência entre Xbox e PS2.
 
-## [VERIFICADO] Enumeração de diretórios ISO9660
+## [VERIFICADO] Leitor ISO9660 e importador privado
 
-- `Iso9660Reader::listDirectory()` lista os filhos imediatos de um caminho de diretório, preservando a ordem dos registros da imagem e retornando nome normalizado, tipo, offset, tamanho e marcador de multi-extent.
-- Limites: 64 MiB por diretório e 65.536 entradas; caminhos com traversal e subdiretórios inválidos são rejeitados.
-- A fixture sintética cobre listagem da raiz e de `DATA/`, metadados do arquivo `TEST.BIN`, rejeição de traversal e rejeição de caminho de arquivo como diretório.
-- A etapa host dos testes passou no Android workflow run `42163257138`. A compilação completa do APK desse run ainda estava em andamento no último polling; não declarar o APK concluído com base apenas no teste host.
+- `Iso9660Reader` abre o PVD ISO9660 no setor 16, resolve arquivos por diretórios/extents, enumera os filhos imediatos e lê por offset sem carregar a imagem inteira.
+- `listDirectory()` e o parser aplicam limites de tamanho/profundidade/entradas e rejeitam traversal, registros/extents inválidos e caminhos ambíguos.
+- `iso9660_installer.cpp` extrai somente o manifesto fornecido, em blocos de 64 KiB. Pré-valida caminhos/destinos/tamanhos, consulta espaço disponível, sincroniza arquivos e diretórios, oferece cancelamento e publica o staging por rename no mesmo filesystem.
+- O FORGE importa somente `SYSTEM.CNF` e o executável identificado por `BOOT2` para `files/installations/gow_boot_seed/disc`. A imagem é revalidada antes da extração e o app mostra progresso/cancelamento.
+- Fixtures sintéticas cobrem listagem ISO, extração byte a byte, tamanho incompatível, traversal, colisão de destinos, cancelamento e limpeza de staging. Nenhuma ISO/ELF de jogo é usada na CI.
 
-## [VERIFICADO] Shell FORGE
+## [VERIFICADO] Provider local cdRoot
 
-- O aplicativo FORGE foi aberto em pelo menos um aparelho Android real, conforme relato do mantenedor.
-- A CI compilou o APK Debug ARM64 no run `42142814087`, commit `18839524eb1061c5331b5762213dadaa51d55dd3`.
-- O teste Vulkan isolado foi removido do launcher após fechar o aplicativo no aparelho. A validação gráfica será feita com o GS e o jogo real.
-- O launcher usa Storage Access Framework para escolher a imagem do usuário.
-- A implementação inicial lê ISO9660 e `SYSTEM.CNF`, interpreta `BOOT2` e reconhece inicialmente `SCUS_973.99` (NTSC-U) e `SCES_531.33` (PAL). Ela compilou na CI; ainda falta validação com imagens reais em aparelho.
+- `CdRootVfs` abre a raiz privada e executa listagem/leitura somente de arquivos regulares; usa `openat`/`O_NOFOLLOW` para bloquear symlinks e traversal e `pread` para leitura aleatória.
+- A enumeração é limitada a 65.536 entradas; paths têm limites de tamanho, componente e profundidade. Handles podem ser abertos, lidos por offset e fechados.
+- O teste sintético `cdroot_vfs_test.cpp` cobre raiz/subdiretórios, listagem repetida, leitura parcial/EOF, handles fechados, nomes/traversal inválidos e symlinks.
+- A primeira implementação compartilhou acidentalmente o offset do descritor raiz via `dup()`. Foi corrigida usando `openat(rootFd, ".", ...)` para gerar descrição de arquivo independente por operação.
+- A CI Android run `42184743140` concluiu os testes host e a compilação do APK Debug ARM64 com o VFS incluído. A integração de runtime preparada para usar `gowcdroot:/` está sendo verificada separadamente pela CI Host recompiler.
+
+
+## [VERIFICADO] Shell FORGE e importação de boot
+
+- O FORGE usa Storage Access Framework para selecionar a imagem e identifica `SYSTEM.CNF`/`BOOT2`, reconhecendo inicialmente `SCUS_973.99` (NTSC-U) e `SCES_531.33` (PAL).
+- A ação `PREPARAR BOOT` reabre e revalida a imagem, importa o arquivo de configuração e o executável para armazenamento privado, informa progresso e permite cancelamento.
+- Após a publicação, a Activity abre a raiz `gow_boot_seed/disc` no `CdRootVfs`. Se a instalação já existir, pode tentar reabrir esse provider.
+- O APK Debug ARM64 foi compilado com a extração e o cdRoot no run `42184743140`. O teste foi feito com fixture ISO sintética na CI; ainda falta uma ISO real de usuário e aparelho real para validar a importação.
+
 
 ## [VERIFICADO] Componentes KIexter importados
 
@@ -113,23 +123,24 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 
 ## [NÃO TESTADO] Runtime e jogo
 
-- Geração do C++ do ELF privado com PS2Recomp e compilação do código gerado para Android ARM64; nenhum ELF de God of War foi fornecido.
-- Cobertura VU1 AOT para todos os microprogramas reais e geração AOT dos módulos IRX necessários.
-- Envio efetivo do FD selecionado em MainActivity para GowGameActivity; a recepção JNI/EXTRA_DISC_FD está preparada, mas o launcher ainda não inicia a Activity.
-- Acesso de uma imagem real pelo provider ISO, enumeração de diretórios e chamadas reais de CD/DVD/IOP.
-- Cache privado do ELF e dos arquivos pequenos de boot realmente necessários.
-- Backend GS/Vulkan Android, presenter e saída de áudio Android.
-- Boot, primeira imagem, menus, controles touch visuais, áudio, FMVs, saves, desempenho e compatibilidade em aparelhos reais.
+- Ainda não foi executado um boot real do jogo, nem gameplay.
+- O launcher ainda não inicia a GameActivity/runtime depois da preparação.
+- O PS2Runtime ainda não recebe o ELF privado e não executa `loadELF()`/serviços de boot.
+- A pasta `gow_boot_seed` contém apenas SYSTEM.CNF e o ELF BOOT2. Ela não contém os assets, arquivos de dados, módulos IRX ou outros recursos necessários ao jogo.
+- A preparação do patch Waffle para rotear `cdRoot` para `gowcdroot:/` está na CI de runtime privado; mesmo após compilação, ainda faltará ligar os serviços reais ao boot.
+- Não há cobertura comprovada de VU1 AOT/IRX para o conteúdo da cópia do usuário.
+- Backend GS/Vulkan Android, presenter completo e saída de áudio Android ainda não estão integrados ao ciclo de gameplay.
+- Primeira imagem, menus, controles touch visuais, áudio, FMVs, saves, desempenho e compatibilidade ainda não foram testados em aparelhos reais.
 
 ## Próximos bloqueios reais — ordem de prioridade
 
-1. Fornecer o ELF privado ao PS2Recomp, gerar C++ e ligar a tabela real para ARM64.
-2. Gerar e integrar VU1/IRX AOT com cobertura comprovada para os módulos realmente usados.
-3. Integrar CD/DVD, SIF/DMA e demais serviços necessários à cadeia de boot.
-4. Completar a enumeração ISO9660 e definir o manifesto BT3 específico da revisão NTSC-U suportada.
-5. Implementar a extração privada com estimativa de espaço, staging, progresso, cancelamento, integridade e publicação atômica.
-6. Apontar o loader ELF e o VFS para a instalação local; substituir o provider híbrido de FD no caminho normal de execução.
-7. Implementar e integrar o GS/Vulkan Android e presenter, de modo que a primeira imagem real possa ser apresentada.
+1. Validar na CI o patch do runtime Waffle que substitui o antigo provider ISO pelo VFS local `gowcdroot:/`.
+2. Implementar e validar um manifesto completo de God of War com base na árvore real da revisão do usuário e nos acessos de boot; não adivinhar caminhos.
+3. Preparar o ELF em caminho privado, executar PS2Recomp e compilar o C++ gerado para ARM64, sem enviar conteúdo proprietário ao Git/CI.
+4. Ligar o lifecycle do PS2Runtime à GameActivity, chamar o loader e estruturar diagnóstico de cada fase de boot.
+5. Gerar e integrar VU1/IRX AOT com cobertura comprovada para os módulos realmente usados.
+6. Integrar CD/DVD, SIF/DMA e os serviços restantes necessários à cadeia de boot.
+7. Implementar GS/Vulkan Android e presenter para alcançar a primeira imagem real.
 8. Validar instalação, boot, menu, novo jogo e primeiro combate com uma ISO do usuário em aparelho real.
 9. Integrar saída de áudio Android e concluir controles, saves e demais componentes de gameplay.
 
