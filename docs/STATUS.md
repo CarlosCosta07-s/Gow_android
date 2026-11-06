@@ -1,6 +1,6 @@
 # Estado do projeto
 
-**Data da auditoria:** 2026-11-06  
+**Data da auditoria:** 2026-11-05  
 **Branch de desenvolvimento:** `main`  
 **Objetivo:** port nativo de God of War (PS2, 2005) para Android ARM64, usando recompilação estática e runtime de serviços PS2 nativo; não é um emulador.
 
@@ -32,6 +32,14 @@ Fonte: [KIexster/god-of-war-recomp](https://github.com/KIexster/god-of-war-recom
 - O build KIexster fixa [PS2Recomp](https://github.com/ran-j/PS2Recomp) no commit `c5a9d02573410a2085a4b4b831b0b68ba3515440`, licença GPL-3.0.
 - Nenhum runtime Waffle completo, PS2Recomp ou renderer desktop foi importado ainda. O antigo submódulo CodeAbhi foi removido.
 
+## [PREPARADO, NÃO TESTADO] Pipeline de recompilação host
+
+- Foi criado tools/build_recompiler_host.py para compilar o alvo ps2_recomp no computador e gerar C++ em diretório privado.
+- O script fixa KIexster em a226151feb6ed22937e42be485aaf28a83acd166 e PS2Recomp em c5a9d02573410a2085a4b4b831b0b68ba3515440.
+- A geração host aplica somente o patch-base Waffle, desativa os alvos runtime/analyzer/test/Studio e mantém o ELF e o C++ gerado fora do repositório.
+- A triagem dos patches e os critérios de seleção do runtime estão em docs/PIPELINE_RECOMPILADOR.md e docs/BASE_KIEXTER.md.
+- **Ainda não foi executado nem compilado neste ambiente.** Não há evidência de geração C++ ou de build ARM64 decorrente desta preparação.
+
 ## [NÃO TESTADO] Runtime e jogo
 
 - Pipeline PS2Recomp integrado ao projeto e gerando C++ do ELF privado.
@@ -47,8 +55,8 @@ Fonte: [KIexster/god-of-war-recomp](https://github.com/KIexster/god-of-war-recom
 ## Próximos bloqueios reais
 
 1. Validar em aparelho o parser `SYSTEM.CNF` com a imagem NTSC-U do usuário.
-2. Integrar PS2Recomp na revisão fixada e gerar C++ em ambiente privado.
-3. Selecionar e importar os módulos portáveis do runtime Waffle/KIexter que o jogo necessita.
+2. Executar e validar o pipeline host criado para PS2Recomp, usando o ELF NTSC-U correto e mantendo a saída privada.
+3. Fechar a seleção arquivo a arquivo dos módulos portáveis do runtime Waffle/KIexter e preparar a compilação Android.
 4. Adaptar runner, lifecycle, leitura/cache do disco, áudio e entrada para Android.
 5. Reaproveitar frontend GS/formatos portáveis e implementar o backend Vulkan Android.
 6. Executar VU1 e IRX necessários por AOT, sem fallback interpretado.
