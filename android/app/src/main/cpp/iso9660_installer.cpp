@@ -586,6 +586,8 @@ IsoInstallResult installIsoManifestImpl(
     return result;
 }
 
+} // namespace
+
 IsoInstallResult installIsoManifest(
     const Iso9660Reader &reader,
     const std::vector<IsoInstallFile> &manifest,

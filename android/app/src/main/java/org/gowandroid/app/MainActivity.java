@@ -954,7 +954,7 @@ public final class MainActivity extends AppCompatActivity {
                     .setTitle("Instalação do disco concluída")
                     .setMessage(
                             "Os arquivos ISO9660 foram extraídos para a pasta privada "
-                                    + "gow_full_install/disc. Os metadados .disc_layout e "
+                                    + "pasta privada da instalação. Os metadados .disc_layout e "
                                     + ".disc_meta foram gerados e publicados junto com os dados. "
                                     + preparedElfSummary + ". A instalação foi preparada, "
                                     + "mas o jogo ainda não foi iniciado.")
@@ -964,10 +964,10 @@ public final class MainActivity extends AppCompatActivity {
             String message = error == null || error.isEmpty()
                     ? "Não foi possível preparar a instalação do disco."
                     : error;
-            boolean cancelled = message.startsWith("Importação cancelada");
+            boolean cancelled = message.startsWith("Instalação cancelada");
             discStatus.setText(cancelled
                     ? "Instalação cancelada; os arquivos temporários foram removidos."
-                    : "Falha na importação: " + message);
+                    : "Falha na instalação: " + message);
             discStatus.setTextColor(cancelled ? COLOR_MUTED : 0xFFE27676);
             new AlertDialog.Builder(this)
                     .setTitle(cancelled ? "Instalação cancelada" : "Falha na instalação")
