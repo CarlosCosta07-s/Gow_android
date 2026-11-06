@@ -24,6 +24,9 @@ extern "C" PS2Runtime *gowCreatePs2Runtime() noexcept;
 extern "C" void gowDestroyPs2Runtime(PS2Runtime *runtime) noexcept;
 extern "C" bool gowInitializePs2RuntimeCoreHeadless(
     PS2Runtime *runtime, char *message, size_t capacity) noexcept;
+extern "C" bool gowRuntimeLoadElfAndCheckAot(
+    PS2Runtime *runtime, const char *bootRelativePath,
+    char *message, size_t capacity) noexcept;
 extern "C" void gowAndroidDiscCloseImage() noexcept;
 
 namespace {
@@ -38,6 +41,8 @@ void logMessage(int priority, const char* message) {
 std::mutex gActivityReferenceMutex;
 JavaVM *gActivityVm = nullptr;
 jobject gActivityReference = nullptr;
+std::mutex gBootPathMutex;
+std::string gBootRelativePath;
 
 void reportRuntimeStatus(android_app *app, const char *message, bool failed) {
     if (app == nullptr || message == nullptr) {
@@ -978,6 +983,29 @@ Java_org_gowandroid_app_GowGameActivity_nativeClearActivityReference(
     }
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_org_gowandroid_app_GowGameActivity_nativeSetBootRelativePath(
+    JNIEnv *env, jclass, jstring relativePath) noexcept {
+    if (env == nullptr || relativePath == nullptr) {
+        return JNI_FALSE;
+    }
+    const char *utf = env->GetStringUTFChars(relativePath, nullptr);
+    if (utf == nullptr) {
+        if (env->ExceptionCheck() == JNI_TRUE) env->ExceptionClear();
+        return JNI_FALSE;
+    }
+    std::string candidate(utf);
+    env->ReleaseStringUTFChars(relativePath, utf);
+    if (candidate.empty() || candidate.size() > 1024u) {
+        return JNI_FALSE;
+    }
+    {
+        std::lock_guard<std::mutex> lock(gBootPathMutex);
+        gBootRelativePath = std::move(candidate);
+    }
+    return JNI_TRUE;
+}
+
 extern "C" void android_main(android_app* app) {
     if (app == nullptr) {
         return;
@@ -1001,17 +1029,46 @@ extern "C" void android_main(android_app* app) {
     reportRuntimeStatus(
         app, "Preparando o núcleo PS2 (memória, EE, IOP e VU)...", false);
     PS2Runtime *runtime = gowCreatePs2Runtime();
+    bool coreReady = false;
     if (runtime != nullptr) {
         std::array<char, 512> coreMessage{};
         if (gowInitializePs2RuntimeCoreHeadless(
                 runtime, coreMessage.data(), coreMessage.size())) {
+            coreReady = true;
             __android_log_print(
                 ANDROID_LOG_INFO, kTag,
                 "PS2Runtime core ready: %s", coreMessage.data());
-            reportRuntimeStatus(
-                app,
-                "Núcleo PS2 inicializado. O jogo ainda não iniciou: o código AOT do ELF, o GS/Vulkan Android e o áudio nativo continuam pendentes.",
-                false);
+
+            std::string bootPath;
+            {
+                std::lock_guard<std::mutex> lock(gBootPathMutex);
+                bootPath = gBootRelativePath;
+            }
+            if (!bootPath.empty()) {
+                std::array<char, 512> loadMessage{};
+                const bool elfReady = gowRuntimeLoadElfAndCheckAot(
+                    runtime, bootPath.c_str(),
+                    loadMessage.data(), loadMessage.size());
+                __android_log_print(
+                    elfReady ? ANDROID_LOG_INFO : ANDROID_LOG_WARN,
+                    kTag, "PS2Runtime ELF/AOT gate: %s",
+                    loadMessage[0] == '\0'
+                        ? (elfReady ? "ELF gate passed." : "ELF gate failed without a diagnostic.")
+                        : loadMessage.data());
+                reportRuntimeStatus(
+                    app,
+                    loadMessage[0] == '\0'
+                        ? (elfReady
+                            ? "ELF e função AOT de entrada validados. O jogo ainda não iniciou: GS/Vulkan e áudio Android continuam pendentes."
+                            : "A validação ELF/AOT não passou. Consulte o Logcat GowAndroid.")
+                        : loadMessage.data(),
+                    !elfReady);
+            } else {
+                reportRuntimeStatus(
+                    app,
+                    "Núcleo PS2 inicializado. Nenhum BOOT2 foi encaminhado; o jogo não foi carregado.",
+                    false);
+            }
         } else {
             __android_log_print(
                 ANDROID_LOG_ERROR, kTag,
