@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import json
 import os
 import shutil
+import struct
 import subprocess
 import sys
 from pathlib import Path
