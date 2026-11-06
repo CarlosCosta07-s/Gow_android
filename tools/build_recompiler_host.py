@@ -712,6 +712,7 @@ def main() -> int:
         'extern "C" uint64_t gowAndroidCdRootOpenFile(const char *path, uint64_t *fileSize) noexcept;\n'
         'extern "C" bool gowAndroidCdRootReadFile(uint64_t handle, uint64_t offset, void *destination, size_t requested, size_t *bytesRead) noexcept;\n'
         'extern "C" void gowAndroidCdRootCloseFile(uint64_t handle) noexcept;\n'
+        'extern "C" bool gowAndroidCdRootStat(const char *path, bool *isDirectory, uint64_t *fileSize) noexcept;\n'
         '#endif\n',
         "declare the Android cdRoot provider for the PS2 VFS",
     )
