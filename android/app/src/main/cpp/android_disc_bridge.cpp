@@ -172,6 +172,28 @@ extern "C" void gowAndroidDiscCloseImage() noexcept {
     g_discReader.close();
 }
 
+extern "C" bool gowAndroidCdRootSetPath(
+    const char *privateCdRoot) noexcept {
+    if (privateCdRoot == nullptr || privateCdRoot[0] == '\0') {
+        return false;
+    }
+    try {
+        std::string path(privateCdRoot);
+        if (!g_cdRootVfs.openRoot(path, nullptr)) {
+            std::lock_guard<std::mutex> lock(g_cdRootPathMutex);
+            g_cdRootPath.clear();
+            return false;
+        }
+        std::lock_guard<std::mutex> lock(g_cdRootPathMutex);
+        g_cdRootPath = std::move(path);
+        return true;
+    } catch (...) {
+        std::lock_guard<std::mutex> lock(g_cdRootPathMutex);
+        g_cdRootPath.clear();
+        return false;
+    }
+}
+
 extern "C" bool gowAndroidCdRootIsReady() noexcept {
     return g_cdRootVfs.isOpen();
 }
@@ -283,16 +305,17 @@ Java_org_gowandroid_app_MainActivity_nativeSetCdRootDirectory(
     if (!copyJavaString(env, privateCdRoot, path) || path.empty()) {
         return JNI_FALSE;
     }
-    if (!g_cdRootVfs.openRoot(path, nullptr)) {
-        std::lock_guard<std::mutex> lock(g_cdRootPathMutex);
-        g_cdRootPath.clear();
+    return gowAndroidCdRootSetPath(path.c_str()) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_org_gowandroid_app_GowGameActivity_nativeSetPrivateDiscRoot(
+    JNIEnv *env, jclass, jstring privateCdRoot) {
+    std::string path;
+    if (!copyJavaString(env, privateCdRoot, path) || path.empty()) {
         return JNI_FALSE;
     }
-    {
-        std::lock_guard<std::mutex> lock(g_cdRootPathMutex);
-        g_cdRootPath = std::move(path);
-    }
-    return JNI_TRUE;
+    return gowAndroidCdRootSetPath(path.c_str()) ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
