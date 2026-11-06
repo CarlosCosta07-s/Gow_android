@@ -49,6 +49,13 @@ android {
             applicationIdSuffix ".debug"
             versionNameSuffix "-debug"
             minifyEnabled false
+            externalNativeBuild {
+                cmake {
+                    // Build the first GS primitive path in Debug only. Release remains disabled
+                    // until textures, depth, alpha tests and blend state are implemented.
+                    arguments "-DGOW_ANDROID_ENABLE_GS_VULKAN=ON"
+                }
+            }
         }
         release {
             minifyEnabled false
