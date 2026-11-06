@@ -179,6 +179,7 @@ jobs:
             android/app/src/test/cpp/android_gs_vulkan_backend_test.cpp \
             android/app/src/main/cpp/android_gs_vulkan_backend.cpp \
             android/app/src/main/cpp/android_gs_geometry.cpp \
+            android/app/src/main/cpp/android_gs_cpu_rasterizer.cpp \
             "$GOW_RUNTIME_DIR/ps2xRuntime/src/lib/gs/gpu/gs_texture_store.cpp" \
             "$GOW_RUNTIME_DIR/ps2xRuntime/src/lib/gs/ps2_gs_memory.cpp" \
             -Iandroid/app/src/main/cpp \
