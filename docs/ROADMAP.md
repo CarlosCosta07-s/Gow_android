@@ -17,7 +17,8 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - [x] Compilar APK Debug ARM64 e confirmar build CI no commit `7ed5a254`.
 - [x] Confirmar a CI do launcher SAF/ISO9660 no run `42125956300`.
 - [x] Criar ícone adaptativo e launcher temático God of War e confirmar a CI no run `42128232489`.
-- [ ] Instalar e executar em aparelho Android real (incluindo conferência do novo ícone e layout).
+- [x] Abrir o shell em um aparelho Android real (confirmado pelo mantenedor em 05/11/2026).
+- [ ] Verificar legibilidade, proporções e ícone em outros aparelhos e dimensões.
 - [x] Adicionar tela inicial e seletor SAF para a imagem do usuário.
 - [x] Solicitar permissão persistente de leitura e validar o descritor primário ISO9660 do setor 16.
 - [ ] Ler `SYSTEM.CNF` e identificar serial/revisão do jogo.
@@ -28,25 +29,27 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 
 ## Fase 2 — Recompilação ARM64
 
-- [ ] Integrar e fixar PS2Recomp e configuração de God of War.
-- [ ] Recompilar ELF privado para C++.
+- [ ] Fixar uma revisão imutável da base Android de recompilação e registrar sua origem/licença.
+- [ ] Integrar PS2Recomp, runtime EE/IOP e hooks específicos de God of War.
+- [ ] Recompilar o ELF privado do usuário para C++.
 - [ ] Compilar objetos gerados para `arm64-v8a`.
+- [ ] Gerar/compilar microprogramas VU1 antecipadamente; não manter interpretador no caminho final.
 - [ ] Testar instruções e funções críticas com checkpoints.
 - [ ] Separar insumos e artefatos privados da CI pública.
 
 **Aceitação:** pipeline reproduzível em ambiente privado, relatório de funções resolvidas/pendentes e nenhum ELF ou código gerado do jogo publicado no Git.
 
-## Fase 3 — Apresentação Vulkan Android
+## Fase 3 — Renderizador Graphics Synthesizer Android (Vulkan)
 
-- [x] Implementar criação de instância e surface Android.
-- [x] Implementar seleção de GPU e filas de gráficos/apresentação.
-- [x] Implementar swapchain, render pass, framebuffers e sincronização.
-- [x] Implementar smoke test clear/present e recriação do swapchain.
-- [ ] Confirmar build nativa e APK pela CI.
-- [ ] Executar teste gráfico em aparelho real e registrar logs/captura.
-- [ ] Tratar perfis de GPU e recuperação de falha.
+- [ ] Integrar o frontend GS da base nativa ao backend Vulkan Android.
+- [ ] Implementar render targets, texturas, CLUT/paletas e swizzle usados por God of War.
+- [ ] Implementar depth, alpha test, destination-alpha e modos de blending do GS.
+- [ ] Implementar alternativas two-pass/ping-pong para efeitos sem suporte direto do driver móvel.
+- [ ] Implementar shaders e sincronização de recursos sem depender do smoke test isolado.
+- [ ] Validar o backend com comandos gráficos reais emitidos pelo jogo em aparelho Android.
+- [ ] Medir uso de memória GPU, frame time e estabilidade em diferentes drivers.
 
-**Aceitação:** apresentação estável durante pausa, retomada, resize e recriação de surface nos aparelhos de referência.
+**Aceitação:** o backend GS apresenta corretamente a primeira imagem real de God of War em Android. Um clear/present isolado não conta como conclusão.
 
 ## Fase 4 — Boot e primeira imagem do jogo
 
@@ -54,7 +57,6 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - [ ] Executar código recompilado e serviços mínimos de kernel.
 - [ ] Resolver CD/DVD, IRX, SIF e cadeia inicial DMA.
 - [ ] Registrar progresso por etapas.
-- [ ] Integrar frontend GS e backend Vulkan.
 - [ ] Apresentar a primeira imagem real do jogo.
 
 **Aceitação:** app apresenta imagem real do jogo, sem tela vazia indefinida. Timeout mostra a última etapa confirmada.
@@ -93,7 +95,9 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 ## Regras de progresso
 
 - Abrir a Activity não significa que o jogo está portado.
-- Criar uma instância Vulkan não significa que o renderer GS funciona.
 - Um shell APK não é uma build completa do jogo.
+- O teste Vulkan clear/present isolado foi retirado do launcher após encerrar o app no aparelho do mantenedor; não será um bloqueio do projeto.
+- A validação de gráficos acontecerá com o GS real e o jogo em execução.
+- O caminho final não usará emulador, interpretador de EE nem interpretador de microprogramas VU1.
 - Não declarar FPS sem medições reproduzíveis.
 - Usar **[VERIFICADO]**, **[HIPÓTESE]** e **[NÃO TESTADO]** em auditorias.
