@@ -636,6 +636,7 @@ def main():
     args = sys.argv[1:]
     heads_file = None
     parts = 6
+    strict = False
     files = []
     out = args[0]
     i = 1
@@ -646,6 +647,9 @@ def main():
         elif args[i] == '--parts':
             parts = int(args[i + 1])
             i += 2
+        elif args[i] == '--strict':
+            strict = True
+            i += 1
         else:
             files.append(args[i])
             i += 1
@@ -663,10 +667,12 @@ def main():
                 extra.add(int(line, 16) & 0x3FF8)
     blocks = {}
     unsupported = 0
+    processed = 0
     for f in inputs:
         code = open(f, 'rb').read()
         if len(code) != CODE_SIZE:
             continue
+        processed += 1
         for pc in sorted(heads_of(code, extra)):
             pairs = extent(code, pc)
             if not pairs:
@@ -713,7 +719,16 @@ def main():
         old = open(path, encoding='utf-8').read() if os.path.exists(path) else None
         if old != body:
             open(path, 'w', encoding='utf-8').write(body)
-    print(f"[vu1n_gen] {len(inputs)} images, {len(blocks)} distinct blocks, {count} generated, {unsupported} unsupported")
+    print(f"[vu1n_gen] {processed}/{len(inputs)} valid images, {len(blocks)} distinct blocks, {count} generated, {unsupported} unsupported")
+    if strict:
+        if processed == 0 or count == 0 or unsupported != 0:
+            print(
+                f"[vu1n_gen] STRICT AOT COVERAGE FAILED: valid_images={processed}, "
+                f"generated={count}, unsupported={unsupported}",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+        print("[vu1n_gen] STRICT AOT COVERAGE PASSED: every discovered block has native code")
 
 
 if __name__ == '__main__':
