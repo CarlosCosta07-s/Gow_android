@@ -107,10 +107,6 @@ public final class MainActivity extends AppCompatActivity {
     private volatile boolean cancelDiscInstallRequested;
     private String preparedElfSummary;
 
-    // The native runtime reads this descriptor through /proc/self/fd/<n>.
-    // Keep it open while the launcher and NativeActivity share the same process.
-    private static ParcelFileDescriptor selectedDiscDescriptor;
-
     private final ActivityResultLauncher<String[]> openDocumentLauncher =
             registerForActivityResult(
                     new ActivityResultContracts.OpenDocument(),
@@ -1068,11 +1064,6 @@ public final class MainActivity extends AppCompatActivity {
                 }
 
                 serial = identifyGodOfWarDisc(candidate, bootPath);
-                ParcelFileDescriptor previous = selectedDiscDescriptor;
-                selectedDiscDescriptor = candidate;
-                candidate = null;
-                closeQuietly(previous);
-
                 valid = true;
                 result = "God of War (2005) reconhecido · " + serial;
             } catch (IOException | SecurityException | ErrnoException exception) {
@@ -1347,8 +1338,6 @@ public final class MainActivity extends AppCompatActivity {
             discInstallDialog.dismiss();
             discInstallDialog = null;
         }
-        closeQuietly(selectedDiscDescriptor);
-        selectedDiscDescriptor = null;
         super.onDestroy();
     }
 }
