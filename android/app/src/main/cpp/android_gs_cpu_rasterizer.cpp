@@ -559,41 +559,135 @@ bool rasterizeGsBatchToVram(
     return false;
 }
 
+namespace {
+
+struct DisplayCircuit {
+    bool valid = false;
+    uint32_t fbp = 0u;
+    uint32_t fbw = 0u;
+    uint8_t psm = GS_PSM_CT32;
+    uint32_t dbx = 0u;
+    uint32_t dby = 0u;
+    uint32_t width = 0u;
+    uint32_t height = 0u;
+};
+
+DisplayCircuit decodeDisplayCircuit(
+    bool enabled, uint64_t dispfb, uint64_t display) {
+    DisplayCircuit circuit{};
+    if (!enabled || display == 0u) return circuit;
+
+    circuit.fbp = static_cast<uint32_t>(dispfb & 0x1FFu);
+    circuit.fbw = std::max<uint32_t>(
+        1u, static_cast<uint32_t>((dispfb >> 9u) & 0x3Fu));
+    circuit.psm = static_cast<uint8_t>((dispfb >> 15u) & 0x1Fu);
+    circuit.dbx = static_cast<uint32_t>((dispfb >> 32u) & 0x7FFu);
+    circuit.dby = static_cast<uint32_t>((dispfb >> 43u) & 0x7FFu);
+    circuit.width = displayWidth(display);
+    circuit.height = displayHeight(display);
+    circuit.valid = circuit.width != 0u && circuit.height != 0u &&
+        circuit.width <= 640u && supportedFramebufferPsm(circuit.psm);
+    return circuit;
+}
+
+uint32_t readDisplayPixel(
+    const GSTextureStore &store,
+    const DisplayCircuit &circuit,
+    uint32_t x,
+    uint32_t y) {
+    // The Waffle reference presenter repeats the first visible source row and
+    // column from coordinate 2 to hide the game's deliberately cleared edge.
+    const uint32_t sourceX = std::max<uint32_t>(2u, circuit.dbx + x);
+    const uint32_t sourceY = std::max<uint32_t>(2u, circuit.dby + y);
+    if (sourceX >= 2048u || sourceY >= 2048u) return 0u;
+    return store.Read(
+        circuit.psm, circuit.fbp, circuit.fbw, sourceX, sourceY);
+}
+
+uint32_t displayAlpha(const DisplayCircuit &circuit, uint32_t pixel) {
+    const uint32_t alpha = circuit.psm == GS_PSM_CT24
+        ? 128u
+        : ((rgbaFromGsPixel(circuit.psm, pixel) >> 24u) & 0xFFu);
+    return std::min<uint32_t>(255u, alpha * 2u);
+}
+
+uint8_t blendChannel(uint8_t foreground, uint8_t background, uint32_t alpha) {
+    const uint32_t inverse = 255u - alpha;
+    const uint32_t value =
+        static_cast<uint32_t>(foreground) * alpha +
+        static_cast<uint32_t>(background) * inverse;
+    return static_cast<uint8_t>((value + 127u) / 255u);
+}
+
+} // namespace
+
 PresentationFrame presentGsVramCircuit(
     const GSTextureStore &store,
     const GSPresentationRequest &request) {
     PresentationFrame frame{};
-    const bool enable1 = (request.pmode & 1u) != 0u;
-    const bool enable2 = (request.pmode & 2u) != 0u;
+    const DisplayCircuit circuit1 = decodeDisplayCircuit(
+        (request.pmode & 1u) != 0u, request.dispfb1, request.display1);
+    const DisplayCircuit circuit2 = decodeDisplayCircuit(
+        (request.pmode & 2u) != 0u, request.dispfb2, request.display2);
+    if (!circuit1.valid && !circuit2.valid) return frame;
 
-    const uint64_t dispfb = enable1 ? request.dispfb1 : request.dispfb2;
-    const uint64_t display = enable1 ? request.display1 : request.display2;
-    if ((!enable1 && !enable2) || display == 0u) return frame;
-
-    const uint32_t fbp = static_cast<uint32_t>(dispfb & 0x1FFu);
-    const uint32_t fbw =
-        std::max<uint32_t>(1u, static_cast<uint32_t>((dispfb >> 9u) & 0x3Fu));
-    const uint8_t psm = static_cast<uint8_t>((dispfb >> 15u) & 0x1Fu);
-    const uint32_t dbx = static_cast<uint32_t>((dispfb >> 32u) & 0x7FFu);
-    const uint32_t dby = static_cast<uint32_t>((dispfb >> 43u) & 0x7FFu);
-    uint32_t width = displayWidth(display);
-    uint32_t height = std::min<uint32_t>(displayHeight(display), 448u);
-    if (width == 0u || height == 0u || width > 640u ||
-        !supportedFramebufferPsm(psm)) {
-        return frame;
-    }
+    // Match the reference GS presenter: circuit 1 defines the output extent
+    // when enabled; otherwise circuit 2 is the sole displayed source.
+    const DisplayCircuit &output = circuit1.valid ? circuit1 : circuit2;
+    const uint32_t width = output.width;
+    const uint32_t height = std::min<uint32_t>(output.height, 448u);
+    if (width == 0u || height == 0u) return frame;
 
     frame.width = width;
     frame.height = height;
-    frame.displayFbp = fbp;
-    frame.sourceFbp = fbp;
-    frame.pixels.assign(
-        static_cast<size_t>(640u) * height * 4u, 0u);
+    frame.displayFbp = output.fbp;
+    frame.sourceFbp = output.fbp;
+    frame.pixels.assign(static_cast<size_t>(640u) * height * 4u, 0u);
+
+    const bool composeBoth = circuit1.valid && circuit2.valid;
+    const bool useBackground = composeBoth && ((request.pmode >> 7u) & 1u) != 0u;
+    const bool fixedAlpha = ((request.pmode >> 5u) & 1u) != 0u;
+    const uint32_t alp = static_cast<uint32_t>((request.pmode >> 8u) & 0xFFu);
+
     for (uint32_t y = 0u; y < height; ++y) {
         for (uint32_t x = 0u; x < width; ++x) {
-            const uint32_t pixel = store.Read(
-                psm, fbp, fbw, dbx + x, dby + y);
-            const uint32_t rgba = rgbaFromGsPixel(psm, pixel);
+            uint32_t rgba = 0xFF000000u;
+            if (composeBoth) {
+                if (useBackground) {
+                    rgba = static_cast<uint32_t>(request.bgcolor & 0x00FFFFFFu) |
+                        0xFF000000u;
+                } else {
+                    const uint32_t backPixel =
+                        readDisplayPixel(store, circuit2, x, y);
+                    rgba = rgbaFromGsPixel(circuit2.psm, backPixel) |
+                        (0xFF000000u);
+                }
+
+                const uint32_t frontPixel =
+                    readDisplayPixel(store, circuit1, x, y);
+                const uint32_t frontRgba =
+                    rgbaFromGsPixel(circuit1.psm, frontPixel);
+                const uint32_t alpha = fixedAlpha
+                    ? alp
+                    : displayAlpha(circuit1, frontPixel);
+                const uint8_t red = blendChannel(
+                    static_cast<uint8_t>(frontRgba & 0xFFu),
+                    static_cast<uint8_t>(rgba & 0xFFu), alpha);
+                const uint8_t green = blendChannel(
+                    static_cast<uint8_t>((frontRgba >> 8u) & 0xFFu),
+                    static_cast<uint8_t>((rgba >> 8u) & 0xFFu), alpha);
+                const uint8_t blue = blendChannel(
+                    static_cast<uint8_t>((frontRgba >> 16u) & 0xFFu),
+                    static_cast<uint8_t>((rgba >> 16u) & 0xFFu), alpha);
+                rgba = static_cast<uint32_t>(red) |
+                    (static_cast<uint32_t>(green) << 8u) |
+                    (static_cast<uint32_t>(blue) << 16u) |
+                    0xFF000000u;
+            } else {
+                const uint32_t pixel = readDisplayPixel(store, output, x, y);
+                rgba = rgbaFromGsPixel(output.psm, pixel) | 0xFF000000u;
+            }
+
             const size_t offset =
                 (static_cast<size_t>(y) * 640u + x) * 4u;
             frame.pixels[offset + 0u] = static_cast<uint8_t>(rgba & 0xFFu);
