@@ -78,7 +78,9 @@ bool configurePrivateAotCaptureDirectories(const std::string &privateCdRoot) {
 
         const std::string vu1Path = vu1Dir.string();
         const std::string iopPath = iopDir.string();
+        const std::string vu1MissPath = (vu1Dir / "vu1n_heads.txt").string();
         if (::setenv("GOW_VU1_CAPTURA", vu1Path.c_str(), 1) != 0 ||
+            ::setenv("GOW_VU1N_MISS_LOG", vu1MissPath.c_str(), 1) != 0 ||
             ::setenv("PS2X_IOP_DUMP_MODULES", iopPath.c_str(), 1) != 0) {
             logMessage(
                 ANDROID_LOG_WARN,
@@ -1798,6 +1800,7 @@ Java_org_gowandroid_app_GowGameActivity_nativeConfigurePrivateBoot(
         (void)configurePrivateAotCaptureDirectories(rootPath);
     } else {
         ::unsetenv("GOW_VU1_CAPTURA");
+        ::unsetenv("GOW_VU1N_MISS_LOG");
         ::unsetenv("PS2X_IOP_DUMP_MODULES");
     }
     {
