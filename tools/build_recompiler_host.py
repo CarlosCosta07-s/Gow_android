@@ -1257,9 +1257,9 @@ def main() -> int:
         "exclude VU1 interpreter A/B verifier from strict runtime",
     )
     vu_dispatch_pattern = re.compile(
-        r"(?m)^[ \\t]*if\\s*\\(\\s*m_unit\\s*==\\s*Unit::VU1\\s*&&"
-        r"\\s*m_native\\s*&&\\s*m_native->enabled\\s*&&\\s*vuData"
-        r"\\s*&&\\s*codeSize\\s*==\\s*PS2_VU1_CODE_SIZE\\s*\\)"
+        r"(?m)^[ \t]*if\s*\(\s*m_unit\s*==\s*Unit::VU1\s*&&"
+        r"\s*m_native\s*&&\s*m_native->enabled\s*&&\s*vuData"
+        r"\s*&&\s*codeSize\s*==\s*PS2_VU1_CODE_SIZE\s*\)"
     )
     vu_core_text = vu_core.read_text(encoding="utf-8")
     vu_dispatch_matches = list(vu_dispatch_pattern.finditer(vu_core_text))
@@ -1271,7 +1271,7 @@ def main() -> int:
     dispatch_position = vu_dispatch_matches[0].start()
     vu_core_text = (
         vu_core_text[:dispatch_position]
-        + "#endif\\n"
+        + "#endif\n"
         + vu_core_text[dispatch_position:]
     )
     vu_core.write_text(vu_core_text, encoding="utf-8")
