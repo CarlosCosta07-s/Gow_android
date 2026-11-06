@@ -179,6 +179,21 @@ def main() -> int:
     run(configure)
     run([cmake, "--build", str(build_dir), "--target", "ps2_recomp", "--parallel"])
 
+    # Compile the IOP core with strict AOT-only dispatch enabled. This validates the
+    # refusal path on the host without requiring or generating any game modules.
+    iop_source = recompiler_source / "ps2xIOP"
+    iop_build_dir = work / "build-iop-native-only"
+    if not (iop_source / "CMakeLists.txt").is_file():
+        raise RuntimeError(f"Waffle IOP source tree is missing: {iop_source}")
+    run([
+        cmake,
+        "-S", str(iop_source),
+        "-B", str(iop_build_dir),
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DPS2X_IOP_NATIVE_ONLY=ON",
+    ])
+    run([cmake, "--build", str(iop_build_dir), "--target", "ps2_iop", "--parallel"])
+
     executable_names = {"ps2_recomp", "ps2_recomp.exe"}
     candidates = [
         path for path in build_dir.rglob("*")
@@ -190,7 +205,7 @@ def main() -> int:
     if args.build_only:
         print("")
         print(f"Host recompiler built successfully: {executable}")
-        print("No game ELF was accessed and no game-derived C++ was generated.")
+        print("Strict IOP AOT-only static library was also compiled; no game ELF was accessed and no game-derived C++ was generated.")
         return 0
 
     assert elf is not None
