@@ -353,6 +353,44 @@ def main() -> int:
         "select sse2neon plus ARM FPCR/FPSR shim for the EE/VU0 runtime",
     )
 
+    # The strict Android profile must not retain the optional PCSX2 VU1 bridge.
+    replace_exactly_once(
+        runtime_cpp,
+        '#include "vu_pcsx2/pcsx2_vu1_bridge.h"\nstatic bool gowUsePcsx2Vu1(); // GOW_VU1_PCSX2=1, defined before PS2Runtime::initialize\n',
+        '#if !defined(PS2X_VU1_NATIVE_ONLY)\n'
+        '#include "vu_pcsx2/pcsx2_vu1_bridge.h"\n'
+        'static bool gowUsePcsx2Vu1(); // GOW_VU1_PCSX2=1, defined before PS2Runtime::initialize\n'
+        '#endif\n',
+        "exclude the optional PCSX2 VU1 bridge from strict Android runtime",
+    )
+    runtime_text = runtime_cpp.read_text(encoding="utf-8")
+    pcxs2_branch = "                                     if (gowUsePcsx2Vu1())\n"
+    if runtime_text.count(pcxs2_branch) != 2:
+        raise RuntimeError("Expected exactly two optional PCSX2 VU1 callback branches.")
+    runtime_text = runtime_text.replace(
+        pcxs2_branch,
+        "#if !defined(PS2X_VU1_NATIVE_ONLY)\n" + pcxs2_branch,
+    )
+    for fallback in ("m_vu1.execute(", "m_vu1.resume("):
+        old = "                                     else\n                                     " + fallback
+        new = "                                     else\n#endif\n                                     " + fallback
+        if runtime_text.count(old) != 1:
+            raise RuntimeError(f"Expected one PCSX2 else branch before {fallback}.")
+        runtime_text = runtime_text.replace(old, new, 1)
+    runtime_cpp.write_text(runtime_text, encoding="utf-8")
+    replace_exactly_once(
+        runtime_cpp,
+        "static bool gowUsePcsx2Vu1()\n{",
+        "#if !defined(PS2X_VU1_NATIVE_ONLY)\nstatic bool gowUsePcsx2Vu1()\n{",
+        "compile the PCSX2 VU1 environment switch only in non-strict builds",
+    )
+    replace_exactly_once(
+        runtime_cpp,
+        "    return enabled;\n}\n\nbool PS2Runtime::initialize",
+        "    return enabled;\n}\n#endif\n\nbool PS2Runtime::initialize",
+        "close the optional PCSX2 VU1 environment switch guard",
+    )
+
     # Strict VU1 policy: never fall back to the cycle-exact interpreter.
     vu_core = recompiler_source / "ps2xRuntime/src/lib/vu/ps2_vu1_core.cpp"
     replace_exactly_once(
