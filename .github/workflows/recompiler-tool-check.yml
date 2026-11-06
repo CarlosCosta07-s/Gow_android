@@ -5,14 +5,22 @@ on:
     branches: [main]
     paths:
       - "tools/build_recompiler_host.py"
+      - "tools/ps2_vfs_cdroot_smoke.cpp"
+      - "tools/run_ps2_vfs_cdroot_smoke.py"
       - "tools/test_elf_validation.py"
+      - "tools/ps2_vfs_cdroot_smoke.cpp"
+      - "tools/run_ps2_vfs_cdroot_smoke.py"
       - "port/kiexter/tools/vu1n_gen.py"
       - "port/kiexter/vu1/ps2_vu1_neon_compat.h"
       - ".github/workflows/recompiler-tool-check.yml"
   pull_request:
     paths:
       - "tools/build_recompiler_host.py"
+      - "tools/ps2_vfs_cdroot_smoke.cpp"
+      - "tools/run_ps2_vfs_cdroot_smoke.py"
       - "tools/test_elf_validation.py"
+      - "tools/ps2_vfs_cdroot_smoke.cpp"
+      - "tools/run_ps2_vfs_cdroot_smoke.py"
       - "port/kiexter/tools/vu1n_gen.py"
       - "port/kiexter/vu1/ps2_vu1_neon_compat.h"
       - ".github/workflows/recompiler-tool-check.yml"
@@ -110,3 +118,6 @@ jobs:
 
       - name: Build pinned host recompiler without game files
         run: python tools/build_recompiler_host.py --build-only --work-dir /tmp/gowport
+
+      - name: Test patched PS2 VFS against synthetic private cdRoot
+        run: python tools/run_ps2_vfs_cdroot_smoke.py --work-dir /tmp/gowport
