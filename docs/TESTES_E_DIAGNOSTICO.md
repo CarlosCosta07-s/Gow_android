@@ -100,3 +100,10 @@ Artefato run 257: `gow-android-arm64-shell`, ID `13524346408`, expira em 13/11/2
 ## Teste sintético de VRAM/transferências
 
 `android_gs_vulkan_backend_test.cpp` verifica acesso CT32, scissor/FBMSK, HOST→LOCAL e snapshot 4 MiB usando o `GSTextureStore` e `ps2_gs_memory.cpp` originais do runtime Waffle. As CIs `42259346530` e `42259354011` foram abertas para essa validação; o teste só deve ser marcado como aprovado depois de uma execução verde.
+## Teste de VRAM e transferências GS — CI 261
+
+**[APROVADO]** Run `42260019446` compilou e executou `android_gs_vulkan_backend_test.cpp` contra `GSTextureStore`/`ps2_gs_memory.cpp` do Waffle. O teste valida read/write CT32, scissor, FBMSK, transferência HOST→LOCAL e snapshot 4 MiB. A expectativa do estado final segue o contrato Waffle: `totalPixels=0`, `copiedPixels=2`, `direction=3` depois que a transferência termina.
+
+Artefato Debug ARM64: `gow-android-arm64-shell`, ID `13524986210`, expira em 13/11/2026.
+
+**Ainda não testado:** rasterização em FBP/PSM, apresentação por DISPFB/DISPLAY/PMODE, texturas/CLUT no shader, depth, alpha/DATE, blending, áudio e boot real. A aprovação host não substitui a validação numa GPU Android.
