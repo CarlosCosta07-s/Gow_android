@@ -53,6 +53,7 @@ add_library(android-game SHARED
     private_boot_path.cpp
     android_frame_scaler.cpp
     android_gs_geometry.cpp
+    android_gs_cpu_rasterizer.cpp
     android_gs_vulkan_backend.cpp
     ps2_elf_validator.cpp
     android_disc_bridge.cpp
