@@ -4,7 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from build_android_game import _verify_generated_outputs, create_build_plan
+from build_android_game import (
+    _verify_generated_outputs,
+    create_build_plan,
+    locate_ntsc_u_elf,
+    parse_system_cnf_boot_path,
+)
 
 
 class AndroidGameBuildPlanTests(unittest.TestCase):
@@ -158,6 +163,53 @@ PS2Runtime::RecompiledFunction g_ps2RecompiledFunctionTable[1u] = {};
                 self.root, self.private / "missing.elf", self.work,
                 windows=False,
             )
+
+    def test_system_cnf_resolves_ntsc_u_boot_path(self) -> None:
+        path = parse_system_cnf_boot_path(
+            "BOOT2 = cdrom0:\\SCUS_973.99;1\\nVER = 1.00\\n"
+        )
+        self.assertEqual(path, "SCUS_973.99")
+
+    def test_system_cnf_supports_nested_ntsc_u_path(self) -> None:
+        path = parse_system_cnf_boot_path(
+            "BOOT2 = cdrom0:\\BOOT\\SCUS_973.99;1\\n"
+        )
+        self.assertEqual(path, "BOOT/SCUS_973.99")
+
+    def test_system_cnf_rejects_path_traversal(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unsafe BOOT2 path"):
+            parse_system_cnf_boot_path(
+                "BOOT2 = cdrom0:\\..\\SCUS_973.99;1\\n"
+            )
+
+    def test_iso_extraction_uses_only_ntsc_u_executable_from_system_cnf(self) -> None:
+        extracted = self.private / "iso-extracted"
+        extracted.mkdir()
+        (extracted / "SYSTEM.CNF").write_text(
+            "BOOT2 = cdrom0:\\SCUS_973.99;1\\n", encoding="ascii"
+        )
+        elf = extracted / "SCUS_973.99"
+        elf.write_bytes(b"synthetic private ELF placeholder")
+        self.assertEqual(locate_ntsc_u_elf(extracted), elf.resolve())
+
+    def test_iso_extraction_rejects_pal_system_cnf(self) -> None:
+        extracted = self.private / "iso-pal"
+        extracted.mkdir()
+        (extracted / "SYSTEM.CNF").write_text(
+            "BOOT2 = cdrom0:\\SCES_531.33;1\\n", encoding="ascii"
+        )
+        (extracted / "SCES_531.33").write_bytes(b"synthetic PAL ELF")
+        with self.assertRaisesRegex(ValueError, "only supports NTSC-U"):
+            locate_ntsc_u_elf(extracted)
+
+    def test_iso_extraction_requires_system_cnf_boot_file(self) -> None:
+        extracted = self.private / "iso-missing"
+        extracted.mkdir()
+        (extracted / "SYSTEM.CNF").write_text(
+            "BOOT2 = cdrom0:\\SCUS_973.99;1\\n", encoding="ascii"
+        )
+        with self.assertRaisesRegex(ValueError, "did not produce exactly one"):
+            locate_ntsc_u_elf(extracted)
 
 
 if __name__ == "__main__":
