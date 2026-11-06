@@ -32,7 +32,7 @@ O ícone adaptativo é um **Ômega branco sobre fundo vermelho sólido**, desenh
 
 ## Launcher e seleção de disco
 
-A tela inicial permite selecionar uma imagem pelo Storage Access Framework, manter a permissão quando o provedor Android permite e validar o descritor primário ISO9660 no setor 16. Essa verificação **não identifica o serial nem confirma que o arquivo é God of War**; a leitura de `SYSTEM.CNF` e a identificação da revisão ainda serão implementadas. A imagem não é copiada para o aplicativo nem enviada ao GitHub.
+A tela inicial permite selecionar uma imagem pelo Storage Access Framework e preservar a permissão de leitura quando o provedor Android permite. O código agora valida o descritor ISO9660, lê o diretório raiz e identifica o executável em `SYSTEM.CNF`, reconhecendo inicialmente `SCUS_973.99` (NTSC-U) e `SCES_531.33` (PAL). **Essa nova leitura está no código, mas ainda aguarda compilação/validação em aparelho com imagens de teste.** A imagem não é copiada para o APK nem enviada ao GitHub.
 
 O launcher mantém as ações de seleção de disco e início do jogo. A ação **JOGAR** ainda não inicia uma sessão: o runtime nativo precisa ser integrado primeiro. O teste Vulkan isolado foi retirado da interface após encerrar o aplicativo no aparelho do mantenedor; a validação gráfica será feita com o renderizador GS e o próprio jogo.
 
