@@ -254,9 +254,48 @@ def main() -> int:
         "Android native startup must not execute guest code before GS/audio are ready.",
     )
 
+    # The first-boot diagnostic may start the worker only after the private ELF
+    # has passed the AOT entry-point gate and the Android GS/Vulkan path is live.
+    start_bridge = runtime_bridge.find(
+        'extern "C" bool gowRuntimeStartGuestExecutionAndroid('
+    )
+    finish_bridge = runtime_bridge.find(
+        'extern "C" bool gowRuntimeGuestExecutionFinishedAndroid('
+    )
+    cdvd_bridge = runtime_bridge.find(
+        'extern "C" bool gowRuntimeValidateIopCdvd(',
+        finish_bridge,
+    )
     require(
-        "startGuestExecutionAndroid(" not in native_main,
-        "Android guest worker must remain opt-in until the GS/audio and boot gates are explicitly connected.",
+        start_bridge >= 0 and finish_bridge > start_bridge
+        and cdvd_bridge > finish_bridge,
+        "Gated Android guest start/finish bridge is missing.",
+    )
+    start_bridge_body = runtime_bridge[start_bridge:finish_bridge]
+    finish_bridge_body = runtime_bridge[finish_bridge:cdvd_bridge]
+    require(
+        "runtime->startGuestExecutionAndroid()" in start_bridge_body
+        and "runtime->isGuestExecutionFinishedAndroid()" in finish_bridge_body,
+        "Android worker bridge does not call the prepared runtime worker API.",
+    )
+
+    for required in (
+        "bool gPrivateAotElfReady = false;",
+        "gPrivateAotElfReady = elfReady;",
+        "bool tryStartAndroidGuestExecution(android_app *app)",
+        "!gPrivateAotElfReady",
+        "!gGsBackendAttached",
+        "!gRenderer.isReady()",
+        "gowRuntimeStartGuestExecutionAndroid(",
+        "bool reportAndroidGuestCompletion",
+        "gowRuntimeGuestExecutionFinishedAndroid(",
+        "tryStartAndroidGuestExecution(app)",
+    ):
+        require(required in native_main, f"Gated Android first-boot path is missing: {required}")
+    require(
+        "startGuestExecutionAndroid(" not in native_main
+        and "runtime->run(" not in native_main,
+        "android_main must use the gated worker bridge, never the desktop run() path.",
     )
 
     require(
@@ -343,7 +382,7 @@ def main() -> int:
         require(required in native_main, f"Local GS scene capture path is missing: {required}")
 
     print("Verified: Android PS2 core initialization is headless and uses a null GS backend.")
-    print("Verified: a Raylib-free guest worker is prepared but not started by android_main.")
+    print("Verified: the Android guest worker starts only after private AOT, GS backend and Vulkan surface gates pass.")
     print("Verified: GameActivity owns presentation and bounded local GS scene captures.")
     return 0
 
