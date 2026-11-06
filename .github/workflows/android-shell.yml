@@ -7,6 +7,7 @@ on:
     paths:
       - "android/**"
       - "port/kiexter/vu1/ps2_vu1_neon_compat.h"
+      - "tools/build_recompiler_host.py"
       - ".github/workflows/android-shell.yml"
 
 permissions:
@@ -63,6 +64,17 @@ jobs:
           if [ -d "$ANDROID_SDK_ROOT/platforms/android-37.0" ] && [ ! -e "$ANDROID_SDK_ROOT/platforms/android-37" ]; then
             ln -s android-37.0 "$ANDROID_SDK_ROOT/platforms/android-37"
           fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build Waffle static runtime for Android arm64-v8a
+        run: |
+          python tools/build_recompiler_host.py \
+            --android-runtime-only \
+            --work-dir "$RUNNER_TEMP/gowport-android-runtime"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
