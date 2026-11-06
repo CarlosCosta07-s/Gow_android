@@ -17,6 +17,7 @@
 class PS2Runtime;
 extern "C" PS2Runtime *gowCreatePs2Runtime() noexcept;
 extern "C" void gowDestroyPs2Runtime(PS2Runtime *runtime) noexcept;
+extern "C" void gowAndroidDiscCloseImage() noexcept;
 
 namespace {
 
@@ -904,5 +905,6 @@ extern "C" void android_main(android_app* app) {
         logMessage(ANDROID_LOG_INFO, "PS2Runtime destroyed cleanly");
     }
     gowAndroidPadResetAll();
+    gowAndroidDiscCloseImage();
     logMessage(ANDROID_LOG_INFO, "Gow_android native shell stopped");
 }
