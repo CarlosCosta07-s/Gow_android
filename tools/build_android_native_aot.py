@@ -103,8 +103,10 @@ def safe_extract_archive(archive_path: Path, destination: Path) -> tuple[Path, P
 
     vu1_dir = destination / "vu1"
     iop_dir = destination / "iop"
-    if not vu1_dir.is_dir() or not iop_dir.is_dir():
-        raise ValueError("AOT capture ZIP must contain both vu1/ and iop/ directories.")
+    # A first strict boot may stop before it has reached either subsystem.
+    # Preserve partial captures so the next AOT iteration can advance further.
+    vu1_dir.mkdir(parents=True, exist_ok=True)
+    iop_dir.mkdir(parents=True, exist_ok=True)
     return vu1_dir, iop_dir
 
 
@@ -113,8 +115,6 @@ def validate_vu1_capture_directory(vu1_dir: Path) -> list[Path]:
     if not vu1_dir.is_dir():
         raise ValueError(f"VU1 capture directory is missing: {vu1_dir}")
     files = sorted(path for path in vu1_dir.glob("*.bin") if path.is_file())
-    if not files:
-        raise ValueError("No VU1 .bin micro-memory captures were found.")
     for path in files:
         if path.is_symlink():
             raise ValueError(f"VU1 capture may not be a symbolic link: {path}")
@@ -129,8 +129,17 @@ def validate_vu1_capture_directory(vu1_dir: Path) -> list[Path]:
 def normalize_and_validate_iop_dump(iop_dir: Path, normalized_dir: Path) -> list[dict[str, object]]:
     reject_symlink_components(iop_dir)
     manifest = iop_dir / "modules.txt"
-    if not iop_dir.is_dir() or not manifest.is_file():
-        raise ValueError("IOP capture must contain iop/modules.txt and the matching .bin files.")
+    if not iop_dir.is_dir():
+        raise ValueError(f"IOP capture directory is missing: {iop_dir}")
+    captured_bins = {
+        path.stem for path in iop_dir.glob("*.bin")
+        if path.is_file() and not path.is_symlink()
+    }
+    if not manifest.is_file():
+        if captured_bins:
+            raise ValueError("IOP .bin captures exist but iop/modules.txt is missing.")
+        normalized_dir.mkdir(parents=True, exist_ok=True)
+        return []
 
     latest: dict[tuple[str, int], tuple[int, int]] = {}
     name_bases: dict[str, int] = {}
@@ -163,7 +172,12 @@ def normalize_and_validate_iop_dump(iop_dir: Path, normalized_dir: Path) -> list
         latest[(name, base)] = (size, expected_hash)
 
     if not latest:
-        raise ValueError("IOP modules.txt contains no captured modules.")
+        if captured_bins:
+            raise ValueError("IOP .bin captures exist but modules.txt contains no module records.")
+        normalized_dir.mkdir(parents=True, exist_ok=True)
+        return []
+    if captured_bins != {name for name, _base in latest}:
+        raise ValueError("IOP capture directory contains unlisted or missing module .bin files.")
 
     normalized_dir.mkdir(parents=True, exist_ok=True)
     records: list[dict[str, object]] = []
