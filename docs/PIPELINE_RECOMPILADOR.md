@@ -45,13 +45,14 @@ Por segurança, o script:
 1. baixa/atualiza cópias de trabalho do KIexter e do PS2Recomp nos commits fixados;
 2. aplica o patch-base ps2recomp-waffle-runtime.patch, em uma cópia privada do PS2Recomp;
 3. aplica transformações ancoradas no código Waffle para ativar PS2X_IOP_NATIVE_ONLY: se um IRX não tiver bloco AOT, o IOP registra PC/RA e interrompe aquela execução em vez de chamar o interpretador de instruções;
-4. configura e compila apenas ps2_recomp no host;
-5. configura ps2xIOP em um build separado e compila a biblioteca estática ps2_iop com PS2X_IOP_NATIVE_ONLY=ON;
-6. no modo --elf, copia o ELF e o mapa para a pasta privada, preenche @ELF@, @MAP@ e @OUT@ no template e gera os arquivos .cpp na pasta privada generated.
+4. no modo estrito, extrai a rotina de exceções para helper independente, condiciona a construção de IopCpuCore e remove core/iop_cpu.cpp da lista do alvo ps2_iop;
+5. configura e compila apenas ps2_recomp no host;
+6. configura ps2xIOP em um build separado, compila a biblioteca estática ps2_iop com PS2X_IOP_NATIVE_ONLY=ON e inspeciona compile_commands.json para garantir que core/iop_cpu.cpp não foi compilado;
+7. no modo --elf, copia o ELF e o mapa para a pasta privada, preenche @ELF@, @MAP@ e @OUT@ no template e gera os arquivos .cpp na pasta privada generated.
 
 O script limpa alterações locais dentro das duas cópias Git privadas antes de reaplicar a revisão fixada. Não coloque arquivos próprios dentro de sources/PS2Recomp ou sources/KIexster.
 
-A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. A execução 42147331364 compilou com sucesso ps2_recomp e a biblioteca ps2_iop com a política nativa estrita. O build IOP usou iop_native_none.cpp, sem módulos IRX reais: isso valida a compilação da trava, não sua cobertura com arquivos de jogo.
+A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. A execução 42148409363 compilou com sucesso ps2_recomp e a biblioteca ps2_iop com a política nativa estrita; compile_commands.json confirmou que core/iop_cpu.cpp não fazia parte da build. O build IOP usou iop_native_none.cpp, sem módulos IRX reais: isso valida a exclusão da unidade de interpretação e a compilação da trava, não a cobertura AOT com arquivos de jogo.
 
 ## Dependências do host
 
