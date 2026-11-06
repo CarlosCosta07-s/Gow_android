@@ -2,7 +2,7 @@
 
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
-> Estado atual: shell Android ARM64 com FORGE e runtime Waffle/KIexter ligado ao alvo nativo. O runtime agora inclui um provider ISO9660 SAF compilado que encaminha caminhos `gowdisc:/` ao IOP/VFS por leitura aleatória; o launcher ainda não passa o FD nem inicia uma sessão. Não há C++ recompilado do ELF do usuário, backend GS/Vulkan Android ou versão jogável.
+> Estado atual: shell FORGE Android ARM64 e runtime Waffle/KIexter compilados. O provider privado `cdRoot` atende operações de arquivo `cdrom0:` no PS2 VFS, e uma correção em validação passa o caminho físico da instalação ao runtime. A extração Android ainda importa somente `SYSTEM.CNF` e o ELF BOOT2: ainda não gera `.disc_layout`/`.disc_meta` para as leituras de CDVD por LSN. O launcher não inicia uma sessão; não há C++ recompilado do ELF do usuário, backend GS/Vulkan Android ou versão jogável.
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml) [![Host recompiler](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml)
 
@@ -101,8 +101,8 @@ A licença GPL-3.0 deste repositório cobre somente o código que seus autores p
 - [Base KIexter: arquivos, origem e adaptação Android](docs/BASE_KIEXTER.md)
 - [Pipeline host do recompilador](docs/PIPELINE_RECOMPILADOR.md)
 - [Auditoria do GS e plano de backend Vulkan Android](docs/GS_VULKAN_ANDROID.md)
-- [Leitor ISO9660 e provider VFS Android](docs/DISC_VFS_ANDROID.md)
-- [Leitor ISO9660 e integração do VFS Android](docs/DISC_VFS_ANDROID.md)
+- [Leitor ISO9660, cdRoot e integração do VFS Android](docs/DISC_VFS_ANDROID.md)
+- [Auditoria da fonte de setores PS2 e layout completo do disco](docs/DISC_RUNTIME_AUDIT.md)
 - [Roadmap e critérios de conclusão](docs/ROADMAP.md)
 - [Auditoria das referências](docs/REFERENCIAS.md)
 - [Créditos e avisos de terceiros](THIRD_PARTY_NOTICES.md)
