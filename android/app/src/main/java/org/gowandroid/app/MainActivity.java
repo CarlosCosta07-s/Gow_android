@@ -27,6 +27,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -57,13 +58,29 @@ public final class MainActivity extends AppCompatActivity {
 
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
 
+    private interface InstallProgressCallback {
+        boolean onProgress(long totalBytes, long copiedBytes,
+                           int completedFiles, int totalFiles);
+    }
+
+    private static native String nativeInstallIsoManifest(
+            int descriptor, String privateRoot, String[] sourcePaths,
+            String[] destinationPaths, InstallProgressCallback progressCallback);
+
+    static {
+        System.loadLibrary("android-game");
+    }
+
     private TextView discName;
     private TextView discStatus;
     private Button selectDiscButton;
+    private Button prepareBootButton;
 
     private Uri selectedDiscUri;
     private boolean selectedDiscValid;
     private String selectedDiscSerial;
+    private String selectedDiscBootPath;
+    private boolean installingBootFiles;
 
     // The native runtime reads this descriptor through /proc/self/fd/<n>.
     // Keep it open while the launcher and NativeActivity share the same process.
@@ -142,9 +159,9 @@ public final class MainActivity extends AppCompatActivity {
         LinearLayout actionRow = new LinearLayout(this);
         actionRow.setOrientation(LinearLayout.HORIZONTAL);
 
-        Button playButton = actionButton("▶   JOGAR", true);
-        playButton.setOnClickListener(view -> onPlayPressed());
-        actionRow.addView(playButton, new LinearLayout.LayoutParams(
+        prepareBootButton = actionButton("PREPARAR BOOT", true);
+        prepareBootButton.setOnClickListener(view -> onPlayPressed());
+        actionRow.addView(prepareBootButton, new LinearLayout.LayoutParams(
                 0, dp(47), 0.72f));
 
         View gap = new View(this);
@@ -521,22 +538,175 @@ public final class MainActivity extends AppCompatActivity {
             return;
         }
 
-        String message = selectedDiscValid
-                ? "Disco identificado: " + selectedDiscSerial + ".\\n\\n"
-                        + "O FORGE já consegue confirmar a identidade do disco por meio do "
-                        + "SYSTEM.CNF. O runtime nativo ainda está em integração; o jogo só será "
-                        + "iniciado quando a recompilação estática e o boot estiverem prontos."
-                : "A imagem ainda não passou pela identificação ISO9660/SYSTEM.CNF. "
-                        + "Selecione uma imagem compatível de God of War (2005).";
+        if (!selectedDiscValid || selectedDiscBootPath == null
+                || selectedDiscBootPath.isEmpty()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Imagem não validada")
+                    .setMessage("A imagem precisa passar pela validação ISO9660 e pela leitura de SYSTEM.CNF antes da importação.")
+                    .setPositiveButton("Entendi", null)
+                    .setNeutralButton("Trocar imagem",
+                            (dialog, which) ->
+                                    openDocumentLauncher.launch(new String[]{"*/*"}))
+                    .show();
+            return;
+        }
 
         new AlertDialog.Builder(this)
-                .setTitle(selectedDiscValid ? "Disco reconhecido" : "Imagem não validada")
-                .setMessage(message)
-                .setPositiveButton("Entendi", null)
-                .setNeutralButton("Trocar imagem",
-                        (dialog, which) ->
-                                openDocumentLauncher.launch(new String[]{"*/*"}))
+                .setTitle("Preparar arquivos de boot")
+                .setMessage(
+                        "Disco reconhecido: " + selectedDiscSerial + ".\\n\\n"
+                                + "O FORGE vai copiar SYSTEM.CNF e o executável indicado por BOOT2 "
+                                + "para o armazenamento privado do aplicativo. Esta é apenas a "
+                                + "primeira etapa de importação: os demais dados do jogo ainda "
+                                + "não foram mapeados e isso não inicia o jogo.")
+                .setPositiveButton("Preparar", (dialog, which) -> startBootFileImport())
+                .setNegativeButton("Cancelar", null)
                 .show();
+    }
+
+    private void startBootFileImport() {
+        if (installingBootFiles || selectedDiscUri == null
+                || selectedDiscBootPath == null || !selectedDiscValid) {
+            return;
+        }
+
+        final Uri sourceUri = selectedDiscUri;
+        final String expectedSerial = selectedDiscSerial;
+        final String bootPath = selectedDiscBootPath;
+        final String installationName = "gow_boot_seed";
+        final File installationRoot = new File(getFilesDir(), "installations");
+        final File finalInstallation = new File(installationRoot, installationName);
+
+        if (finalInstallation.exists()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Arquivos de boot já importados")
+                    .setMessage(
+                            "A pasta de preparação já existe no armazenamento privado. "
+                                    + "Ela contém somente os arquivos de boot importados nesta etapa; "
+                                    + "não representa uma instalação completa nem permite iniciar o jogo.")
+                    .setPositiveButton("Entendi", null)
+                    .show();
+            return;
+        }
+
+        if (!installationRoot.exists() && !installationRoot.mkdirs()) {
+            showBootImportResult(false,
+                    "Não foi possível criar a pasta privada de instalação.");
+            return;
+        }
+
+        installingBootFiles = true;
+        if (prepareBootButton != null) {
+            prepareBootButton.setEnabled(false);
+            prepareBootButton.setText("IMPORTANDO...");
+            prepareBootButton.setAlpha(0.6f);
+        }
+        discStatus.setText("Preparando SYSTEM.CNF e o executável BOOT2...");
+        discStatus.setTextColor(COLOR_MUTED);
+
+        ioExecutor.execute(() -> {
+            ParcelFileDescriptor candidate = null;
+            String failure = null;
+            try {
+                candidate = getContentResolver().openFileDescriptor(sourceUri, "r");
+                if (candidate == null) {
+                    throw new IOException("O provedor não conseguiu reabrir a imagem selecionada.");
+                }
+
+                String[] detectedBootPath = new String[1];
+                String detectedSerial = identifyGodOfWarDisc(candidate, detectedBootPath);
+                if (!expectedSerial.equals(detectedSerial)
+                        || !bootPath.equals(detectedBootPath[0])) {
+                    throw new IOException(
+                            "A identidade da imagem mudou desde a validação inicial. "
+                                    + "Selecione e valide novamente o disco.");
+                }
+
+                String[] sourcePaths = {"SYSTEM.CNF", bootPath};
+                String[] destinationPaths = {
+                        "disc/SYSTEM.CNF",
+                        "disc/" + bootPath
+                };
+                final int[] lastPercent = {-1};
+                InstallProgressCallback callback =
+                        (totalBytes, copiedBytes, completedFiles, totalFiles) -> {
+                            if (isFinishing() || isDestroyed()) {
+                                return false;
+                            }
+                            int percent = totalBytes <= 0L ? 100
+                                    : (int) Math.min(100L,
+                                            (copiedBytes * 100L) / totalBytes);
+                            if (percent != lastPercent[0]) {
+                                lastPercent[0] = percent;
+                                runOnUiThread(() -> {
+                                    if (!isFinishing() && !isDestroyed()) {
+                                        discStatus.setText(
+                                                "Importando arquivos de boot: " + percent + "% · "
+                                                        + completedFiles + "/" + totalFiles);
+                                    }
+                                });
+                            }
+                            return true;
+                        };
+
+                String error = nativeInstallIsoManifest(
+                        candidate.getFd(), installationRoot.getAbsolutePath(),
+                        sourcePaths, destinationPaths, callback);
+                if (error != null && !error.isEmpty()) {
+                    failure = error;
+                }
+            } catch (IOException | SecurityException | ErrnoException exception) {
+                failure = "Falha na importação: " + safeMessage(exception);
+            } catch (RuntimeException exception) {
+                failure = "Falha na importação: " + safeMessage(exception);
+            } finally {
+                closeQuietly(candidate);
+            }
+
+            final String finalFailure = failure;
+            runOnUiThread(() -> showBootImportResult(
+                    finalFailure == null, finalFailure));
+        });
+    }
+
+    private void showBootImportResult(boolean success, String error) {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        installingBootFiles = false;
+        if (prepareBootButton != null) {
+            prepareBootButton.setEnabled(true);
+            prepareBootButton.setAlpha(1f);
+            prepareBootButton.setText(success ? "BOOT PREPARADO" : "TENTAR NOVAMENTE");
+            if (success) prepareBootButton.setEnabled(false);
+        }
+
+        if (success) {
+            discStatus.setText(
+                    "Arquivos de boot importados para o armazenamento privado. "
+                            + "Os demais arquivos do disco ainda precisam ser identificados; "
+                            + "o jogo ainda não pode iniciar.");
+            discStatus.setTextColor(0xFF8BC28F);
+            new AlertDialog.Builder(this)
+                    .setTitle("Preparação inicial concluída")
+                    .setMessage(
+                            "SYSTEM.CNF e o executável BOOT2 foram copiados e publicados "
+                                    + "na pasta privada gow_boot_seed. A instalação ainda está "
+                                    + "incompleta e o runtime não foi iniciado.")
+                    .setPositiveButton("Continuar", null)
+                    .show();
+        } else {
+            String message = error == null || error.isEmpty()
+                    ? "Não foi possível importar os arquivos de boot."
+                    : error;
+            discStatus.setText("Falha na importação: " + message);
+            discStatus.setTextColor(0xFFE27676);
+            new AlertDialog.Builder(this)
+                    .setTitle("Falha na preparação")
+                    .setMessage(message)
+                    .setPositiveButton("Fechar", null)
+                    .show();
+        }
     }
 
     private void showSettingsDialog() {
@@ -576,6 +746,7 @@ public final class MainActivity extends AppCompatActivity {
 
         selectedDiscUri = uri;
         selectedDiscValid = false;
+        selectedDiscBootPath = null;
 
         try {
             getContentResolver().takePersistableUriPermission(
@@ -619,6 +790,7 @@ public final class MainActivity extends AppCompatActivity {
             boolean valid = false;
             ParcelFileDescriptor candidate = null;
             String serial = null;
+            String[] bootPath = new String[1];
 
             try {
                 candidate = getContentResolver().openFileDescriptor(uri, "r");
@@ -626,7 +798,7 @@ public final class MainActivity extends AppCompatActivity {
                     throw new IOException("O provedor não conseguiu abrir o arquivo.");
                 }
 
-                serial = identifyGodOfWarDisc(candidate);
+                serial = identifyGodOfWarDisc(candidate, bootPath);
                 ParcelFileDescriptor previous = selectedDiscDescriptor;
                 selectedDiscDescriptor = candidate;
                 candidate = null;
@@ -644,12 +816,14 @@ public final class MainActivity extends AppCompatActivity {
             final String finalName = name;
             final String finalResult = result;
             final String finalSerial = serial;
+            final String finalBootPath = bootPath[0];
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) {
                     return;
                 }
                 selectedDiscValid = isValid;
                 selectedDiscSerial = finalSerial;
+                selectedDiscBootPath = isValid ? finalBootPath : null;
                 discName.setText(finalName);
                 discStatus.setText(finalResult);
                 discStatus.setTextColor(
@@ -668,7 +842,8 @@ public final class MainActivity extends AppCompatActivity {
      * This intentionally supports 2048-byte ISO sectors; raw 2352-byte BIN
      * and compressed CHD images require a separate disc-image reader.
      */
-    private String identifyGodOfWarDisc(ParcelFileDescriptor descriptor)
+    private String identifyGodOfWarDisc(
+            ParcelFileDescriptor descriptor, String[] executablePathOut)
             throws IOException, ErrnoException {
         byte[] pvd = readAt(descriptor, PRIMARY_VOLUME_DESCRIPTOR_OFFSET, ISO_SECTOR_SIZE);
         if ((pvd[0] & 0xFF) != 1
@@ -764,6 +939,10 @@ public final class MainActivity extends AppCompatActivity {
             executable = executable.substring(0, version);
         }
         String serial = executable.trim().toUpperCase(Locale.ROOT);
+        if (executablePathOut == null || executablePathOut.length == 0) {
+            throw new IOException("Não foi possível armazenar o caminho BOOT2.");
+        }
+        executablePathOut[0] = normalizeIsoPathForInstall(executablePath);
 
         if ("SCUS_973.99".equals(serial)) {
             return "SCUS_973.99 (NTSC-U)";
@@ -774,6 +953,36 @@ public final class MainActivity extends AppCompatActivity {
         throw new IOException(
                 "SYSTEM.CNF aponta para " + serial
                         + ". Esta versão reconhece SCUS_973.99 (NTSC-U) e SCES_531.33 (PAL).");
+    }
+
+    private static String normalizeIsoPathForInstall(String path) throws IOException {
+        String normalized = path.replace('\\\\', '/').trim();
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        if (normalized.isEmpty() || normalized.length() > 1024) {
+            throw new IOException("O caminho BOOT2 está vazio ou excede o limite suportado.");
+        }
+
+        String[] components = normalized.split("/", -1);
+        if (components.length > 32) {
+            throw new IOException("O caminho BOOT2 excede o limite de profundidade.");
+        }
+        StringBuilder result = new StringBuilder();
+        for (String component : components) {
+            if (component.isEmpty() || ".".equals(component) || "..".equals(component)
+                    || component.length() > 255 || component.indexOf(':') >= 0) {
+                throw new IOException("O caminho BOOT2 contém um componente inválido.");
+            }
+            int version = component.indexOf(';');
+            String name = version >= 0 ? component.substring(0, version) : component;
+            if (name.isEmpty()) {
+                throw new IOException("O caminho BOOT2 contém um nome vazio.");
+            }
+            if (result.length() > 0) result.append('/');
+            result.append(name.toUpperCase(Locale.ROOT));
+        }
+        return result.toString();
     }
 
     private static byte[] readAt(
@@ -861,6 +1070,8 @@ public final class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         ioExecutor.shutdownNow();
+        closeQuietly(selectedDiscDescriptor);
+        selectedDiscDescriptor = null;
         super.onDestroy();
     }
 }
