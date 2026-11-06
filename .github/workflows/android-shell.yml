@@ -8,6 +8,12 @@ on:
       - "android/**"
       - "port/kiexter/vu1/ps2_vu1_neon_compat.h"
       - "tools/build_recompiler_host.py"
+      - "tools/build_android_game.py"
+      - "tools/build_android_native_aot.py"
+      - "tools/test_android_native_aot.py"
+      - "port/kiexter/tools/vu1n_gen.py"
+      - "port/kiexter/tools/iopn_gen.py"
+      - "port/kiexter/tools/vu1n_heads.txt"
       - "tools/check_android_runtime_lifecycle.py"
       - "tools/ps2_vfs_cdroot_smoke.cpp"
       - "tools/run_ps2_vfs_cdroot_smoke.py"
@@ -92,6 +98,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Test private Android VU1 and IOP AOT capture pipeline
+        shell: bash
+        run: |
+          python tools/test_android_native_aot.py
 
       - name: Prepare pinned Waffle runtime for Gradle/CMake
         run: |
