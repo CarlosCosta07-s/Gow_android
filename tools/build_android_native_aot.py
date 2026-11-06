@@ -306,6 +306,8 @@ def generate_native_aot(
         raise RuntimeError("Unexpected IOP generated sources exist without validated module captures.")
 
     vu1_sources: list[Path] = []
+    vu1_unsupported = 0
+    vu1_interpreter_callouts = 0
     if vu1_files:
         vu1_command = [
             python, "-I", str(vu1_generator),
@@ -313,15 +315,24 @@ def generate_native_aot(
         ]
         if heads_file.is_file():
             vu1_command.extend(["--heads", str(heads_file)])
-        vu1_command.extend(["--parts", "6", "--strict"])
+        vu1_command.extend(["--parts", "6", "--strict-partial"])
         vu1_stdout = run_generator(vu1_command, cwd=root)
         vu1_sources = sorted(vu1_output.glob("vu1n_part*.cpp"))
         if len(vu1_sources) != 6:
             raise RuntimeError(
                 f"VU1 AOT generator produced {len(vu1_sources)} parts; exactly 6 are required."
             )
-        if "STRICT AOT COVERAGE PASSED" not in vu1_stdout:
-            raise RuntimeError("VU1 generator did not confirm strict native-only block coverage.")
+        coverage = re.search(
+            r"\\[vu1n_gen\\] (\\d+)/(\\d+) valid images, (\\d+) distinct blocks, "
+            r"(\\d+) generated, (\\d+) unsupported, (\\d+) interpreter callouts",
+            vu1_stdout,
+        )
+        if coverage is None or int(coverage.group(1)) == 0 or int(coverage.group(4)) == 0:
+            raise RuntimeError("VU1 generator did not produce any native blocks from valid captures.")
+        vu1_unsupported = int(coverage.group(5))
+        vu1_interpreter_callouts = int(coverage.group(6))
+        if "STRICT AOT PARTIAL" not in vu1_stdout:
+            raise RuntimeError("VU1 generator did not confirm native-only partial generation.")
         for source in vu1_sources:
             if not source.is_file() or source.stat().st_size == 0:
                 raise RuntimeError(f"Generated VU1 translation unit is empty: {source.name}")
@@ -332,7 +343,12 @@ def generate_native_aot(
         "vu1_native_translation_units": len(vu1_sources),
         "iop_modules": len(iop_records),
         "iop_native_translation_units": len(iop_sources),
-        "full_native_aot": bool(vu1_sources and iop_records),
+        "full_native_aot": bool(
+            vu1_sources and iop_records
+            and vu1_unsupported == 0 and vu1_interpreter_callouts == 0
+        ),
+        "vu1_unsupported_blocks": vu1_unsupported,
+        "vu1_interpreter_callouts": vu1_interpreter_callouts,
         "iop": iop_records,
         "sources": {
             "vu1": [path.name for path in vu1_sources],
