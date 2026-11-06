@@ -185,6 +185,7 @@ jobs:
             -Iandroid/app/src/main/cpp \
             -I"$GOW_RUNTIME_DIR/ps2xRuntime/include" \
             -I"$GOW_RUNTIME_DIR/ps2xRuntime/src/lib" \
+            -I"$GOW_RUNTIME_DIR/ps2xRuntime/src/lib/gs" \
             -I"$GOW_RUNTIME_DIR/ps2xRuntime/src/lib/gs/gpu" \
             -Wno-error=switch \
             -Wno-error=unused-parameter \
