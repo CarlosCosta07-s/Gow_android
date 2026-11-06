@@ -121,9 +121,9 @@ Esta é uma seleção por responsabilidade, não uma lista de arquivos já impor
 A classificação inicial dos patches (correção, otimização, host desktop ou dependência x86) está em [PIPELINE_RECOMPILADOR.md](PIPELINE_RECOMPILADOR.md). Os patches opcionais não foram aplicados automaticamente: cada um precisa de revisão e teste ARM64/Vulkan próprio.
 
 
-## Auditoria de fontes do runtime Waffle (snapshot de referência)
+## Auditoria de fontes do runtime Waffle (commit de referência)
 
-Foi feita leitura do CMake de ps2xRuntime na branch runtime do Waffle, snapshot ba16c8d70eb5ae73267732e3c0e36cb3b6e90ebc. Esse snapshot serve para identificar dependências e bloqueios; ele **não deve ser misturado automaticamente** com a versão Waffle incorporada no patch-base KIexster. A integração deve manter uma única revisão coerente.
+Foi feita leitura do CMake de ps2xRuntime na branch runtime do Waffle, snapshot 49ca62c1d20b4659c61df6286c54e86edf411012. Essa revisão serve para identificar dependências e bloqueios; ele **não deve ser misturado automaticamente** com a versão Waffle incorporada no patch-base KIexster. A integração deve manter uma única revisão coerente.
 
 A lista do alvo ps2_runtime mostra candidatos para reaproveitamento, ainda não importados:
 
@@ -134,7 +134,7 @@ A lista do alvo ps2_runtime mostra candidatos para reaproveitamento, ainda não 
 
 ### Fontes que não podem entrar no caminho final do jogo
 
-O CMake desse snapshot adiciona explicitamente ao alvo do runtime arquivos de referência PCSX2 para o teste diferencial do EE:
+O CMake dessa revisão adiciona explicitamente ao alvo do runtime arquivos de referência PCSX2 para o teste diferencial do EE:
 
 - ee_ref/ee_diff.cpp, ee_watch.cpp, ee_ref/eeref.cpp;
 - ee_ref/R5900OpcodeImpl.cpp, R5900OpcodeTables.cpp, MMI.cpp e FPU.cpp;
