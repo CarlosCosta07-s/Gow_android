@@ -897,7 +897,6 @@ public final class MainActivity extends AppCompatActivity {
         discInstallProgressBar = null;
         discInstallProgressText = null;
         installingDisc = false;
-        refreshExportElfButtonState();
         if (installDiscButton != null) {
             installDiscButton.setEnabled(true);
             installDiscButton.setAlpha(1f);
@@ -979,7 +978,6 @@ public final class MainActivity extends AppCompatActivity {
         }
 
         installingDisc = true;
-        refreshExportElfButtonState();
         cancelDiscInstallRequested = false;
         showDiscInstallProgressDialog();
         if (installDiscButton != null) {
@@ -1087,7 +1085,7 @@ public final class MainActivity extends AppCompatActivity {
                                             + (iopCdvdValidation == null
                                                 ? "resposta nativa vazia." : iopCdvdValidation);
                                 } else {
-                                    preparedElfSummary = installSummary.substring(3).trim()
+                                    preparedDiscSummary = installSummary.substring(3).trim()
                                             + " · " + runtimePathValidation.substring(4).trim()
                                             + " · " + elfValidation.substring(4).trim()
                                             + " · " + discValidation.substring(4).trim()
@@ -1180,7 +1178,6 @@ public final class MainActivity extends AppCompatActivity {
         discInstallProgressBar = null;
         discInstallProgressText = null;
         installingDisc = false;
-        refreshExportElfButtonState();
         if (installDiscButton != null) {
             installDiscButton.setEnabled(true);
             installDiscButton.setAlpha(1f);
@@ -1192,7 +1189,7 @@ public final class MainActivity extends AppCompatActivity {
         if (success) {
             discStatus.setText(
                     "Instalação completa do disco preparada. "
-                            + preparedElfSummary + ". O boot do jogo ainda não foi iniciado.");
+                            + preparedDiscSummary + ". O boot do jogo ainda não foi iniciado.");
             discStatus.setTextColor(0xFF8BC28F);
             new AlertDialog.Builder(this)
                     .setTitle("Instalação do disco concluída")
@@ -1200,7 +1197,7 @@ public final class MainActivity extends AppCompatActivity {
                             "Os arquivos ISO9660 foram extraídos para o armazenamento "
                                     + "privado do aplicativo. Os metadados .disc_layout e "
                                     + ".disc_meta foram gerados e publicados junto com os dados. "
-                                    + preparedElfSummary + ". A instalação foi preparada e a "
+                                    + preparedDiscSummary + ". A instalação foi preparada e a "
                                     + "fonte de disco foi validada; o jogo ainda não foi iniciado.")
                     .setPositiveButton(
                             "Verificar runtime",
@@ -1296,8 +1293,6 @@ public final class MainActivity extends AppCompatActivity {
         selectedDiscUri = uri;
         selectedDiscValid = false;
         selectedDiscBootPath = null;
-        refreshExportElfButtonState();
-
         try {
             getContentResolver().takePersistableUriPermission(
                     uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -1334,8 +1329,6 @@ public final class MainActivity extends AppCompatActivity {
         selectedDiscValid = false;
         selectedDiscSerial = null;
         selectedDiscBootPath = null;
-        refreshExportElfButtonState();
-
         ioExecutor.execute(() -> {
             String name = queryDisplayName(uri);
             String result;
@@ -1371,7 +1364,6 @@ public final class MainActivity extends AppCompatActivity {
                 selectedDiscValid = isValid;
                 selectedDiscSerial = finalSerial;
                 selectedDiscBootPath = isValid ? finalBootPath : null;
-                refreshExportElfButtonState();
                 discName.setText(finalName);
                 discStatus.setText(finalResult);
                 discStatus.setTextColor(
