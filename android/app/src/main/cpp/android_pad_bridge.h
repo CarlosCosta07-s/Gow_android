@@ -1,11 +1,14 @@
 #pragma once
 
-#include <android/input.h>
+#include <game-activity/GameActivity.h>
+
 #include <cstddef>
 #include <cstdint>
 
 extern "C" {
-int32_t gowAndroidPadHandleInputEvent(AInputEvent *event) noexcept;
+int32_t gowAndroidPadHandleKeyEvent(const GameActivityKeyEvent *event) noexcept;
+int32_t gowAndroidPadHandleMotionEvent(const GameActivityMotionEvent *event) noexcept;
+void gowAndroidPadEnableGamepadAxes() noexcept;
 void gowAndroidPadResetAll() noexcept;
 void gowAndroidPadSetTouchButtons(uint16_t pressedMask) noexcept;
 void gowAndroidPadSetTouchAxes(float leftX, float leftY, float rightX, float rightY) noexcept;
