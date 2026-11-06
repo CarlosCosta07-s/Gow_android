@@ -34,10 +34,10 @@ Fonte: [KIexster/god-of-war-recomp](https://github.com/KIexster/god-of-war-recom
 
 ## [VERIFICADO] Bloqueios identificados na configuração Waffle
 
-Auditoria estática do CMake e dos fontes no snapshot Waffle runtime ba16c8d70eb5ae73267732e3c0e36cb3b6e90ebc:
+Auditoria estática do CMake e dos fontes no snapshot Waffle runtime 49ca62c1d20b4659c61df6286c54e86edf411012:
 
-- O alvo ps2_runtime inclui fontes ee_ref e vu_pcsx2 descritas pelo CMake como teste diferencial/diagnóstico PCSX2. Elas não devem compor o caminho de execução final; se houver build de diagnóstico separado, manter os avisos GPL-3.0-or-later.
-- ps2_vu1_core.cpp implementa VU1Interpreter. A geração/ligação dos blocos VU1 AOT no CMake de referência é condicional e excluída quando Android está ativo; o caminho final precisa gerar AOT no host e impedir fallback para microprogramas sem cobertura.
+- O alvo ps2_runtime inclui fontes ee_ref e vu_pcsx2 para teste diferencial/diagnóstico PCSX2. O alvo ps2_iop também inclui iop_emulator.cpp e core/iop_cpu.cpp. Elas não devem compor o caminho de execução final; se houver build de diagnóstico separado, manter os avisos GPL-3.0-or-later.
+- ps2_vu1_core.cpp implementa VU1Interpreter. A geração/ligação dos blocos VU1 AOT no CMake de referência é condicional e excluída quando Android está ativo; o caminho final precisa gerar AOT no host e impedir fallback para microprogramas sem cobertura. O CMake IOP combina módulos AOT com iop_cpu interpretado, então a variante final precisa impedir esse fallback também.
 - gs_gl.cpp é backend OpenGL e ps2_audio_device.cpp usa miniaudio/Raylib do host; substituir por GS/Vulkan Android e saída de áudio Android.
 - ps2_pad_rumble_win.cpp é específico de Windows. ps2_android_runtime.cpp contém apenas um TODO de controles touch.
 - ps2_vif1_interpreter.cpp decodifica comandos VIF1/UNPACK; não é o interpretador de instruções MIPS do EE. A decisão sobre sua permanência é por função de hardware, separada da regra contra fallback de CPU.
