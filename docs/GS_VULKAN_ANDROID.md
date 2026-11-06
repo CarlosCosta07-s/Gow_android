@@ -2,7 +2,7 @@
 
 **Revisão:** 2026-11-06  
 **Runtime auditado:** Waffle/KIexster, commit `49ca62c1d20b4659c61df6286c54e86edf411012`  
-**Estado:** frontend identificado; backend GS/Vulkan ainda não implementado.
+**Estado:** backend Android de referência implementado parcialmente: rasterização GS em CPU/VRAM, composição CRTC e apresentação Vulkan. Não é ainda um rasterizador GS Vulkan completo nem foi validado com cena real do jogo.
 
 ## 1. Caminho real do GS na base Waffle
 
