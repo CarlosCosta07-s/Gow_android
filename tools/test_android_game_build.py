@@ -69,6 +69,14 @@ class AndroidGameBuildPlanTests(unittest.TestCase):
         self.assertTrue(plan.gradle_command[2].endswith("gradlew.bat"))
         self.assertEqual(plan.gradle_command[-1], "assembleDebug")
 
+    def test_rejects_pal_executable_for_ntsc_u_map(self) -> None:
+        pal_elf = self.private / "SCES_531.33"
+        pal_elf.write_bytes(b"synthetic test ELF placeholder")
+        with self.assertRaisesRegex(ValueError, "pinned to the NTSC-U"):
+            create_build_plan(
+                self.root, pal_elf, self.work, windows=False,
+            )
+
     def test_rejects_missing_elf(self) -> None:
         with self.assertRaisesRegex(ValueError, "was not found"):
             create_build_plan(
