@@ -55,7 +55,7 @@ Por segurança, o script:
 
 O script limpa alterações locais dentro das duas cópias Git privadas antes de reaplicar a revisão fixada. Não coloque arquivos próprios dentro de sources/PS2Recomp ou sources/KIexster.
 
-A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. A execução 42150329023 compilou ps2_recomp, ps2_iop e ps2_runtime no host. O banco de compilação confirmou que core/iop_cpu.cpp não entrou no alvo estrito, que ps2_vu1_core.cpp recebeu PS2X_VU1_NATIVE_ONLY=1 e que as fontes diferenciais PCSX2 foram excluídas. O build IOP usou iop_native_none.cpp e não recebeu microcódigo VU1: isso valida compilação e política de fallback no host, não cobertura AOT do jogo nem a execução no Android. A adaptação NEON também está em validação separada.
+A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. A execução 42150329023 compilou ps2_recomp, ps2_iop e ps2_runtime no host. O banco de compilação confirmou que core/iop_cpu.cpp não entrou no alvo estrito, que ps2_vu1_core.cpp recebeu PS2X_VU1_NATIVE_ONLY=1 e que as fontes diferenciais PCSX2 foram excluídas. O build IOP usou iop_native_none.cpp e não recebeu microcódigo VU1: isso valida compilação e política de fallback no host, não cobertura AOT do jogo. A execução 42150853233 confirmou que o builder copia ps2_vu1_neon_compat.h para a árvore Waffle e aplica a seleção NEON/ SSE no header; o build compilou no host x86-64 e, portanto, verificou o ramo SSE. O smoke NDK ARM64 separado passou na execução 42150765223. O runtime Waffle completo ainda não foi compilado para Android ARM64.
 
 ## Dependências do host
 
