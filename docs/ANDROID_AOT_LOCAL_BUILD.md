@@ -17,6 +17,24 @@ O arquivo deve ser o ELF `SCUS_973.99` extraído da sua própria imagem. Não us
 - Android SDK/NDK instalados e configurados para o Gradle do projeto.
 - Java 17 (o projeto usa o Gradle Wrapper).
 
+## Controle de memória durante a compilação
+
+O padrão do fluxo local é conservador: o CMake usa **1 job** para compilar o runtime e o C++ AOT, e o Gradle usa um worker. Isso reduz picos de memória em computadores modestos, embora possa aumentar o tempo total do build.
+
+O número de jobs do recompilador host pode ser alterado pela variável de ambiente `GOW_BUILD_JOBS` (aceita de 1 a 16). Para a primeira compilação, mantenha 1:
+
+```powershell
+$env:GOW_BUILD_JOBS = "1"
+```
+
+No Linux:
+
+```bash
+GOW_BUILD_JOBS=1 python3 tools/build_android_game.py --elf "$HOME/gow-private/SCUS_973.99" --work-dir "/tmp/gowport"
+```
+
+Não aumente o paralelismo antes de confirmar a memória disponível durante a compilação das unidades AOT.
+
 ## Windows (PowerShell)
 
 Copie o ELF da sua própria mídia para uma pasta privada fora do repositório. Exemplo:
