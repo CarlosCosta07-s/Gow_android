@@ -1,9 +1,11 @@
 #include "android_gs_vulkan_backend.h"
 
 #include "gs_texture_store.h"
+#include "runtime/gs/ps2_gs_common.h"
 
 #include <algorithm>
 #include <exception>
+#include <stdexcept>
 #include <utility>
 
 namespace gow::android {
@@ -93,18 +95,31 @@ bool AndroidGSVulkanBackend::ClearFramebuffer(
     const uint32_t x0 = std::min<uint32_t>(context.scissor.x0, width);
     const uint32_t x1 = std::min<uint32_t>(context.scissor.x1, width - 1u);
     const uint32_t y0 = context.scissor.y0;
-    const uint32_t y1 = context.scissor.y1;
+    const uint32_t y1 = std::min<uint32_t>(context.scissor.y1, 2047u);
     if (x0 > x1 || y0 > y1) return false;
 
+    uint32_t frameMask = context.frame.fbmsk;
+    if (context.frame.psm == GS_PSM_CT16 ||
+        context.frame.psm == GS_PSM_CT16S) {
+        frameMask = GSInternal::frameMask16(frameMask);
+    }
     for (uint32_t y = y0; y <= y1; ++y) {
         for (uint32_t x = x0; x <= x1; ++x) {
+            const uint32_t previous = impl_->textureStore.Read(
+                context.frame.psm,
+                context.frame.fbp,
+                context.frame.fbw,
+                x,
+                y);
+            const uint32_t merged =
+                (previous & frameMask) | (rgba & ~frameMask);
             impl_->textureStore.Write(
                 context.frame.psm,
                 context.frame.fbp,
                 context.frame.fbw,
                 x,
                 y,
-                rgba & ~context.frame.fbmsk);
+                merged);
         }
     }
     return true;
