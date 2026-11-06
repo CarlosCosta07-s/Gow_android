@@ -218,3 +218,8 @@ O painel informa explicitamente que o jogo ainda não iniciou quando o núcleo h
 **[VERIFICADO NA CI, run `42250619735`]** Preparação Waffle, verificador de lifecycle/JNI, testes nativos de entrada/ISO/CDVD, PS2Vfs, teste de confinamento do caminho BOOT2 (traversal, caminho absoluto, nome vazio, diretório, prefixo de dispositivo e symlink externo) e build APK Debug ARM64 passaram. Artefato `gow-android-arm64-shell` ID `13520766214`, disponível até 13/11/2026. Ainda falta instalar e abrir esse APK em aparelho com uma instalação do usuário, conferir Logcat/painel e validar o callback visual.
 
 **Bloqueios para gameplay:** (1) executar PS2Recomp com o ELF privado e integrar o C++ AOT/registro de funções ARM64 ao APK de teste; (2) gerar e integrar VU1/IOP AOT/IRX com cobertura; (3) implementar GS Vulkan Android e presenter real; (4) implementar áudio Android; (5) validar CDVD/serviços da sessão real e a primeira imagem. Nenhuma ISO, ELF, IRX, microcódigo ou C++ gerado foi enviado ao Git ou à CI pública.
+## Revisão de sessão da GameActivity — CI 221
+
+**[VERIFICADO NA CI `42252442268`]** A configuração BOOT2 é zerada ao registrar uma nova `GowGameActivity`; a Activity registra sua referência JNI antes de `super.onCreate()`, que inicia o ciclo nativo. `android_main()` aguarda a configuração recebida, e a limpeza da referência JNI também libera a espera quando a Activity encerra. O APK Debug ARM64 compilou e os testes host/VFS passaram.
+
+**Limite:** a verificação da CI não substitui a execução em aparelho. Ainda falta abrir o APK com uma instalação privada real, observar o painel, verificar se a mensagem da tabela AOT vazia é apresentada e recolher Logcat `GowAndroid`. O APK ainda não contém AOT do jogo e permanece não jogável.
