@@ -234,6 +234,11 @@ jobs:
         id: build
         shell: bash
         working-directory: android
+        env:
+          GOW_ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.GOW_ANDROID_DEBUG_KEYSTORE_BASE64 }}
+          GOW_ANDROID_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.GOW_ANDROID_DEBUG_KEYSTORE_PASSWORD }}
+          GOW_ANDROID_DEBUG_KEY_ALIAS: ${{ secrets.GOW_ANDROID_DEBUG_KEY_ALIAS }}
+          GOW_ANDROID_DEBUG_KEY_PASSWORD: ${{ secrets.GOW_ANDROID_DEBUG_KEY_PASSWORD }}
         run: |
           set +e
           gradle --no-daemon assembleDebug --stacktrace --info 2>&1 | tee "$RUNNER_TEMP/gow-android-build.log"
