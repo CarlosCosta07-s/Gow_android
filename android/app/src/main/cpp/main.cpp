@@ -1091,6 +1091,10 @@ private:
         swapchainImages_.clear();
         swapchainLayouts_.clear();
         frameUploadSupported_ = false;
+        uploadBufferReady_ = false;
+        uploadTargetWidth_ = 0u;
+        uploadTargetHeight_ = 0u;
+        frameUploadDirty_ = hasPendingFrame_;
 
         if (swapchain_ != VK_NULL_HANDLE) {
             vkDestroySwapchainKHR(device_, swapchain_, nullptr);
