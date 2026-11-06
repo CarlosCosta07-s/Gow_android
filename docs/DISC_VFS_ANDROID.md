@@ -68,29 +68,44 @@ O módulo `android/app/src/main/cpp/cdroot_vfs.h/.cpp` fornece leitura somente d
 
 Os testes `cdroot_vfs_test.cpp` cobrem raiz e subdiretórios, listagens repetidas, leituras parciais/EOF, handles fechados, traversal, nomes inválidos e symlinks. O erro encontrado na listagem repetida foi corrigido: a raiz agora é aberta com `openat(rootFd, ".", ...)`, evitando compartilhar o offset de diretório do descritor persistente.
 
-## 5. Provider local preparado na integração Waffle
+## 5. Integração Android com o runtime Waffle/KIexter
 
-O script `tools/build_recompiler_host.py` foi alterado para que a árvore Waffle/KIexter preparada para Android use o prefixo `gowcdroot:/` no PS2 VFS e no adaptador IOP. As chamadas passam a ser:
+A integração agora separa o caminho físico da instalação do caminho lógico usado pelo dispositivo PS2.
 
-- `gowAndroidCdRootOpenFile`;
-- `gowAndroidCdRootReadFile`;
-- `gowAndroidCdRootCloseFile`;
-- `gowAndroidCdRootIsReady`.
+### VFS por caminho
 
-O runtime define `paths.cdRoot` para `gowcdroot:/` quando o provider privado está aberto. O código antigo de patch que roteava `gowdisc:/` para o leitor ISO foi substituído nessa preparação. O bridge ISO continua presente como leitor/importador, mas deixa de ser o provider previsto para gameplay.
+- `PS2Vfs::open()` e `PS2Vfs::stat()` reconhecem `cdrom0:` a partir de `ParsedPs2Path`, antes de transformar a rota em um caminho do host.
+- As operações de arquivo são encaminhadas ao `CdRootVfs` seguro por meio de `gowAndroidCdRootOpenFile`, `gowAndroidCdRootReadFile`, `gowAndroidCdRootCloseFile` e `gowAndroidCdRootStat`.
+- A abertura continua somente para leitura. Escritas, criação e truncamento no disco de jogo são rejeitados.
 
-**Verificação de compilação:** o patch de preparação foi compilado no build host estrito sem arquivos do jogo (run `42186655605`) e o target Android ARM64 que consome a árvore preparada compilou (run `42187116530`). **Limite:** isso confirma a compilação do provider e do adaptador, não que o PS2Runtime esteja sendo iniciado pela Activity nem que os serviços do jogo estejam abrindo arquivos pelo VFS durante um boot real.
+### Caminho físico para a fonte de setores
+
+O runtime mantém `IoPaths.cdRoot` como o caminho físico absoluto da pasta privada de instalação. A ponte JNI guarda a raiz recebida por `MainActivity.nativeSetCdRootDirectory()` e a nova função C ABI `gowAndroidCdRootCopyPath()` a entrega ao runtime.
+
+Isso é necessário porque `PS2Runtime::setIoPaths()` normaliza os caminhos com `std::filesystem::absolute()`. Um token como `gowcdroot:/` não deve ser passado como se fosse um caminho físico: ele pode ser normalizado como um diretório comum do host e deixar de ser reconhecido.
+
+O contrato do runtime Waffle/KIexter também inclui `ps2x::iop::DiscSource::openExtracted(root)`. Esse componente abre `.disc_layout` e `.disc_meta` na pasta física, localiza arquivos por seu LSN e atende leituras de setores. Portanto, a pasta entregue em `IoPaths.cdRoot` precisa conter o layout completo produzido pelo extrator de disco, não apenas `SYSTEM.CNF` e o ELF BOOT2.
+
+### Limite atual
+
+**[IMPLEMENTAÇÃO NO CÓDIGO]** A ponte de caminho físico foi adicionada e o PS2 VFS Android foi alterado para roteamento por dispositivo, sem depender do token virtual.
+
+**[PENDENTE DE CI]** Os workflows acionados pelos commits `e531ea1`, `1741d98`, `d124812` e `a7f93b4` ainda precisam concluir. A compilação do APK após a alteração do bridge JNI já passou nos runs `42213205739` e `42213209556`; os testes host do VFS e a compilação host/Android da preparação final ainda estão em execução na revisão deste documento.
+
+**[NÃO IMPLEMENTADO]** O importador Android ainda instala somente `SYSTEM.CNF` e o ELF BOOT2. Ainda não cria `.disc_layout` nem `.disc_meta`, não extrai o conjunto completo de arquivos, e não foi validado com `DiscSource::openExtracted()` ou uma chamada real de `sceCdRead`.
+
+A auditoria de referência, o formato dos metadados e o plano de implementação estão em [DISC_RUNTIME_AUDIT.md](DISC_RUNTIME_AUDIT.md).
 
 ## 6. Próximas etapas
 
-1. Validar a preparação e compilação Waffle com o provider `gowcdroot:/` e com o novo VFS incluído.
-2. Ligar o lifecycle do `PS2Runtime` à GameActivity e definir a ordem correta entre montagem de `cdRoot`, carregamento do ELF e inicialização dos serviços PS2.
-3. Derivar o manifesto completo de God of War a partir da árvore real da ISO e de rastreamento de boot/runtime; não presumir caminhos.
-4. Preparar o ELF privado no caminho usado por `PS2Runtime::loadELF()` e executar a geração C++ com PS2Recomp no workspace privado.
-5. Gerar e integrar cobertura AOT de VU1/IRX para os módulos realmente usados, sem fallback interpretado.
-6. Integrar GS/Vulkan e o presenter Android para alcançar a primeira imagem.
-7. Validar instalação, reparo, cancelamento, falta de espaço, boot, menu e primeiro combate com imagem do usuário em aparelho real.
-8. Medir I/O, memória, frame time e temperatura antes de ajustar cache/prefetch ou resolução.
+1. Concluir os workflows host e Android da correção de montagem e resolver eventuais falhas.
+2. Implementar leitura das duas camadas do DVD e enumeração recursiva de todos os arquivos/extents do disco selecionado.
+3. Gerar `.disc_layout` e `.disc_meta` exatamente no formato consumido por `DiscSource::openExtracted()`, preservando LSNs originais.
+4. Criar instalação privada completa com previsão de espaço, staging, progresso, cancelamento, validação e publicação atômica.
+5. Criar fixtures sintéticas para DVD de dupla camada e testar `openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()`.
+6. Disponibilizar os IRX no layout esperado, conectar o lifecycle do runtime à GameActivity e instrumentar a inicialização.
+7. Integrar GS/Vulkan e apresentar a primeira imagem real.
+8. Validar boot, menu e primeiro combate; somente depois medir desempenho e otimizar.
 
 ## 6. Privacidade e integridade
 
