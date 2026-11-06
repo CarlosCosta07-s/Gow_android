@@ -147,3 +147,21 @@ python tools/compare_gs_scene.py \
 A ferramenta exige dimensões iguais. Ela informa MAE, RMSE, PSNR, erro máximo por canal e porcentagem de pixels dentro da tolerância; o PPM `--diff` realça diferenças. Os limiares acima são apenas uma configuração inicial para triagem. Para cada cena, registrar região, resolução, estado de interlace, frame/timing e diferenças esperadas antes de aprovar a comparação.
 
 **Limite:** a existência do caminho de captura e os testes sintéticos do gravador não comprovam uma captura de God of War. O runtime ainda não executa o ELF recompilado: a tabela AOT pública está vazia e `PS2Runtime::run()` permanece bloqueado. As imagens de referência e do jogo devem permanecer locais; não as enviar ao repositório nem à CI.
+
+
+### Capturas adicionais sob demanda no APK Debug
+
+O APK Debug exibe o botão **Capturar cena** no canto inferior direito da GameActivity. Ao tocar, a Activity solicita ao loop nativo que salve o próximo `PresentationFrame` disponível. As capturas manuais são nomeadas sequencialmente:
+
+- `gow_android_scene_01.ppm`
+- `gow_android_scene_02.ppm`
+- ...
+- `gow_android_scene_32.ppm`
+
+A primeira captura continua automática (`gow_android_first_gs_frame.ppm`). O limite manual é 32 arquivos por processo. A interface só confirma que a solicitação foi enfileirada; o sucesso real deve ser confirmado no Logcat:
+
+```bash
+adb logcat -s GowAndroid:I GowGameActivity:I
+```
+
+Procure `Saved GS scene capture:` para o caminho gravado. Depois use `adb pull` e o comparador PPM. Se o runtime não estiver entregando frames, o botão não consegue produzir uma imagem; ele não inicia nem desbloqueia o jogo.
