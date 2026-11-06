@@ -23,7 +23,9 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 - [x] Adicionar tela inicial e seletor SAF para a imagem do usuário.
 - [x] Solicitar permissão persistente de leitura e validar o descritor primário ISO9660 do setor 16.
 - [x] Implementar no launcher a leitura de SYSTEM.CNF e a identificação inicial de SCUS_973.99/SCES_531.33.
-- [x] Implementar leitor ISO9660 por FD, provider C ABI e patch privado do PS2IopHostAdapter/PS2Vfs para open/size/read/close em cdrom0:; build Android e host aprovados. A passagem do FD pelo launcher e o teste com ISO real ainda estão pendentes.
+- [x] Implementar leitor ISO9660 por FD e fixture ISO sintética, com testes host na CI.
+- [x] Compilar a ponte híbrida C ABI/JNI e o provider temporário `gowdisc:/` no runtime privado (Android run `42161298942`, host run `42161298950`); essa implementação é transitória e não será o caminho final após a decisão BT3.
+- [ ] Implementar enumeração completa e segura da árvore ISO9660 para o instalador BT3.
 - [x] Compilar o parser SYSTEM.CNF pela CI (run `42142814087`).
 - [ ] Validar essa leitura com imagens de teste do usuário em aparelho Android.
 - [ ] Diagnosticar permissão, formato e região.
@@ -58,11 +60,13 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 
 - [ ] Selecionar e importar os módulos portáveis do runtime Waffle/KIexter (EE, memória, scheduler, stubs e serviços usados pelo título).
 - [x] Adaptar o runner nativo para AndroidX GameActivity/NDK, ligar `ps2_runtime` ao alvo `android-game` e preservar o MainActivity FORGE (smoke apenas de construção/destruição; sem iniciar o runtime).
-- [ ] Conectar o descritor SAF já recebido pelo GowGameActivity ao fluxo JOGAR do MainActivity quando o runtime estiver pronto, mantendo o handle durante toda a sessão.
-- [ ] Implementar instalação híbrida inspirada no Dragon Rage BT4: permissão SAF persistente, cache privado do ELF original e somente arquivos pequenos de boot comprovadamente necessários; manter os dados grandes na ISO.
-- [ ] Transferir um descritor ISO válido do GowGameActivity para o código nativo com ownership explícito e encerramento seguro.
-- [x] Ligar `Iso9660Reader` ao `PS2IopHostAdapter`/`PS2Vfs` como provider compilável de `cdrom0:` (open/size/read/close por caminho e offset), sem extrair a ISO inteira; validar com ISO real ainda pendente.
-- [ ] Validar acesso aleatório, revogação da permissão SAF, pausa/retorno e troca de imagem em aparelho Android.
+- [ ] Implementar importador BT3 no FORGE: validação da ISO/revisão, estimativa de espaço, progresso e cancelamento.
+- [ ] Definir manifesto de instalação específico de God of War com base na árvore real e no rastreamento dos acessos de boot; não copiar a lista de arquivos do Dragon Rage por suposição.
+- [ ] Extrair ELF, arquivos de boot e dados necessários para staging privado, preservando archives grandes nos formatos originais.
+- [ ] Verificar tamanhos/hashes disponíveis e publicar a instalação atomicamente; limpar ou retomar staging incompleto sem marcar instalação parcial como pronta.
+- [ ] Configurar `PS2Runtime::loadELF()` para o ELF local e o `PS2IopHostAdapter`/`PS2Vfs` para usar o `cdRoot` local da instalação.
+- [ ] Substituir o caminho híbrido `gowdisc:/` no caminho normal de execução quando a leitura local estiver validada; remover a dependência de FD ISO mantido durante gameplay.
+- [ ] Testar instalação, cancelamento, falta de espaço, reparo, integridade e inicialização com ISO do usuário em aparelho Android.
 - [ ] Ligar código recompilado, overrides de God of War e serviços mínimos de boot.
 - [ ] Resolver CD/DVD, IRX, SIF, DMA e cadeia inicial de execução.
 - [ ] Registrar diagnóstico por etapa, PC/RA e último subsistema confirmado.
@@ -99,11 +103,15 @@ Uma fase só será considerada concluída quando houver código, build e evidên
 
 ## Fase 7 — Compatibilidade e otimização
 
-- [ ] Testar áreas, transições, checkpoints, mortes e carregamentos.
-- [ ] Medir FPS médio, 1% low, frame time, memória e temperatura.
-- [ ] Avaliar resolução interna e limites térmicos.
-- [ ] Testar GPUs e drivers ARM64 Vulkan diferentes.
+- [ ] Testar áreas, transições, checkpoints, mortes e carregamentos em aparelhos de classes diferentes.
+- [ ] Medir FPS médio, 1% low, distribuição de frame time, CPU/GPU, memória/PSS, I/O e temperatura em sessões curtas e prolongadas.
+- [ ] Identificar gargalos por aparelho antes de alterar renderer, runtime, cache ou sincronização.
+- [ ] Avaliar escala de resolução interna, frame pacing e perfis Econômico/Equilibrado/Qualidade sem alterar a temporização do jogo.
+- [ ] Definir limites de cache e eventual prefetch com base em medições de memória e latência; evitar preload indiscriminado.
+- [ ] Testar GPUs e drivers ARM64 Vulkan diferentes, incluindo throttling térmico.
 - [ ] Corrigir regressões e preparar instalação/documentação.
+
+**Diretrizes:** [Otimização para celulares modestos](ANDROID_LOW_END_OPTIMIZATION.md).
 
 **Aceitação:** progresso validado nos aparelhos publicados na matriz de compatibilidade; limitações descritas sem promessas não testadas.
 
