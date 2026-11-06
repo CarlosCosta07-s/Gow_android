@@ -1261,33 +1261,33 @@ def main() -> int:
     # branch, its final dispatch block has evolved, so guard the actual entry points.
     replace_exactly_once(
         vu_core,
-        "void VU1Interpreter::run(uint8_t *vuCode, uint32_t codeSize,\\n"
-        "                         uint8_t *vuData, uint32_t dataSize,\\n"
-        "                         GS &gs, PS2Memory *memory, uint32_t maxCycles)\\n"
-        "{\\n",
-        "void VU1Interpreter::run(uint8_t *vuCode, uint32_t codeSize,\\n"
-        "                         uint8_t *vuData, uint32_t dataSize,\\n"
-        "                         GS &gs, PS2Memory *memory, uint32_t maxCycles)\\n"
-        "{\\n"
-        "#if defined(PS2X_VU1_NATIVE_ONLY)\\n"
-        "    if (m_unit == Unit::VU1 && (!m_native || !m_native->enabled || !vuData || codeSize != PS2_VU1_CODE_SIZE))\\n"
-        "    {\\n"
-        "        std::fprintf(stderr, \\"[VU1:native-required] invalid VU1 native dispatch state; execution stopped.\\n\\");\\n"
-        "        m_stopRequested = true;\\n"
-        "        return;\\n"
-        "    }\\n"
-        "#endif\\n",
+        "void VU1Interpreter::run(uint8_t *vuCode, uint32_t codeSize,\n"
+        "                         uint8_t *vuData, uint32_t dataSize,\n"
+        "                         GS &gs, PS2Memory *memory, uint32_t maxCycles)\n"
+        "{\n",
+        "void VU1Interpreter::run(uint8_t *vuCode, uint32_t codeSize,\n"
+        "                         uint8_t *vuData, uint32_t dataSize,\n"
+        "                         GS &gs, PS2Memory *memory, uint32_t maxCycles)\n"
+        "{\n"
+        "#if defined(PS2X_VU1_NATIVE_ONLY)\n"
+        "    if (m_unit == Unit::VU1 && (!m_native || !m_native->enabled || !vuData || codeSize != PS2_VU1_CODE_SIZE))\n"
+        "    {\n"
+        "        std::fprintf(stderr, \"[VU1:native-required] invalid VU1 native dispatch state; execution stopped.\n\");\n"
+        "        m_stopRequested = true;\n"
+        "        return;\n"
+        "    }\n"
+        "#endif\n",
         "guard Android VU1 execution against missing native microprogram state",
     )
     replace_exactly_once(
         vu_core,
-        "        if (!runNativeLoop(context))\\n"
+        "        if (!runNativeLoop(context))\n"
         "            runExact(context);",
-        "        if (!runNativeLoop(context))\\n"
-        "        {\\n"
-        "            std::fprintf(stderr, \\"[VU1:native-required] native microprogram unavailable; stopping instead of interpreting.\\n\\");\\n"
-        "            m_stopRequested = true;\\n"
-        "            return true;\\n"
+        "        if (!runNativeLoop(context))\n"
+        "        {\n"
+        "            std::fprintf(stderr, \"[VU1:native-required] native microprogram unavailable; stopping instead of interpreting.\n\");\n"
+        "            m_stopRequested = true;\n"
+        "            return true;\n"
         "        }",
         "block exact-interpreter fallback when Android VU1 native dispatch misses",
     )
