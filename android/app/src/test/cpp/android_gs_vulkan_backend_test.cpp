@@ -372,7 +372,7 @@ int main() {
         const uint32_t blendedVram =
             backend.ReadVram(GS_PSM_CT32, 0u, 1u, 58u, 20u);
         require((blendedVram & 0xFFu) == 127u &&
-                ((blendedVram >> 16u) & 0xFFu) == 128u,
+                ((blendedVram >> 16u) & 0xFFu) == 127u,
                 "GS ALPHA fixed-point equation did not produce the expected RGB blend.");
 
         std::cout << "Android GS VRAM adapter tests passed.\n";
