@@ -115,6 +115,7 @@ A licença GPL-3.0 deste repositório cobre somente o código que seus autores p
 - [Auditoria da fonte de setores PS2 e layout completo do disco](docs/DISC_RUNTIME_AUDIT.md)
 - [Roadmap e critérios de conclusão](docs/ROADMAP.md)
 - [Auditoria das referências](docs/REFERENCIAS.md)
+- [Plano técnico baseado nas referências Dragon Rage e Black for Android](docs/ANDROID_REFERENCE_IMPLEMENTATION_PLAN.md)
 - [Créditos e avisos de terceiros](THIRD_PARTY_NOTICES.md)
 - [Política de direitos e dados](docs/LEGAL_E_DADOS.md)
 - [Testes e diagnóstico](docs/TESTES_E_DIAGNOSTICO.md)
