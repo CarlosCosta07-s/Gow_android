@@ -28,8 +28,8 @@ public final class GowGameActivity extends GameActivity {
             "org.gowandroid.app.extra.BOOT_RELATIVE_PATH";
 
     private static native boolean nativeSetDiscFileDescriptor(int descriptor);
-    private static native boolean nativeSetPrivateDiscRoot(String privateCdRoot);
-    private static native boolean nativeSetBootRelativePath(String relativePath);
+    private static native boolean nativeConfigurePrivateBoot(
+            String privateCdRoot, String relativePath);
     private static native void nativeSetActivityReference(GowGameActivity activity);
     private static native void nativeClearActivityReference(GowGameActivity activity);
 
@@ -58,20 +58,18 @@ public final class GowGameActivity extends GameActivity {
         String bootRelativePath = getIntent().getStringExtra(EXTRA_BOOT_RELATIVE_PATH);
         if (privateCdRoot != null && !privateCdRoot.isEmpty()
                 && bootRelativePath != null && !bootRelativePath.isEmpty()) {
-            if (!nativeSetPrivateDiscRoot(privateCdRoot)) {
-                onNativeRuntimeStatus(
-                        "Não foi possível montar a instalação privada do disco. O jogo não foi carregado.",
-                        true);
-            } else if (!nativeSetBootRelativePath(bootRelativePath)) {
-                onNativeRuntimeStatus(
-                        "O caminho BOOT2 não pôde ser enviado ao runtime. O jogo não foi carregado.",
-                        true);
-            } else {
+            if (nativeConfigurePrivateBoot(privateCdRoot, bootRelativePath)) {
                 onNativeRuntimeStatus(
                         "Disco privado e BOOT2 encaminhados. Preparando o núcleo e verificando a cobertura AOT...",
                         false);
+            } else {
+                onNativeRuntimeStatus(
+                        "Não foi possível montar a instalação privada ou registrar o BOOT2. O jogo não foi carregado.",
+                        true);
             }
         } else {
+            // Always release the native startup handshake, including diagnostic-only launches.
+            nativeConfigurePrivateBoot("", "");
             onNativeRuntimeStatus(
                     "Nenhuma instalação/BOOT2 foi encaminhada pelo FORGE. Esta tela é somente diagnóstico.",
                     false);
