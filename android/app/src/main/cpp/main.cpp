@@ -1,6 +1,7 @@
 #define VK_USE_PLATFORM_ANDROID_KHR
 
 #include <game-activity/native_app_glue/android_native_app_glue.h>
+#include "android_pad_bridge.h"
 
 #include <android/log.h>
 #include <android/native_window.h>
@@ -12,6 +13,10 @@
 #include <limits>
 #include <string>
 #include <vector>
+
+class PS2Runtime;
+extern "C" PS2Runtime *gowCreatePs2Runtime() noexcept;
+extern "C" void gowDestroyPs2Runtime(PS2Runtime *runtime) noexcept;
 
 namespace {
 
@@ -763,6 +768,10 @@ private:
 
 VulkanSmokeRenderer gRenderer;
 
+int32_t handleInputEvent(android_app*, AInputEvent *event) {
+    return gowAndroidPadHandleInputEvent(event);
+}
+
 void handleAppCommand(android_app* app, int32_t command) {
     switch (command) {
         case APP_CMD_INIT_WINDOW:
@@ -778,6 +787,14 @@ void handleAppCommand(android_app* app, int32_t command) {
         case APP_CMD_WINDOW_RESIZED:
         case APP_CMD_CONTENT_RECT_CHANGED:
             gRenderer.recreateSwapchain();
+            break;
+
+        case APP_CMD_LOST_FOCUS:
+        case APP_CMD_PAUSE:
+            gowAndroidPadResetAll();
+            break;
+
+        case APP_CMD_GAINED_FOCUS:
             break;
 
         case APP_CMD_LOW_MEMORY:
@@ -798,8 +815,19 @@ extern "C" void android_main(android_app* app) {
 
     app->userData = &gRenderer;
     app->onAppCmd = handleAppCommand;
+    app->onInputEvent = handleInputEvent;
 
     logMessage(ANDROID_LOG_INFO, "Gow_android native shell started");
+
+    // Construction/destruction only. Do not call initialize(), loadELF() or run()
+    // until Android GS/audio/VFS adapters and private game code are available.
+    PS2Runtime *runtime = gowCreatePs2Runtime();
+    if (runtime != nullptr) {
+        logMessage(ANDROID_LOG_INFO,
+            "PS2Runtime constructed; guest execution and desktop host initialization remain disabled");
+    } else {
+        logMessage(ANDROID_LOG_ERROR, "PS2Runtime construction failed");
+    }
 
     while (app->destroyRequested == 0) {
         int events = 0;
@@ -825,5 +853,11 @@ extern "C" void android_main(android_app* app) {
     }
 
     gRenderer.shutdown();
+    if (runtime != nullptr) {
+        gowDestroyPs2Runtime(runtime);
+        runtime = nullptr;
+        logMessage(ANDROID_LOG_INFO, "PS2Runtime destroyed cleanly");
+    }
+    gowAndroidPadResetAll();
     logMessage(ANDROID_LOG_INFO, "Gow_android native shell stopped");
 }
