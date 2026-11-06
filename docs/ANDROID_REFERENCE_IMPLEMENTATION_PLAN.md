@@ -39,7 +39,7 @@ Referência: [RanggaCasper/Black-Android](https://github.com/RanggaCasper/Black-
 ### Arquitetura final
 
 1. **FORGE / Android:** seleção de imagem do usuário, validação da revisão, instalação privada, progresso, cancelamento, integridade e diagnóstico.
-2. **Build host privado:** PS2Recomp, mapa/configuração KIexster da revisão NTSC-U e ferramentas de geração VU1/IOP. ELF, dumps, IRX e C++ gerado permanecem fora do Git e da CI pública.
+2. **Build host privado:** recebe somente a ISO original; prepara PS2Recomp/KIexster em commits fixados, extrai automaticamente SYSTEM.CNF, ELF NTSC-U, IRX, pacotes e layout por setor, e gera C++ de EE/VU1/IOP em workspace privado. Quando o aparelho Debug está conectado por ADB, as capturas VU1/IOP são sincronizadas diretamente do armazenamento privado do aplicativo, sem exportação manual.
 3. **Build Android:** Android NDK/CMake compila o runtime PS2 adaptado, as unidades C++ AOT e o backend Android para `arm64-v8a`.
 4. **Execução no aparelho:** GameActivity hospeda o runtime nativo; VFS/CDVD lê a instalação privada; o EE/IOP/VU executa somente o caminho nativo/AOT exigido pelo produto; GS é apresentado por Vulkan.
 5. **Validação:** primeiro boot e primeiro frame reais, capturados localmente e comparados com a mesma cena/revisão no renderer de referência. Capturas e dados proprietários nunca são enviados à CI.
@@ -69,11 +69,11 @@ God of War usa leituras por setor/LSN em partes do caminho de I/O. A auditoria l
 
 ## 5. Sequência mínima de execução
 
-### Marco A — obter os insumos privados
-- Instalar e verificar a revisão NTSC-U suportada.
-- Exportar o ELF exato `SCUS_973.99`.
-- Extrair, em ambiente privado, os microprogramas VU1 e os IRX solicitados pelo jogo.
-- Não enviar esses arquivos a Issues, Releases, Actions, commits ou serviços públicos.
+### Marco A — receber somente a ISO
+- O usuário seleciona a própria ISO NTSC-U no FORGE.
+- O build host também recebe somente o caminho dessa ISO via `--iso`; o extrator KIexster localiza SYSTEM.CNF e extrai automaticamente o ELF `SCUS_973.99`, os IRX, pacotes e layout por setor em workspace privado.
+- O primeiro APK é bootstrap estrito. Depois de abrir Verificar runtime no aparelho, as capturas VU1/IOP ficam no armazenamento privado do app e são sincronizadas por ADB durante a próxima execução do mesmo comando.
+- Não solicitar exportação de ELF, IRX, microcódigo, ZIP ou log. Não enviar dados derivados do jogo a Issues, Releases, Actions, commits ou serviços públicos.
 
 ### Marco B — produzir a build AOT Android
 - Executar `tools/build_android_game.py` em Windows/Linux com o ELF privado e workspace ASCII fora do repositório.
@@ -93,9 +93,9 @@ God of War usa leituras por setor/LSN em partes do caminho de I/O. A auditoria l
 
 ## 6. O que pode ser feito hoje e o que depende do usuário
 
-**Pode ser feito no repositório:** corrigir CI, manter o APK shell reproduzível, reforçar verificações e documentação, integrar código já preparado e eliminar bloqueios determinísticos.
+**Pode ser feito no repositório:** manter o fluxo de entrada ISO-only, preparação automática dos compiladores fixados, extração privada, sincronização ADB das capturas, correção de CI e integração Android.
 
-**Depende de insumo local:** gerar AOT real exige a cópia do usuário. A recompilação atual é uma ferramenta host; o aparelho Android não substitui automaticamente um ambiente Windows/Linux com CMake, compilador C++ e Android NDK.
+**Depende de insumo local:** a única mídia fornecida é a ISO original. A geração AOT específica do jogo ainda é executada por uma ferramenta host Windows/Linux com CMake, compilador C++ e Android NDK; os intermediários são extraídos automaticamente e não são exportados pelo usuário.
 
 **Depende de aparelho:** mesmo com APK AOT, somente um dispositivo Android ARM64 pode confirmar inicialização, estabilidade, driver Vulkan e a primeira cena real.
 
