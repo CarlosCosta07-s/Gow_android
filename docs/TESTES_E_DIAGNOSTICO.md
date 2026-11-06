@@ -27,6 +27,7 @@ A compilação da interface e do ícone está verificada por CI; visualização 
 | C — ISO9660 | O descritor primário do setor 16 é validado (código presente; execução em aparelho pendente). | Estado da tela e log sem caminho privado. |
 | D — Identificação | `SYSTEM.CNF`, serial e revisão são reconhecidos. | Log de validação sem caminho privado. |
 | E — Vulkan | Surface, swapchain, filas e primeira apresentação de teste funcionam. | Logs de criação, resize e present. |
+| E1 — Diagnóstico nativo | A Activity exibe preparação, estado do núcleo e erro sem depender apenas do Logcat. | Captura do painel e Logcat com `GowAndroid`; testar mensagem precoce antes da criação da view. |
 | F — Runtime | EE progride por estágios conhecidos. | PC/RA/SP, thread e última etapa. |
 | G — Primeiro frame | GS apresenta imagem real do jogo. | Captura de tela e log correlacionado. |
 | H — Gameplay | Menu, novo jogo, combate e transições funcionam. | Lista de cenários e resultados. |
@@ -62,3 +63,9 @@ A compilação da interface e do ícone está verificada por CI; visualização 
 - **[NÃO TESTADO]**: sem evidência suficiente.
 
 Remover caminhos absolutos, nomes de usuário e dados pessoais antes de publicar logs.
+
+## Diagnóstico de inicialização da GameActivity
+
+O callback JNI `onNativeRuntimeStatus(String, boolean)` entrega mensagens do `android_main()` à interface Java pela thread principal. O painel diferencia estado informativo e falha, e a Activity preserva a última mensagem recebida antes de o painel estar pronto.
+
+**Estado da verificação em 06/11/2026:** o verificador estático do contrato JNI/Java passou na CI `42246181055`. A build APK desse workflow ainda estava em execução na última consulta. A apresentação visual e o fluxo de falha precisam ser reproduzidos em aparelho antes de marcar esta porta como [VERIFICADO].
