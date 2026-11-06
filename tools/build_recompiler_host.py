@@ -1268,7 +1268,7 @@ def main() -> int:
             "Expected the VU1 run and resume dispatch sites; "
             f"found {len(vu_dispatch_matches)}."
         )
-    dispatch_position = vu_dispatch_matches[0].start()
+    dispatch_position = vu_dispatch_matches[1].start()
     vu_core_text = (
         vu_core_text[:dispatch_position]
         + "#endif\n"
