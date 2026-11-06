@@ -23,6 +23,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Test DualShock 2 packet encoder on host
+        shell: bash
+        run: |
+          c++ -std=c++20 -Wall -Wextra -Werror \
+            android/app/src/test/cpp/dualshock2_packet_test.cpp \
+            -Iandroid/app/src/main/cpp \
+            -o "$RUNNER_TEMP/dualshock2-packet-test"
+          "$RUNNER_TEMP/dualshock2-packet-test"
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
