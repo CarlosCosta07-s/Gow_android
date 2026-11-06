@@ -1256,46 +1256,42 @@ def main() -> int:
     {""",
         "exclude VU1 interpreter A/B verifier from strict runtime",
     )
+    # Fail closed on Android if a VU1 program cannot be dispatched natively.
+    # The pinned KIexster patch provides runNativeLoop(); unlike the older archived
+    # branch, its final dispatch block has evolved, so guard the actual entry points.
     replace_exactly_once(
         vu_core,
-        """        else if (checked % 2000u == 0u)
-            std::fprintf(stderr, "[vu1n-verify] %u runs checked, %u mismatches\n", checked, bad);
-    }
-    if (m_unit == Unit::VU1 && m_native && m_native->enabled && vuData && codeSize == PS2_VU1_CODE_SIZE)
-    {
-        if (!runNativeLoop(context))
-            runExact(context);
-    }
-    else
-        runExact(context);""",
-        """        else if (checked % 2000u == 0u)
-            std::fprintf(stderr, "[vu1n-verify] %u runs checked, %u mismatches\n", checked, bad);
-    }
-#endif
-#if defined(PS2X_VU1_NATIVE_ONLY)
-    if (m_unit == Unit::VU1)
-    {
-        if (vuData != nullptr && codeSize == PS2_VU1_CODE_SIZE)
-            runNativeLoop(context);
-        else
-        {
-            std::fprintf(stderr, "[VU1:native-required] invalid VU1 execution buffer: codeSize=%u data=%p\n", codeSize, static_cast<void *>(vuData));
-            m_stopRequested = true;
-        }
-    }
-    else
-        runExact(context);
-#else
-    if (m_unit == Unit::VU1 && m_native && m_native->enabled && vuData && codeSize == PS2_VU1_CODE_SIZE)
-    {
-        if (!runNativeLoop(context))
-            runExact(context);
-    }
-    else
-        runExact(context);
-#endif""",
-        "strict VU1 runtime dispatch without interpreter fallback",
+        "void VU1Interpreter::run(uint8_t *vuCode, uint32_t codeSize,\\n"
+        "                         uint8_t *vuData, uint32_t dataSize,\\n"
+        "                         GS &gs, PS2Memory *memory, uint32_t maxCycles)\\n"
+        "{\\n",
+        "void VU1Interpreter::run(uint8_t *vuCode, uint32_t codeSize,\\n"
+        "                         uint8_t *vuData, uint32_t dataSize,\\n"
+        "                         GS &gs, PS2Memory *memory, uint32_t maxCycles)\\n"
+        "{\\n"
+        "#if defined(PS2X_VU1_NATIVE_ONLY)\\n"
+        "    if (m_unit == Unit::VU1 && (!m_native || !m_native->enabled || !vuData || codeSize != PS2_VU1_CODE_SIZE))\\n"
+        "    {\\n"
+        "        std::fprintf(stderr, \\"[VU1:native-required] invalid VU1 native dispatch state; execution stopped.\\n\\");\\n"
+        "        m_stopRequested = true;\\n"
+        "        return;\\n"
+        "    }\\n"
+        "#endif\\n",
+        "guard Android VU1 execution against missing native microprogram state",
     )
+    replace_exactly_once(
+        vu_core,
+        "        if (!runNativeLoop(context))\\n"
+        "            runExact(context);",
+        "        if (!runNativeLoop(context))\\n"
+        "        {\\n"
+        "            std::fprintf(stderr, \\"[VU1:native-required] native microprogram unavailable; stopping instead of interpreting.\\n\\");\\n"
+        "            m_stopRequested = true;\\n"
+        "            return true;\\n"
+        "        }",
+        "block exact-interpreter fallback when Android VU1 native dispatch misses",
+    )
+
 
     # Empty shell-only symbols keep the Android shell linkable before the private
     # game ELF has been recompiled. Disable this source when generated game code is linked.
