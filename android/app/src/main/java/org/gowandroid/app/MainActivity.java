@@ -37,8 +37,8 @@ import java.util.concurrent.Executors;
  * FORGE is the minimalist game-library interface for the Gow_android project.
  *
  * It uses original UI elements only: no character portraits, screenshots or
- * extracted artwork from God of War. Disc selection and ISO9660 validation are
- * implemented, but SYSTEM.CNF identification and game boot are not yet available.
+ * extracted artwork from God of War. Disc selection, ISO9660 validation and
+ * initial SYSTEM.CNF identification are implemented; game boot is not available yet.
  */
 public final class MainActivity extends AppCompatActivity {
     private static final String PREF_DISC_URI = "selected_disc_uri";
