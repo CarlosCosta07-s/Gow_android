@@ -153,6 +153,33 @@ def _select_device(adb: str, serial: str | None) -> str:
     return devices[0]
 
 
+def find_adb_executable() -> str | None:
+    """Find ADB on PATH or in the usual Android SDK platform-tools folders."""
+    on_path = shutil.which("adb")
+    if on_path:
+        return on_path
+
+    candidates: list[Path] = []
+    for variable in ("ANDROID_SDK_ROOT", "ANDROID_HOME"):
+        value = os.environ.get(variable)
+        if value:
+            candidates.append(Path(value) / "platform-tools")
+
+    home = Path.home()
+    candidates.extend([
+        home / "AppData/Local/Android/Sdk/platform-tools",
+        home / "Android/Sdk/platform-tools",
+        home / "Library/Android/sdk/platform-tools",
+    ])
+    executable_names = ("adb.exe", "adb") if os.name == "nt" else ("adb",)
+    for directory in candidates:
+        for executable_name in executable_names:
+            candidate = directory / executable_name
+            if candidate.is_file():
+                return str(candidate)
+    return None
+
+
 def pull_private_aot_captures(
     work_dir: Path,
     repo_root: Path,
@@ -173,7 +200,7 @@ def pull_private_aot_captures(
     if not str(work).isascii():
         raise ValueError("The private ADB workspace path must use ASCII characters.")
 
-    adb = adb_executable or shutil.which("adb")
+    adb = adb_executable or find_adb_executable()
     if not adb:
         raise NoDeviceCaptures("ADB was not found; install Android SDK Platform Tools or connect its PATH.")
     serial = _select_device(adb, device_serial)
