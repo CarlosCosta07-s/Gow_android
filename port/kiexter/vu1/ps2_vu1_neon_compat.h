@@ -1,5 +1,87 @@
 #pragma once
 
+#if defined(__aarch64__) && defined(__ARM_NEON) && defined(USE_SSE2NEON)
+#include <arm_neon.h>
+#include <sse2neon.h>
+#include <cstdint>
+
+// The Waffle runtime already supplies the broad SSE2 API through sse2neon.
+// This layer only overrides the semantics that matter to VU1: SSE MAX/MIN
+// operand selection and the MXCSR subset used for rounding/flush control.
+namespace gow_vu1_neon
+{
+    inline __m128 max_ps(__m128 a, __m128 b) noexcept
+    {
+        return vbslq_f32(vcgtq_f32(a, b), a, b);
+    }
+
+    inline __m128 min_ps(__m128 a, __m128 b) noexcept
+    {
+        return vbslq_f32(vcltq_f32(a, b), a, b);
+    }
+
+    inline uint32_t getcsr() noexcept
+    {
+        uint64_t fpcr = 0;
+        uint64_t fpsr = 0;
+        asm volatile("mrs %0, fpcr" : "=r"(fpcr));
+        asm volatile("mrs %0, fpsr" : "=r"(fpsr));
+
+        uint32_t value = 0x1F80u;
+        value |= static_cast<uint32_t>((fpcr >> 22u) & 3u) << 13u;
+        if ((fpcr & (1ull << 24u)) != 0u)
+            value |= 0x8040u;
+        if ((fpsr & (1ull << 0u)) != 0u) value |= 1u << 0u;
+        if ((fpsr & (1ull << 7u)) != 0u) value |= 1u << 1u;
+        if ((fpsr & (1ull << 1u)) != 0u) value |= 1u << 2u;
+        if ((fpsr & (1ull << 2u)) != 0u) value |= 1u << 3u;
+        if ((fpsr & (1ull << 3u)) != 0u) value |= 1u << 4u;
+        if ((fpsr & (1ull << 4u)) != 0u) value |= 1u << 5u;
+        return value;
+    }
+
+    inline void setcsr(uint32_t value) noexcept
+    {
+        uint64_t fpcr = 0;
+        asm volatile("mrs %0, fpcr" : "=r"(fpcr));
+        fpcr &= ~((3ull << 22u) | (1ull << 24u));
+        fpcr |= static_cast<uint64_t>((value >> 13u) & 3u) << 22u;
+        if ((value & (0x8000u | 0x0040u)) != 0u)
+            fpcr |= 1ull << 24u;
+        asm volatile("msr fpcr, %0" : : "r"(fpcr) : "memory");
+
+        uint64_t fpsr = 0;
+        asm volatile("mrs %0, fpsr" : "=r"(fpsr));
+        fpsr &= ~((1ull << 0u) | (1ull << 1u) | (1ull << 2u) |
+                  (1ull << 3u) | (1ull << 4u) | (1ull << 7u));
+        if ((value & (1u << 0u)) != 0u) fpsr |= 1ull << 0u;
+        if ((value & (1u << 1u)) != 0u) fpsr |= 1ull << 7u;
+        if ((value & (1u << 2u)) != 0u) fpsr |= 1ull << 1u;
+        if ((value & (1u << 3u)) != 0u) fpsr |= 1ull << 2u;
+        if ((value & (1u << 4u)) != 0u) fpsr |= 1ull << 3u;
+        if ((value & (1u << 5u)) != 0u) fpsr |= 1ull << 4u;
+        asm volatile("msr fpsr, %0" : : "r"(fpsr) : "memory");
+    }
+}
+
+#ifdef _mm_max_ps
+#undef _mm_max_ps
+#endif
+#ifdef _mm_min_ps
+#undef _mm_min_ps
+#endif
+#ifdef _mm_getcsr
+#undef _mm_getcsr
+#endif
+#ifdef _mm_setcsr
+#undef _mm_setcsr
+#endif
+#define _mm_max_ps(a, b) ::gow_vu1_neon::max_ps((a), (b))
+#define _mm_min_ps(a, b) ::gow_vu1_neon::min_ps((a), (b))
+#define _mm_getcsr() ::gow_vu1_neon::getcsr()
+#define _mm_setcsr(value) ::gow_vu1_neon::setcsr((value))
+
+#else
 // ARM64 compatibility layer for the SSE-style vector API used by Waffle's native VU1 blocks.
 // The implementation is deliberately limited to the intrinsics actually used by
 // ps2_vu1_native.h and vu1n_gen.py. Keep semantics aligned with SSE, especially lane masks,
@@ -233,3 +315,5 @@ namespace gow_vu1_neon
 #define _mm_blend_ps(a, b, imm) ::gow_vu1_neon::blend_ps<(imm)>((a), (b))
 #define _mm_getcsr() ::gow_vu1_neon::getcsr()
 #define _mm_setcsr(value) ::gow_vu1_neon::setcsr((value))
+
+#endif // ARM64 sse2neon branch
