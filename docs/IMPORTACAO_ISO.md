@@ -40,7 +40,7 @@ A versão atual reconhece os executáveis `SCUS_973.99` (NTSC-U) e `SCES_531.33`
 - Manifestos vazios, destinos repetidos, colisões arquivo/diretório, arquivos ausentes e tamanhos incompatíveis são rejeitados antes da cópia.
 - A extração não carrega a imagem inteira na memória; usa um buffer de 64 KiB.
 - A pasta publicada é `files/installations/gow_boot_seed`, no armazenamento privado do aplicativo.
-- O `CdRootVfs` é somente leitura, faz acesso por descritores relativos à raiz, rejeita traversal e symlinks, aceita apenas arquivos regulares, limita listagens a 65.536 entradas e mantém handles para leituras por offset.
+- O `CdRootVfs` é somente leitura, faz acesso por descritores relativos à raiz, rejeita traversal e symlinks, aceita apenas arquivos regulares, limita listagens a 65.536 entradas e mantém handles para leituras por offset. A busca de componentes é case-insensitive ASCII e ignora sufixos ISO `;versão`; duas entradas que colidam após essa normalização são rejeitadas.
 - O provider expõe a API C ABI `gowAndroidCdRootOpenFile/ReadFile/CloseFile` e o sinalizador `gowAndroidCdRootIsReady`. O patch local do runtime Waffle foi atualizado para usar o prefixo `gowcdroot:/` no lugar do provider direto da ISO; a compilação desse patch ainda está em validação na CI.
 - Se essa pasta já existir, a importação não a substitui automaticamente.
 
