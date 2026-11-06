@@ -395,6 +395,7 @@ def main() -> int:
     for required in (
         "configurePrivateAotCaptureDirectories",
         'setenv("GOW_VU1_CAPTURA"',
+        'setenv("GOW_VU1N_MISS_LOG"',
         'setenv("PS2X_IOP_DUMP_MODULES"',
         "gow-aot-captures",
     ):
@@ -423,6 +424,7 @@ def main() -> int:
         'setText("Exportar dados AOT")',
         "REQUEST_EXPORT_AOT_CAPTURES",
         "capture_manifest.txt",
+        "vu1/vu1n_heads.txt",
         "gow-aot-captures",
     ):
         require(required in activity, f"Private AOT capture export UI is missing: {required}")
@@ -434,6 +436,7 @@ def main() -> int:
         "VU1_MICRO_MEMORY_BYTES",
         "normalize_and_validate_iop_dump",
         "--strict-partial",
+        "vu1n_heads_combined.txt",
         "full_native_aot",
     ):
         require(required in native_aot_source, f"Private native AOT builder is missing: {required}")
