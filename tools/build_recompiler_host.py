@@ -352,6 +352,69 @@ def main() -> int:
         "#endif\n",
         "select sse2neon plus ARM FPCR/FPSR shim for the EE/VU0 runtime",
     )
+    replace_exactly_once(
+        runtime_cpp,
+        "#else\n"
+        "        if (IsAudioDeviceReady())\n"
+        "        {\n"
+        "            CloseAudioDevice();\n"
+        "            m_audioBackend.setAudioReady(false);\n"
+        "        }\n"
+        "#endif\n"
+        "        if (m_debugUiInitialized && m_debugUiShutdownCallback)",
+        "#else\n"
+        "#if !defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\n"
+        "        if (IsAudioDeviceReady())\n"
+        "        {\n"
+        "            CloseAudioDevice();\n"
+        "            m_audioBackend.setAudioReady(false);\n"
+        "        }\n"
+        "#endif\n"
+        "#endif\n"
+        "        if (m_debugUiInitialized && m_debugUiShutdownCallback)",
+        "avoid querying the uninitialized Raylib audio device in the Android-managed lifecycle",
+    )
+
+    # Android reads DualShock 2 state from the app-owned GameActivity bridge;
+    # desktop platforms continue using the upstream Raylib polling backend.
+    pad_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_pad.cpp"
+    replace_exactly_once(
+        pad_cpp,
+        '#include "ps2_host_backend.h"\n',
+        '#include "ps2_host_backend.h"\n'
+        '#if defined(__ANDROID__)\n'
+        'extern "C" bool gowAndroidPadReadState(int port, int slot, uint8_t *data, size_t size);\n'
+        '#endif\n',
+        "declare Android GameActivity pad bridge",
+    )
+    replace_exactly_once(
+        pad_cpp,
+        "bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t size)\n{\n"
+        "    if (!data || size < 32)\n",
+        "bool PSPadBackend::readState(int port, int slot, uint8_t *data, size_t size)\n{\n"
+        "#if defined(__ANDROID__)\n"
+        "    return gowAndroidPadReadState(port, slot, data, size);\n"
+        "#else\n"
+        "    if (!data || size < 32)\n",
+        "route Android PS2 pad reads through the atomic GameActivity input state",
+    )
+    replace_exactly_once(
+        pad_cpp,
+        "    return true;\n}\n\nvoid PSPadBackend::setActuators",
+        "    return true;\n#endif\n}\n\nvoid PSPadBackend::setActuators",
+        "close the Android-specific PS2 pad input branch",
+    )
+    replace_exactly_once(
+        pad_cpp,
+        "#else\n"
+        "    // Other platforms (SDL, Switch): raylib's rumble, which stops after at most 2 s, so it is resent every second.\n",
+        "#elif defined(__ANDROID__)\n"
+        "    // Android haptics are separate from Raylib/GLFW; retain actuator state for the future Java bridge.\n"
+        "    (void)refresh;\n"
+        "#else\n"
+        "    // Other platforms (SDL, Switch): raylib's rumble, which stops after at most 2 s, so it is resent every second.\n",
+        "prevent desktop Raylib rumble calls in Android runtime",
+    )
 
     # The strict Android profile must not retain the optional PCSX2 VU1 bridge.
     replace_exactly_once(
@@ -583,6 +646,9 @@ def main() -> int:
         "target_compile_definitions(ps2_runtime PRIVATE\n    PS2X_HAS_FFMPEG=$<BOOL:${PS2X_ENABLE_FFMPEG}>\n)\n",
         "if(PS2X_VU1_NATIVE_ONLY)\n"
         "    target_compile_definitions(ps2_runtime PRIVATE PS2X_VU1_NATIVE_ONLY=1)\n"
+        "endif()\n"
+        "if(ANDROID)\n"
+        "    target_compile_definitions(ps2_runtime PRIVATE PS2X_ANDROID_LIFECYCLE_MANAGED=1)\n"
         "endif()\n\n"
         "target_compile_definitions(ps2_runtime PRIVATE\n    PS2X_HAS_FFMPEG=$<BOOL:${PS2X_ENABLE_FFMPEG}>\n)\n",
         "VU1 native-only compile definition",
