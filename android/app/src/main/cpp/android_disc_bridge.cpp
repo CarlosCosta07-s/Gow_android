@@ -1,3 +1,4 @@
+#include "android_cdroot_bridge.h"
 #include "cdroot_vfs.h"
 #include "iso9660_installer.h"
 #include "iso9660_reader.h"
