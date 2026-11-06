@@ -43,8 +43,10 @@ public final class GowGameActivity extends GameActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+        // Register before GameActivity starts android_main so the native thread
+        // cannot observe a stale BOOT2 configuration from an earlier Activity.
         nativeSetActivityReference(this);
+        super.onCreate(savedInstanceState);
         createNativeStatusOverlay();
 
         int discDescriptor = getIntent().getIntExtra(EXTRA_DISC_FD, -1);
