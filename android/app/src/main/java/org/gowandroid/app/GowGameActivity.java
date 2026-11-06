@@ -25,7 +25,7 @@ public final class GowGameActivity extends GameActivity {
 
     private static native boolean nativeSetDiscFileDescriptor(int descriptor);
     private static native void nativeSetActivityReference(GowGameActivity activity);
-    private static native void nativeClearActivityReference();
+    private static native void nativeClearActivityReference(GowGameActivity activity);
 
     private TextView nativeStatusView;
     private String pendingNativeStatus;
@@ -62,7 +62,7 @@ public final class GowGameActivity extends GameActivity {
 
     @Override
     protected void onDestroy() {
-        nativeClearActivityReference();
+        nativeClearActivityReference(this);
         super.onDestroy();
     }
 
