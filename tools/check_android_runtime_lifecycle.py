@@ -381,6 +381,72 @@ def main() -> int:
     ):
         require(required in native_main, f"Local GS scene capture path is missing: {required}")
 
+    # The strict Android worker must capture each loaded VU1 image before
+    # rejecting a missing native block; IOP module images are dumped at load time.
+    build_host = (project_root / "tools/build_recompiler_host.py").read_text(encoding="utf-8")
+    for required in (
+        'compiledProgramFor(vuCode, codeSize, memory)',
+        'capture microcode before strict AOT lookup',
+        'PS2X_IOP_NATIVE_SOURCE_DIR',
+        'route private generated IRX AOT files into the IOP target',
+    ):
+        require(required in build_host, f"Private AOT capture/build preparation is missing: {required}")
+
+    for required in (
+        "configurePrivateAotCaptureDirectories",
+        'setenv("GOW_VU1_CAPTURA"',
+        'setenv("PS2X_IOP_DUMP_MODULES"',
+        "gow-aot-captures",
+    ):
+        require(required in native_main, f"Private VU1/IOP capture setup is missing: {required}")
+
+    for required in (
+        "GOW_ANDROID_GENERATED_VU1_DIR",
+        "GOW_ANDROID_GENERATED_IOP_DIR",
+        "PS2X_IOP_NATIVE_SOURCE_DIR",
+        "GOW_ANDROID_CAPTURE_BOOTSTRAP",
+        "target_sources(ps2_runtime PRIVATE ${GOW_ANDROID_GENERATED_VU1_SOURCES})",
+    ):
+        require(required in cmake_text, f"Private AOT CMake integration is missing: {required}")
+
+    prepared_iop_cmake = root / "ps2xIOP/CMakeLists.txt"
+    require(prepared_iop_cmake.is_file(), "Prepared IOP CMake file is missing.")
+    prepared_iop_text = prepared_iop_cmake.read_text(encoding="utf-8")
+    for required in (
+        "PS2X_IOP_NATIVE_SOURCE_DIR",
+        "iopn_registry.cpp",
+        "iopn_*.cpp",
+    ):
+        require(required in prepared_iop_text, f"Prepared IOP CMake AOT source path is missing: {required}")
+
+    for required in (
+        'setText("Exportar dados AOT")',
+        "REQUEST_EXPORT_AOT_CAPTURES",
+        "capture_manifest.txt",
+        "gow-aot-captures",
+    ):
+        require(required in activity, f"Private AOT capture export UI is missing: {required}")
+
+    native_aot_builder = project_root / "tools/build_android_native_aot.py"
+    require(native_aot_builder.is_file(), "Private native AOT builder is missing.")
+    native_aot_source = native_aot_builder.read_text(encoding="utf-8")
+    for required in (
+        "VU1_MICRO_MEMORY_BYTES",
+        "normalize_and_validate_iop_dump",
+        "--strict",
+        "full_native_aot",
+    ):
+        require(required in native_aot_source, f"Private native AOT builder is missing: {required}")
+
+    game_builder = (project_root / "tools/build_android_game.py").read_text(encoding="utf-8")
+    for required in (
+        "--capture-bootstrap",
+        "--aot-captures",
+        "prepare_runtime_command",
+        "GOW_ANDROID_CAPTURE_BOOTSTRAP",
+    ):
+        require(required in game_builder, f"Android AOT build orchestration is missing: {required}")
+
     print("Verified: Android PS2 core initialization is headless and uses a null GS backend.")
     print("Verified: the Android guest worker starts only after private AOT, GS backend and Vulkan surface gates pass.")
     print("Verified: GameActivity owns presentation and bounded local GS scene captures.")
