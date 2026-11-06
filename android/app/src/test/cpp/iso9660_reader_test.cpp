@@ -73,6 +73,130 @@ int fail(std::string_view message) {
     return 1;
 }
 
+bool buildDualLayerFixture(int fd) {
+    constexpr uint32_t layer0Sectors = 32u;
+    constexpr uint32_t totalSectors = 64u;
+    constexpr uint64_t layer1Base = layer0Sectors - 16u;
+    if (::ftruncate(fd, static_cast<off_t>(totalSectors * kSector)) != 0) return false;
+
+    std::array<uint8_t, kSector> layer0Pvd{};
+    layer0Pvd[0] = 1u;
+    std::memcpy(layer0Pvd.data() + 1u, "CD001", 5u);
+    layer0Pvd[6] = 1u;
+    putU32Both(layer0Pvd.data() + 80u, layer0Sectors);
+    const auto layer0Root =
+        makeRecord(std::string_view("\0", 1u), 20u, 2048u, 0x02u);
+    std::copy(layer0Root.begin(), layer0Root.end(), layer0Pvd.begin() + 156);
+    if (!writeAt(fd, 16u * kSector, layer0Pvd.data(), layer0Pvd.size())) return false;
+
+    std::array<uint8_t, kSector> layer0Directory{};
+    size_t layer0Cursor = 0u;
+    addRecord(layer0Directory, layer0Cursor,
+              makeRecord(std::string_view("\0", 1u), 20u, 2048u, 0x02u));
+    addRecord(layer0Directory, layer0Cursor,
+              makeRecord(std::string_view("\1", 1u), 20u, 2048u, 0x02u));
+    addRecord(layer0Directory, layer0Cursor,
+              makeRecord("LOW.BIN;1", 22u, 2050u, 0x00u));
+    addRecord(layer0Directory, layer0Cursor,
+              makeRecord("LOWDIR", 24u, 2048u, 0x02u));
+    if (!writeAt(fd, 20u * kSector, layer0Directory.data(), layer0Directory.size())) return false;
+
+    std::array<uint8_t, kSector> nestedDirectory{};
+    size_t nestedCursor = 0u;
+    addRecord(nestedDirectory, nestedCursor,
+              makeRecord(std::string_view("\0", 1u), 24u, 2048u, 0x02u));
+    addRecord(nestedDirectory, nestedCursor,
+              makeRecord(std::string_view("\1", 1u), 20u, 2048u, 0x02u));
+    addRecord(nestedDirectory, nestedCursor,
+              makeRecord("LOWNEST.BIN;1", 25u, 1u, 0x00u));
+    if (!writeAt(fd, 24u * kSector, nestedDirectory.data(), nestedDirectory.size())) return false;
+
+    std::vector<uint8_t> lowPayload(2050u);
+    for (size_t i = 0u; i < lowPayload.size(); ++i)
+        lowPayload[i] = static_cast<uint8_t>((i * 13u + 7u) & 0xFFu);
+    if (!writeAt(fd, 22u * kSector, lowPayload.data(), lowPayload.size())) return false;
+    const uint8_t nestedPayload = 0xA5u;
+    if (!writeAt(fd, 25u * kSector, &nestedPayload, 1u)) return false;
+
+    std::array<uint8_t, kSector> layer1Pvd{};
+    layer1Pvd[0] = 1u;
+    std::memcpy(layer1Pvd.data() + 1u, "CD001", 5u);
+    layer1Pvd[6] = 1u;
+    putU32Both(layer1Pvd.data() + 80u, 32u);
+    const auto layer1Root =
+        makeRecord(std::string_view("\0", 1u), 20u, 2048u, 0x02u);
+    std::copy(layer1Root.begin(), layer1Root.end(), layer1Pvd.begin() + 156);
+    if (!writeAt(fd, static_cast<uint64_t>(layer0Sectors) * kSector,
+                 layer1Pvd.data(), layer1Pvd.size())) return false;
+
+    std::array<uint8_t, kSector> layer1Directory{};
+    size_t layer1Cursor = 0u;
+    addRecord(layer1Directory, layer1Cursor,
+              makeRecord(std::string_view("\0", 1u), 20u, 2048u, 0x02u));
+    addRecord(layer1Directory, layer1Cursor,
+              makeRecord(std::string_view("\1", 1u), 20u, 2048u, 0x02u));
+    addRecord(layer1Directory, layer1Cursor,
+              makeRecord("HIGH.BIN;1", 22u, 3u, 0x00u));
+    if (!writeAt(fd, (layer1Base + 20u) * kSector,
+                 layer1Directory.data(), layer1Directory.size())) return false;
+    const std::array<uint8_t, 3> highPayload{0xD1u, 0xD2u, 0xD3u};
+    return writeAt(fd, (layer1Base + 22u) * kSector,
+                   highPayload.data(), highPayload.size());
+}
+
+bool testDualLayerDiscLayout() {
+    FILE *file = std::tmpfile();
+    if (!file) {
+        std::cerr << "FAIL: could not create dual-layer ISO fixture\n";
+        return false;
+    }
+    const int fd = ::fileno(file);
+    if (fd < 0 || !buildDualLayerFixture(fd)) {
+        std::fclose(file);
+        std::cerr << "FAIL: could not build dual-layer ISO fixture\n";
+        return false;
+    }
+
+    Iso9660Reader reader;
+    std::string error;
+    if (!reader.openDescriptor(fd, &error)) {
+        std::fclose(file);
+        std::cerr << "FAIL: dual-layer ISO open failed: " << error << '\n';
+        return false;
+    }
+
+    gow::disc::IsoDiscLayout layout{};
+    if (!reader.scanDiscLayout(layout, &error)) {
+        std::fclose(file);
+        std::cerr << "FAIL: dual-layer disc scan failed: " << error << '\n';
+        return false;
+    }
+    if (layout.sectorCount != 64u || layout.layer1Start != 16u ||
+        layout.files.size() != 3u ||
+        layout.files[0].path != "LOW.BIN" ||
+        layout.files[0].lsn != 22u || layout.files[0].size != 2050u ||
+        layout.files[1].path != "LOWDIR/LOWNEST.BIN" ||
+        layout.files[1].lsn != 25u || layout.files[1].size != 1u ||
+        layout.files[2].path != "HIGH.BIN" ||
+        layout.files[2].lsn != 38u || layout.files[2].size != 3u) {
+        std::fclose(file);
+        std::cerr << "FAIL: dual-layer layout paths, LSNs, or sizes mismatch\n";
+        return false;
+    }
+
+    std::array<uint8_t, kSector> sector{};
+    if (!reader.readSectors(38u, 1u, sector.data()) ||
+        sector[0] != 0xD1u || sector[1] != 0xD2u || sector[2] != 0xD3u) {
+        std::fclose(file);
+        std::cerr << "FAIL: dual-layer physical sector read mismatch\n";
+        return false;
+    }
+
+    reader.close();
+    std::fclose(file);
+    return true;
+}
+
 bool buildFixture(int fd) {
     constexpr uint64_t sectors = 25u;
     if (::ftruncate(fd, static_cast<off_t>(sectors * kSector)) != 0) return false;
@@ -81,6 +205,7 @@ bool buildFixture(int fd) {
     pvd[0] = 1u;
     std::memcpy(pvd.data() + 1u, "CD001", 5u);
     pvd[6] = 1u;
+    putU32Both(pvd.data() + 80u, static_cast<uint32_t>(sectors));
     const auto root = makeRecord(std::string_view("\0", 1u), 20u, 2048u, 0x02u);
     std::copy(root.begin(), root.end(), pvd.begin() + 156);
     if (!writeAt(fd, 16u * kSector, pvd.data(), pvd.size())) return false;
@@ -361,6 +486,7 @@ int main() {
     std::fclose(file);
     reader.close();
     if (reader.isOpen()) return fail("reader did not close its duplicated descriptor");
+    if (!testDualLayerDiscLayout()) return 1;
     std::cout << "ISO9660 reader tests passed\n";
     return 0;
 }
