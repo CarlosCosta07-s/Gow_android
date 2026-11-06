@@ -33,6 +33,7 @@ struct IsoInstallResult {
     uint64_t totalBytes = 0u;
     uint64_t copiedBytes = 0u;
     size_t completedFiles = 0u;
+    size_t totalFiles = 0u;
     std::string error;
 };
 
