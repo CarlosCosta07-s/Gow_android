@@ -1035,23 +1035,23 @@ public final class MainActivity extends AppCompatActivity {
                             return !cancelDiscInstallRequested;
                         };
 
-                String error = nativeInstallIsoDisc(
+                String installSummary = nativeInstallIsoDisc(
                         candidate.getFd(), installationRoot.getAbsolutePath(),
                         installationName, callback);
-                if (error != null && !error.isEmpty()) {
-                    failure = error;
+                if (installSummary == null || !installSummary.startsWith("OK:")) {
+                    failure = installSummary == null || installSummary.isEmpty()
+                            ? "A instalação do disco falhou sem fornecer um diagnóstico."
+                            : installSummary;
                 } else if (!nativeSetCdRootDirectory(
                         new File(finalInstallation, "disc").getAbsolutePath())) {
                     failure = "Os arquivos foram publicados, mas o provider cdRoot não conseguiu abrir a pasta privada.";
                 } else {
-                    String integrityValidation = nativeVerifyDiscIntegrity(
-                            new File(finalInstallation, "disc").getAbsolutePath(),
-                            createIntegrityProgressCallback());
-                    if (integrityValidation == null || !integrityValidation.startsWith("OK:")) {
-                        failure = "Os arquivos foram publicados, mas a verificação SHA-256 da instalação falhou: "
-                                + (integrityValidation == null
-                                    ? "resposta nativa vazia." : integrityValidation);
-                    } else {
+                    // Every extracted byte was SHA-256 hashed in the same buffer
+                    // that was written, and every output file was fsync'd before
+                    // the staging directory was published. Avoid rereading the
+                    // full multi-gigabyte installation immediately after copy.
+                    // Existing installations still receive a full readback hash
+                    // verification in verifyExistingInstallationAsync().
                     String runtimePathValidation = nativePrepareRuntimeIoPaths(bootPath);
                     if (runtimePathValidation == null || !runtimePathValidation.startsWith("OK:")) {
                         failure = "A instalação foi publicada, mas PS2Runtime não aceitou o caminho físico "
@@ -1076,7 +1076,7 @@ public final class MainActivity extends AppCompatActivity {
                                             + (iopCdvdValidation == null
                                                 ? "resposta nativa vazia." : iopCdvdValidation);
                                 } else {
-                                    preparedElfSummary = integrityValidation.substring(4).trim()
+                                    preparedElfSummary = installSummary.substring(3).trim()
                                             + " · " + runtimePathValidation.substring(4).trim()
                                             + " · " + elfValidation.substring(4).trim()
                                             + " · " + discValidation.substring(4).trim()
@@ -1084,7 +1084,6 @@ public final class MainActivity extends AppCompatActivity {
                                 }
                             }
                         }
-                    }
                     }
                 }
             } catch (IOException | SecurityException | ErrnoException exception) {

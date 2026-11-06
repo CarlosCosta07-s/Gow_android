@@ -20,7 +20,7 @@ namespace gow::disc {
 namespace {
 
 constexpr uint64_t kSectorSize = kIsoSectorSize;
-constexpr uint32_t kSectorBatch = 64u;
+constexpr uint32_t kSectorBatch = 512u;
 constexpr size_t kRelativePathLimit = 1024u;
 constexpr size_t kComponentLimit = 255u;
 constexpr size_t kMetadataRecordSize = 4u + kIsoSectorSize;
@@ -159,36 +159,58 @@ bool readNonFileSectorCount(const Iso9660Reader &reader,
     count = 0u;
     std::vector<uint8_t> buffer(static_cast<size_t>(kSectorBatch) * kIsoSectorSize);
     size_t intervalIndex = 0u;
+    uint64_t first = 0u;
+    uint64_t lastNotification = 0u;
+    constexpr uint64_t kProgressIntervalSectors =
+        static_cast<uint64_t>(kSectorBatch) * 64u;
 
-    for (uint64_t first = 0u; first < layout.sectorCount;) {
-        const uint32_t batch = static_cast<uint32_t>(
-            std::min<uint64_t>(kSectorBatch, layout.sectorCount - first));
-        if (!reader.readSectors(static_cast<uint32_t>(first), batch, buffer.data())) {
-            setError(error, "Could not scan ISO sectors while measuring disc metadata.");
-            return false;
+    while (first < layout.sectorCount) {
+        while (intervalIndex < intervals.size() &&
+               first >= intervals[intervalIndex].end) {
+            ++intervalIndex;
         }
 
-        for (uint32_t index = 0u; index < batch; ++index) {
-            const uint64_t lsn = first + index;
-            if (sectorIsCovered(lsn, intervals, intervalIndex)) continue;
-            const uint8_t *sector =
-                buffer.data() + static_cast<size_t>(index) * kIsoSectorSize;
-            if (sectorHasData(sector)) {
-                if (count == std::numeric_limits<uint64_t>::max()) {
-                    setError(error, "The metadata sector count overflowed.");
-                    return false;
-                }
-                ++count;
+        if (intervalIndex < intervals.size() &&
+            first >= intervals[intervalIndex].begin) {
+            // File extents are copied and hashed by the installer. Their
+            // sectors must not be read again while building .disc_meta.
+            first = intervals[intervalIndex].end;
+            ++intervalIndex;
+        } else {
+            const uint64_t gapEnd = intervalIndex < intervals.size()
+                ? intervals[intervalIndex].begin : layout.sectorCount;
+            const uint32_t batch = static_cast<uint32_t>(
+                std::min<uint64_t>(kSectorBatch, gapEnd - first));
+            if (batch == 0u ||
+                !reader.readSectors(static_cast<uint32_t>(first), batch, buffer.data())) {
+                setError(error, "Could not scan ISO sectors while measuring disc metadata.");
+                return false;
             }
+
+            // This batch lies wholly outside every file extent.
+            for (uint32_t index = 0u; index < batch; ++index) {
+                const uint8_t *sector =
+                    buffer.data() + static_cast<size_t>(index) * kIsoSectorSize;
+                if (sectorHasData(sector)) {
+                    if (count == std::numeric_limits<uint64_t>::max()) {
+                        setError(error, "The metadata sector count overflowed.");
+                        return false;
+                    }
+                    ++count;
+                }
+            }
+            first += batch;
         }
-        first += batch;
+
         if (progressCallback != nullptr &&
-            (first == layout.sectorCount || first % (kSectorBatch * 64u) == 0u)) {
+            (first - lastNotification >= kProgressIntervalSectors ||
+             first == layout.sectorCount)) {
             const IsoDiscMetadataProgress progress{first, layout.sectorCount};
             if (!progressCallback(progress, userData)) {
                 setError(error, "Disc metadata analysis was cancelled.");
                 return false;
             }
+            lastNotification = first;
         }
     }
     return true;
@@ -428,44 +450,72 @@ bool writeIsoDiscMetadataMeasured(
     }
 
     std::vector<uint8_t> buffer(static_cast<size_t>(kSectorBatch) * kIsoSectorSize);
-    std::array<uint8_t, kMetadataRecordSize> record{};
+    std::vector<uint8_t> recordBuffer(
+        static_cast<size_t>(kSectorBatch) * kMetadataRecordSize);
     size_t intervalIndex = 0u;
     uint64_t writtenSectors = 0u;
+    uint64_t first = 0u;
+    uint64_t lastNotification = 0u;
+    constexpr uint64_t kProgressIntervalSectors =
+        static_cast<uint64_t>(kSectorBatch) * 64u;
     bool metaOk = true;
     bool wasCancelled = false;
-    for (uint64_t first = 0u; first < layout.sectorCount && metaOk;) {
-        const uint32_t batch = static_cast<uint32_t>(
-            std::min<uint64_t>(kSectorBatch, layout.sectorCount - first));
-        if (!reader.readSectors(static_cast<uint32_t>(first), batch, buffer.data())) {
-            metaOk = false;
-            break;
+
+    while (first < layout.sectorCount && metaOk) {
+        while (intervalIndex < intervals.size() &&
+               first >= intervals[intervalIndex].end) {
+            ++intervalIndex;
         }
-        for (uint32_t index = 0u; index < batch; ++index) {
-            const uint64_t lsn = first + index;
-            if (sectorIsCovered(lsn, intervals, intervalIndex)) continue;
-            const uint8_t *sector =
-                buffer.data() + static_cast<size_t>(index) * kIsoSectorSize;
-            if (!sectorHasData(sector)) continue;
-            if (lsn > std::numeric_limits<uint32_t>::max()) {
+
+        if (intervalIndex < intervals.size() &&
+            first >= intervals[intervalIndex].begin) {
+            // Preserve only sectors outside extracted file extents. File data
+            // itself is already present in disc/<path> at its original LSN.
+            first = intervals[intervalIndex].end;
+            ++intervalIndex;
+        } else {
+            const uint64_t gapEnd = intervalIndex < intervals.size()
+                ? intervals[intervalIndex].begin : layout.sectorCount;
+            const uint32_t batch = static_cast<uint32_t>(
+                std::min<uint64_t>(kSectorBatch, gapEnd - first));
+            if (batch == 0u ||
+                !reader.readSectors(static_cast<uint32_t>(first), batch, buffer.data())) {
                 metaOk = false;
                 break;
             }
-            writeU32Le(record.data(), static_cast<uint32_t>(lsn));
-            std::memcpy(record.data() + 4u, sector, kIsoSectorSize);
-            if (!writeAll(metaFd, record.data(), record.size())) {
-                metaOk = false;
-                break;
+
+            size_t bufferedRecordBytes = 0u;
+            for (uint32_t index = 0u; index < batch; ++index) {
+                const uint64_t lsn = first + index;
+                const uint8_t *sector =
+                    buffer.data() + static_cast<size_t>(index) * kIsoSectorSize;
+                if (!sectorHasData(sector)) continue;
+                if (lsn > std::numeric_limits<uint32_t>::max()) {
+                    metaOk = false;
+                    break;
+                }
+                uint8_t *record = recordBuffer.data() + bufferedRecordBytes;
+                writeU32Le(record, static_cast<uint32_t>(lsn));
+                std::memcpy(record + 4u, sector, kIsoSectorSize);
+                bufferedRecordBytes += kMetadataRecordSize;
+                ++writtenSectors;
             }
-            ++writtenSectors;
+            if (metaOk && bufferedRecordBytes != 0u &&
+                !writeAll(metaFd, recordBuffer.data(), bufferedRecordBytes)) {
+                metaOk = false;
+            }
+            first += batch;
         }
-        first += batch;
+
         if (metaOk && progressCallback != nullptr &&
-            (first == layout.sectorCount || first % (kSectorBatch * 64u) == 0u)) {
+            (first - lastNotification >= kProgressIntervalSectors ||
+             first == layout.sectorCount)) {
             const IsoDiscMetadataProgress progress{first, layout.sectorCount};
             if (!progressCallback(progress, userData)) {
                 metaOk = false;
                 wasCancelled = true;
             }
+            lastNotification = first;
         }
     }
 

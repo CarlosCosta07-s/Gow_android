@@ -582,7 +582,13 @@ Java_org_gowandroid_app_MainActivity_nativeInstallIsoDisc(
                 ? "A instalação completa do disco falhou."
                 : result.error);
         }
-        return makeResult("");
+        char summary[256]{};
+        std::snprintf(
+            summary, sizeof(summary),
+            "OK: %zu arquivos copiados · %llu bytes preparados · SHA-256 calculado durante a extração",
+            result.completedFiles,
+            static_cast<unsigned long long>(result.copiedBytes));
+        return makeResult(summary);
     } catch (const std::exception &exception) {
         return makeResult(std::string("Falha interna na instalação do disco: ") + exception.what());
     } catch (...) {

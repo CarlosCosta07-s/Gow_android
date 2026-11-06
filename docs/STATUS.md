@@ -301,3 +301,14 @@ Cobertura atual exercitada em `android_gs_vulkan_backend_test.cpp`:
 **[VERIFICADO NA CI]** Host run 42274965500 compilou o recompiler e o runtime Waffle sob as políticas estritas; Android run 42274999877 passou pelo preparo do runtime, checker de lifecycle, testes sintéticos de captura/comparação, I/O/disco/VFS e build Debug ARM64. Artefato gow-android-arm64-shell ID 13532807788 (6.200.631 bytes). Nenhum ELF, ISO, IRX, microcódigo ou C++ gerado do jogo foi fornecido à CI.
 
 **[AINDA NÃO É BOOT]** A tabela AOT pública permanece vazia. Nenhum ELF real foi carregado, nenhum worker EE foi iniciado com código do jogo, nenhuma cadeia de boot/IRX/VU1 foi exercitada e nenhuma cena real foi capturada. O próximo marco é gerar e validar localmente o AOT do ELF do usuário, incluindo cobertura dos microprogramas VU1 e módulos IRX necessários; em seguida ligar o worker apenas após os serviços de boot, GS/presenter e áudio estarem prontos.
+
+
+## Instalação com leitura mínima dos setores — 06/11/2026
+
+**[IMPLEMENTADO; AGUARDANDO CI E MEDIÇÃO EM APARELHO]** A análise de .disc_meta agora percorre apenas os intervalos fora dos extents dos arquivos ISO. Os extents copiados já são lidos e hasheados durante a extração; relê-los nas duas passagens de contagem/gravação de metadados era redundante. A leitura de metadados usa lotes de 512 setores (1 MiB), e os registros .disc_meta são gravados em blocos, não um write() por setor.
+
+A extração usa buffer de 1 MiB e atualiza o callback de progresso/cancelamento em intervalos de 4 MiB e ao concluir cada arquivo. O SHA-256 de verificação usa buffer heap de 1 MiB e notifica em intervalos de 16 MiB/por arquivo.
+
+**[DECISÃO DE INTEGRIDADE]** Na instalação nova, cada buffer de origem é hasheado enquanto os mesmos bytes são enviados ao arquivo de destino; os arquivos e diretórios são sincronizados antes da publicação atômica. Por isso, o FORGE não faz uma segunda leitura integral imediata dos mesmos gigabytes após a cópia. Ao reconhecer uma instalação existente, verifyExistingInstallationAsync() continua realizando a verificação SHA-256 completa antes de aceitá-la.
+
+**[PENDENTE]** O ganho real depende da proporção de setores ocupados pelos arquivos na imagem e do desempenho do provedor SAF/armazenamento do aparelho. Não anunciar um fator de aceleração antes de medir novamente no dispositivo.

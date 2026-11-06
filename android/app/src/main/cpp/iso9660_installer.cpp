@@ -25,7 +25,8 @@
 namespace gow::disc {
 namespace {
 
-constexpr size_t kCopyBufferSize = 64u * 1024u;
+constexpr size_t kCopyBufferSize = 1024u * 1024u;
+constexpr uint64_t kCopyProgressInterval = 4u * 1024u * 1024u;
 constexpr size_t kMaxManifestFiles = 65536u;
 constexpr size_t kMaxRelativePathLength = 1024u;
 constexpr size_t kMaxPathComponentLength = 255u;
@@ -242,10 +243,10 @@ bool hashFileDescriptor(
         return false;
     }
     Sha256 hash;
-    std::array<uint8_t, kCopyBufferSize> buffer{};
+    std::vector<uint8_t> buffer(kCopyBufferSize);
     uint64_t totalRead = 0u;
     uint64_t lastNotification = progress.verifiedBytes;
-    constexpr uint64_t kProgressInterval = 1024u * 1024u;
+    constexpr uint64_t kProgressInterval = 16u * 1024u * 1024u;
     while (true) {
         const ssize_t count = ::read(fd, buffer.data(), buffer.size());
         if (count < 0) {
@@ -659,7 +660,8 @@ IsoInstallResult installIsoManifestImpl(
 
     bool keepGoing = true;
     notifyProgress(result, progressCallback, userData, keepGoing);
-    std::array<uint8_t, kCopyBufferSize> buffer{};
+    std::vector<uint8_t> buffer(kCopyBufferSize);
+    uint64_t lastCopyNotification = result.copiedBytes;
     bool copySucceeded = keepGoing;
     std::vector<IntegrityEntry> integrityEntries;
     if (discLayout != nullptr) integrityEntries.reserve(resolved.size() + 2u);
@@ -712,10 +714,14 @@ IsoInstallResult installIsoManifestImpl(
                 fileHash.update(buffer.data(), bytesRead);
             fileOffset += static_cast<uint64_t>(bytesRead);
             result.copiedBytes += static_cast<uint64_t>(bytesRead);
-            notifyProgress(result, progressCallback, userData, keepGoing);
-            if (!keepGoing) {
-                fileSucceeded = false;
-                break;
+            if (result.copiedBytes - lastCopyNotification >=
+                kCopyProgressInterval) {
+                notifyProgress(result, progressCallback, userData, keepGoing);
+                lastCopyNotification = result.copiedBytes;
+                if (!keepGoing) {
+                    fileSucceeded = false;
+                    break;
+                }
             }
         }
 

@@ -219,6 +219,26 @@ int fail(std::string_view message) {
     return 1;
 }
 
+struct SectorProgressRecorder {
+    uint64_t lastCompleted = 0u;
+    uint64_t total = 0u;
+    size_t calls = 0u;
+};
+
+bool recordSectorProgress(
+    const gow::disc::IsoDiscMetadataProgress &progress,
+    void *userData) {
+    auto *recorder = static_cast<SectorProgressRecorder *>(userData);
+    if (recorder == nullptr || progress.completedSectors < recorder->lastCompleted ||
+        progress.completedSectors > progress.totalSectors) {
+        return false;
+    }
+    recorder->lastCompleted = progress.completedSectors;
+    recorder->total = progress.totalSectors;
+    ++recorder->calls;
+    return true;
+}
+
 bool present(const fs::path &path) {
     std::error_code ec;
     return fs::exists(fs::symlink_status(path, ec));
@@ -231,15 +251,29 @@ int testMeasureAndWrite() {
 
     IsoDiscMetadataInfo measured{};
     std::string error;
-    if (!measureIsoDiscMetadata(f.reader, f.layout, measured, &error))
+    SectorProgressRecorder measureProgress{};
+    if (!measureIsoDiscMetadata(
+            f.reader, f.layout, measured, &error,
+            recordSectorProgress, &measureProgress))
         return fail("measure failed: " + error);
     if (measured.metadataSectorCount != 5u ||
         measured.metadataFileBytes != 5u * kRecord)
         return fail("measured metadata sector count/bytes mismatch");
+    if (measureProgress.calls == 0u ||
+        measureProgress.lastCompleted != f.layout.sectorCount ||
+        measureProgress.total != f.layout.sectorCount)
+        return fail("metadata measurement progress did not include skipped file extents");
 
     IsoDiscMetadataInfo written{};
-    if (!writeIsoDiscMetadata(f.reader, f.layout, f.root.string(), &written, &error))
+    SectorProgressRecorder writeProgress{};
+    if (!writeIsoDiscMetadata(
+            f.reader, f.layout, f.root.string(), &written, &error,
+            recordSectorProgress, &writeProgress))
         return fail("write failed: " + error);
+    if (writeProgress.calls == 0u ||
+        writeProgress.lastCompleted != f.layout.sectorCount ||
+        writeProgress.total != f.layout.sectorCount)
+        return fail("metadata writer progress did not include skipped file extents");
     if (written.metadataSectorCount != 5u) return fail("written info mismatch");
 
     const std::string expectedLayout =
