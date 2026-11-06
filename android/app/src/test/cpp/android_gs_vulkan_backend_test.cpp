@@ -326,6 +326,10 @@ int main() {
             vertex.r = 128u; vertex.g = 128u; vertex.b = 128u; vertex.a = 128u;
         }
         backend.Submit(t4hlSprite);
+        const uint32_t t4hlRawIndex = backend.ReadVram(
+            GS_PSM_T4HL, 224u, 1u, 0u, 0u);
+        require(t4hlRawIndex == 1u,
+                "T4HL VRAM read did not return the stored lower high-byte nibble.");
 
         GSTex0Reg t4hhTex0 = indexed4Tex0;
         t4hhTex0.psm = GS_PSM_T4HH;
@@ -448,9 +452,17 @@ int main() {
                 csm1Second[2] == 255u && csm1Second[3] == 255u,
                 "CSM1 T8 texture did not load CLUT entry 16 from the swapped source index 8.");
         const auto t4hlPixel = pixelAt(8u, 24u);
-        require(t4hlPixel[0] == 255u && t4hlPixel[1] == 255u &&
-                t4hlPixel[2] == 0u && t4hlPixel[3] == 255u,
-                "T4HL did not read the lower nibble of the high-byte plane.");
+        if (!(t4hlPixel[0] == 0u && t4hlPixel[1] == 255u &&
+              t4hlPixel[2] == 255u && t4hlPixel[3] == 255u)) {
+            std::cerr << "T4HL sampled RGBA="
+                      << static_cast<unsigned>(t4hlPixel[0]) << ','
+                      << static_cast<unsigned>(t4hlPixel[1]) << ','
+                      << static_cast<unsigned>(t4hlPixel[2]) << ','
+                      << static_cast<unsigned>(t4hlPixel[3]) << '\\n';
+        }
+        require(t4hlPixel[0] == 0u && t4hlPixel[1] == 255u &&
+                t4hlPixel[2] == 255u && t4hlPixel[3] == 255u,
+                "T4HL did not resolve CLUT index one from its high-byte plane.");
         const auto t4hhPixel = pixelAt(12u, 24u);
         require(t4hhPixel[0] == 255u && t4hhPixel[1] == 255u &&
                 t4hhPixel[2] == 255u && t4hhPixel[3] == 255u,
