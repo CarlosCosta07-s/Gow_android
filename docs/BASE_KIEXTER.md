@@ -20,10 +20,12 @@ O README do KIexster declara mapa de 6.414 funções, recompilação estática M
 | `port/kiexter/gow_overrides.cpp` | `src/gow_overrides.cpp` | `6f73d16bc59d34f780317bf09c69c3a1f863fc0e` | Overrides e integração específicos de God of War. |
 | `port/kiexter/tools/vu1n_gen.py` | `tools/vu1/vu1n_gen.py` | `4ddb2c1d81b1717240d9259af8457cc860d95eea` | Geração antecipada de blocos C++ para microprogramas VU1. |
 | `port/kiexter/tools/iopn_gen.py` | `tools/iop/iopn_gen.py` | `f1e540f6bac22435855ff0b22661167fe3f953da` | Geração antecipada de C++ para os módulos IRX do jogo. |
+| `port/kiexter/tools/vu1n_heads.txt` | `tools/vu1/vu1n_heads.txt` | `a50466e46bb27e232be8f058e305ed118c4f88ce` | Entradas adicionais de microprogramas/blocks VU1 para o gerador AOT. |
+| `port/kiexter/gow_pad2_packet.h` | `src/gow_pad2_packet.h` | `ca1c082b6793e54baf789e3d45122ac8d748eec8` | Conversão do estado de pad para o pacote de 18 bytes esperado por libpad2. |
 
 Os dois arquivos de configuração foram validados estruturalmente: 6.414 intervalos, sem sobreposições, tamanhos coerentes e marcadores `@ELF@`, `@MAP@`, `@OUT@` presentes. Essa checagem não recompila o ELF e não valida o runtime.
 
-Os três arquivos de código foram trazidos para uma área de staging. **Ainda não estão no CMake/Gradle e não fazem parte do APK.** O arquivo de overrides depende de tipos e headers do runtime Waffle/KIexster; os geradores VU1/IOP dependem de dumps privados produzidos pelo runtime. Não devem ser compilados isoladamente.
+Os quatro arquivos de código foram trazidos para uma área de staging. **Ainda não estão no CMake/Gradle e não fazem parte do APK.** O arquivo de overrides depende de tipos e headers do runtime Waffle/KIexster; os geradores VU1/IOP dependem de dumps privados produzidos pelo runtime. O helper de pad é pequeno, mas só se integra quando a camada host de entrada estiver conectada. Não devem ser compilados isoladamente.
 
 ## Proveniência adicional: Waffle565 e PS2Recomp
 
