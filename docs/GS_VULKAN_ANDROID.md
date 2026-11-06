@@ -123,3 +123,12 @@ A fila tem limite por frame, é esvaziada quando a surface é perdida e o cache 
 **Resultado:** CI `42260019446` aprovada; artefato Debug ARM64 `gow-android-arm64-shell` ID `13524986210`.
 
 Esse resultado prova a semântica de memória/transferência exercitada, mas não prova rasterização GS. `AndroidGSVulkanBackend::Submit()` ainda envia geometria sólida ao pipeline da surface; `Present()` ainda retorna vazio. A próxima mudança necessária é rasterizar em VRAM FBP/FBW/PSM, depois ler a saída pelo circuito DISPFB/DISPLAY/PMODE para construir um `PresentationFrame`.
+## 11. Rasterização inicial em VRAM e CRTC (CI 268)
+
+O adaptador Android deixou de depender da fila de geometria desenhada diretamente na surface para a rota padrão. `AndroidGSVulkanBackend::Submit()` chama `rasterizeGsBatchToVram()` e grava primitivas opacas não texturizadas em `GSTextureStore`, usando o mesmo espaço GS swizzled de 4 MiB que recebe transferências. A implementação inicial aceita POINT, LINE/LINESTRIP, TRIANGLE/TRISTRIP/TRIFAN e SPRITE em CT32, CT24, CT16 e CT16S; retira XYOFFSET, clipa pelo scissor e aplica FBMSK.
+
+`AndroidGSVulkanBackend::Present()` usa `presentGsVramCircuit()` para decodificar o circuito ativo (DISPFB/DISPLAY), ler pixels do FBP/FBW/PSM e devolver `PresentationFrame`. O buffer mantém stride de 640 pixels por linha para satisfazer `copyLatchedHostPresentationFrame()` do Waffle; o Android o envia ao staging RGBA da swapchain Vulkan.
+
+**Evidência:** CI `42261321872` aprovou testes CT32 de triângulo/sprite e CRTC 64×32, cores, stride de 640 pixels e região não desenhada; aprovou também VRAM/transferências 4 MiB e compilação Debug ARM64. Artefato `gow-android-arm64-shell` ID `13524359107`.
+
+**Limites do rasterizador:** rejeita draws com TME, ABE, fog, alpha test ou ZTE. Não há sampling de textura/CLUT, mipmapping, filtragem, perspective correction, Z-buffer, DATE, equações de blending GS, PABE/FBA, dithering, formatos depth, circuitos duplos, PMODE/ALP/SLBG, nem tratamento completo de display. Essa prova é sintética; não é ainda uma cena de God of War.
