@@ -933,7 +933,7 @@ extern "C" void android_main(android_app* app) {
                 "PS2Runtime core initialization failed: %s", coreMessage.data());
             std::string status =
                 "Falha ao inicializar o núcleo PS2: ";
-            status += coreMessage[0] == '\\0'
+            status += coreMessage[0] == '\0'
                 ? "motivo não informado."
                 : coreMessage.data();
             status += " Consulte o Logcat com a etiqueta GowAndroid.";
