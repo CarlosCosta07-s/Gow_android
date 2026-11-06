@@ -76,10 +76,10 @@ God of War usa leituras por setor/LSN em partes do caminho de I/O. A auditoria l
 - Não solicitar exportação de ELF, IRX, microcódigo, ZIP ou log. Não enviar dados derivados do jogo a Issues, Releases, Actions, commits ou serviços públicos.
 
 ### Marco B — produzir a build AOT Android
-- Executar `tools/build_android_game.py` em Windows/Linux com o ELF privado e workspace ASCII fora do repositório.
-- Validar que `register_functions.cpp`, cabeçalhos e unidades de função existem, que a tabela não está vazia e que o entry point está registrado.
-- Gerar e compilar separadamente VU1/IRX AOT; o script de ELF sozinho não substitui essas etapas.
-- Compilar o APK ARM64 com o C++ gerado em `android/app/build/gow-generated-game`, diretório ignorado pelo Git.
+- Executar `tools/build_android_game.py --iso <ISO-original>` em Windows/Linux, com workspace privado ASCII fora do repositório.
+- O pipeline extrai automaticamente o ELF indicado por `SYSTEM.CNF`, valida `SCUS_973.99` e gera C++ do EE; o usuário não exporta nem fornece ELF.
+- Se um aparelho Debug autorizado estiver conectado por ADB, o pipeline tenta sincronizar capturas VU1/IOP do armazenamento privado do aplicativo e gerar as unidades nativas. Sem capturas, gera um APK bootstrap estrito.
+- Validar `register_functions.cpp`, a tabela AOT e a cobertura do entry point; compilar o APK ARM64 com o C++ privado em `android/app/build/`, diretório ignorado pelo Git.
 
 ### Marco C — ligar o boot real
 - Só iniciar o worker EE após núcleo, AOT, serviços CDVD/IOP/VU, backend GS/apresentação e encerramento seguro estarem válidos.
