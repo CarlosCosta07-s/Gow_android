@@ -6,6 +6,7 @@
 #include "emulator/core/iop_memory.h"
 #include "emulator/imports/iop_cdvd.h"
 #include "ps2x/iop/iop_host.h"
+#include "private_boot_path.h"
 
 #include <algorithm>
 #include <array>
@@ -285,64 +286,15 @@ extern "C" bool gowRuntimeLoadElfAndCheckAot(
             return false;
         }
 
-        std::string relative(bootRelativePath);
-        if (relative.size() > 1024u || relative.front() == '/' ||
-            relative.find(':') != std::string::npos ||
-            relative.find('\0') != std::string::npos) {
-            writeMessage(message, capacity, "O caminho BOOT2 é absoluto ou excede os limites.");
-            return false;
-        }
-        std::replace(relative.begin(), relative.end(), '\\', '/');
-
-        std::filesystem::path normalized;
-        size_t cursor = 0u;
-        size_t depth = 0u;
-        while (cursor < relative.size()) {
-            const size_t end = relative.find('/', cursor);
-            const size_t finish = end == std::string::npos ? relative.size() : end;
-            std::string component = relative.substr(cursor, finish - cursor);
-            if (component.empty() || component == "." || component == ".." ||
-                component.size() > 255u || ++depth > 32u) {
-                writeMessage(message, capacity, "O caminho BOOT2 contém um componente inválido.");
-                return false;
-            }
-            const size_t version = component.find(';');
-            if (version != std::string::npos) component.resize(version);
-            if (component.empty()) {
-                writeMessage(message, capacity, "O caminho BOOT2 contém um nome vazio.");
-                return false;
-            }
-            for (char &ch : component) {
-                ch = static_cast<char>(
-                    std::toupper(static_cast<unsigned char>(ch)));
-            }
-            normalized /= component;
-            if (end == std::string::npos) break;
-            cursor = end + 1u;
-        }
-        if (normalized.empty()) {
-            writeMessage(message, capacity, "O caminho BOOT2 não contém um arquivo.");
-            return false;
-        }
-
-        const std::filesystem::path canonicalRoot =
-            std::filesystem::weakly_canonical(
-                std::filesystem::u8path(privateRoot.data()));
-        const std::filesystem::path candidate =
-            std::filesystem::weakly_canonical(canonicalRoot / normalized);
-        auto rootPart = canonicalRoot.begin();
-        auto candidatePart = candidate.begin();
-        for (; rootPart != canonicalRoot.end() &&
-               candidatePart != candidate.end();
-             ++rootPart, ++candidatePart) {
-            if (*rootPart != *candidatePart) break;
-        }
-        if (rootPart != canonicalRoot.end() ||
-            candidatePart == candidate.end() ||
-            !std::filesystem::is_regular_file(candidate)) {
+        std::filesystem::path candidate;
+        std::string pathError;
+        if (!gow::disc::resolvePrivateBootElfPath(
+                privateRoot.data(), bootRelativePath, candidate, pathError)) {
             writeMessage(
                 message, capacity,
-                "O BOOT2 não é um arquivo regular dentro da instalação privada.");
+                pathError.empty()
+                    ? "O caminho BOOT2 não pôde ser resolvido dentro da instalação privada."
+                    : pathError);
             return false;
         }
 
