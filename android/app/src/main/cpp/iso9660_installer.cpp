@@ -714,8 +714,11 @@ IsoInstallResult installIsoManifestImpl(
                 fileHash.update(buffer.data(), bytesRead);
             fileOffset += static_cast<uint64_t>(bytesRead);
             result.copiedBytes += static_cast<uint64_t>(bytesRead);
+            const bool fileComplete = fileOffset == entry.source.size;
             if (result.copiedBytes - lastCopyNotification >=
-                kCopyProgressInterval) {
+                    kCopyProgressInterval || fileComplete) {
+                // Keep a callback at each file boundary so cancellation and UI
+                // progress remain observable even for files smaller than 4 MiB.
                 notifyProgress(result, progressCallback, userData, keepGoing);
                 lastCopyNotification = result.copiedBytes;
                 if (!keepGoing) {
