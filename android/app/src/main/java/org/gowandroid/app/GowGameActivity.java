@@ -2,6 +2,7 @@ package org.gowandroid.app;
 
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -134,7 +135,9 @@ public final class GowGameActivity extends GameActivity {
             pendingNativeStatus = null;
         }
 
-        if (BuildConfig.DEBUG) {
+        boolean isDebuggable = (getApplicationInfo().flags
+                & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        if (isDebuggable) {
             Button captureButton = new Button(this);
             captureButton.setText("Capturar cena");
             captureButton.setAllCaps(false);
