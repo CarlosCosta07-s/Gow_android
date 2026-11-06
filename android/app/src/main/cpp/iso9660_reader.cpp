@@ -22,16 +22,6 @@ constexpr size_t kDirectoryRecordMinimum = 34u;
 constexpr uint8_t kDirectoryFlag = 0x02u;
 constexpr uint8_t kMultiExtentFlag = 0x80u;
 
-uint16_t readU16Le(const uint8_t *data) noexcept {
-    return static_cast<uint16_t>(data[0]) |
-           static_cast<uint16_t>(static_cast<uint16_t>(data[1]) << 8u);
-}
-
-uint16_t readU16Be(const uint8_t *data) noexcept {
-    return static_cast<uint16_t>(static_cast<uint16_t>(data[0]) << 8u) |
-           static_cast<uint16_t>(data[1]);
-}
-
 uint32_t readU32Le(const uint8_t *data) noexcept {
     return static_cast<uint32_t>(data[0]) |
            (static_cast<uint32_t>(data[1]) << 8u) |
