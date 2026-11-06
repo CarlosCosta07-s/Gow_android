@@ -82,6 +82,11 @@ set(PS2X_IOP_NATIVE_SOURCE_DIR "${GOW_ANDROID_GENERATED_IOP_DIR}" CACHE PATH
     "Private generated IRX AOT C++ directory" FORCE)
 file(GLOB GOW_ANDROID_GENERATED_VU1_SOURCES CONFIGURE_DEPENDS
     "${GOW_ANDROID_GENERATED_VU1_DIR}/vu1n_part*.cpp")
+set(GOW_ANDROID_GENERATED_GAME_DIR
+    "${CMAKE_CURRENT_LIST_DIR}/../../../build/gow-generated-game"
+    CACHE PATH "Private PS2Recomp-generated C++ for the user's own PS2 ELF")
+file(GLOB_RECURSE GOW_ANDROID_GENERATED_GAME_SOURCES
+    CONFIGURE_DEPENDS "${GOW_ANDROID_GENERATED_GAME_DIR}/*.cpp")
 set(GOW_ANDROID_CAPTURE_BOOTSTRAP OFF)
 if("$ENV{GOW_ANDROID_CAPTURE_BOOTSTRAP}" STREQUAL "1")
     set(GOW_ANDROID_CAPTURE_BOOTSTRAP ON)
@@ -148,12 +153,6 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
 
     # PS2Recomp outputs remain private and are staged under android/app/build,
     # which is ignored by Git. Its individual-function output may be nested.
-    set(GOW_ANDROID_GENERATED_GAME_DIR
-        "${CMAKE_CURRENT_LIST_DIR}/../../../build/gow-generated-game"
-        CACHE PATH "Private PS2Recomp-generated C++ for the user's own PS2 ELF")
-    file(GLOB_RECURSE GOW_ANDROID_GENERATED_GAME_SOURCES
-        CONFIGURE_DEPENDS "${GOW_ANDROID_GENERATED_GAME_DIR}/*.cpp")
-
     if(GOW_ANDROID_GENERATED_GAME_SOURCES)
         foreach(required_file
             register_functions.cpp
