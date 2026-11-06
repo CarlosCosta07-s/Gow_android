@@ -13,6 +13,15 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# The game recompilation output contains many large C++ translation units.
+# Default to one native compiler job for modest-memory build hosts; maintainers
+# can explicitly raise this with -DGOW_ANDROID_NATIVE_COMPILE_JOBS=<n>.
+set(GOW_ANDROID_NATIVE_COMPILE_JOBS "1" CACHE STRING
+    "Maximum concurrent Ninja compile jobs for the Android runtime and generated game code")
+if(NOT GOW_ANDROID_NATIVE_COMPILE_JOBS MATCHES "^[1-8]$")
+    message(FATAL_ERROR "GOW_ANDROID_NATIVE_COMPILE_JOBS must be an integer from 1 to 8.")
+endif()
+
 find_package(game-activity REQUIRED CONFIG)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_program(GOW_GLSLANG_VALIDATOR NAMES glslangValidator
@@ -96,6 +105,11 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
     # in the prepared runtime until a native Android audio adapter is available.
     target_compile_definitions(ps2_runtime PRIVATE PS2X_ANDROID_LIFECYCLE_MANAGED=1)
 
+    set_property(GLOBAL APPEND PROPERTY JOB_POOLS
+        gow_android_native_compile=${GOW_ANDROID_NATIVE_COMPILE_JOBS})
+    set_property(TARGET ps2_runtime PROPERTY JOB_POOL_COMPILE gow_android_native_compile)
+    set_property(TARGET android-game PROPERTY JOB_POOL_COMPILE gow_android_native_compile)
+
     target_sources(android-game PRIVATE runtime_link_bridge.cpp)
 
     # PS2Recomp outputs remain private and are staged under android/app/build,
@@ -123,8 +137,6 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
             "Link an empty function table until private game code is generated" FORCE)
         target_sources(android-game PRIVATE ${GOW_ANDROID_GENERATED_GAME_SOURCES})
         target_include_directories(android-game PRIVATE "${GOW_ANDROID_GENERATED_GAME_DIR}")
-        set_property(GLOBAL APPEND PROPERTY JOB_POOLS gow_recompiled_compile=2)
-        set_property(TARGET android-game PROPERTY JOB_POOL_COMPILE gow_recompiled_compile)
         message(STATUS "FORGE Android target includes private PS2Recomp game C++.")
     else()
         option(GOW_ANDROID_EMPTY_RECOMPILED_TABLE
