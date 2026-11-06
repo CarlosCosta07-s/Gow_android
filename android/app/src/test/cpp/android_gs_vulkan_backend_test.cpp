@@ -1,5 +1,6 @@
 #include "android_gs_vulkan_backend.h"
 
+#include <array>
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
@@ -73,6 +74,81 @@ int main() {
         backend.SnapshotVram(snapshotBytes);
         require(snapshotBytes.size() == 4u * 1024u * 1024u,
                 "GS backend VRAM snapshot does not contain all 4 MiB.");
+
+        // A solid CT32 triangle must update the FBP VRAM, not bypass it to draw
+        // directly into the Android surface.
+        GSPrimitiveBatch triangle{};
+        triangle.vertexCount = 3u;
+        triangle.state.context.frame = {0u, 1u, GS_PSM_CT32, 0u};
+        triangle.state.context.scissor = {0u, 63u, 0u, 63u};
+        triangle.state.prim.type = GS_PRIM_TRIANGLE;
+        triangle.state.prim.iip = false;
+        triangle.vertices[0].x = 4.0f;
+        triangle.vertices[0].y = 4.0f;
+        triangle.vertices[1].x = 20.0f;
+        triangle.vertices[1].y = 4.0f;
+        triangle.vertices[2].x = 4.0f;
+        triangle.vertices[2].y = 20.0f;
+        for (auto &vertex : triangle.vertices) {
+            vertex.r = 255u;
+            vertex.g = 0u;
+            vertex.b = 0u;
+            vertex.a = 255u;
+        }
+        backend.Submit(triangle);
+
+        // A sprite is converted to a filled rectangle in the same GS FBP.
+        GSPrimitiveBatch sprite{};
+        sprite.vertexCount = 2u;
+        sprite.state.context.frame = triangle.state.context.frame;
+        sprite.state.context.scissor = triangle.state.context.scissor;
+        sprite.state.prim.type = GS_PRIM_SPRITE;
+        sprite.state.prim.iip = false;
+        sprite.vertices[0].x = 24.0f;
+        sprite.vertices[0].y = 24.0f;
+        sprite.vertices[1].x = 32.0f;
+        sprite.vertices[1].y = 32.0f;
+        for (auto &vertex : sprite.vertices) {
+            vertex.r = 0u;
+            vertex.g = 0u;
+            vertex.b = 255u;
+            vertex.a = 255u;
+        }
+        backend.Submit(sprite);
+
+        GSPresentationRequest presentation{};
+        presentation.pmode = 1u;
+        presentation.dispfb1 =
+            (1ull << 9u) |
+            (static_cast<uint64_t>(GS_PSM_CT32) << 15u);
+        presentation.display1 =
+            (63ull << 32u) | (31ull << 44u);
+        const PresentationFrame frame = backend.Present(presentation);
+        require(frame.width == 64u && frame.height == 32u,
+                "CRTC presentation did not decode the requested 64x32 display mode.");
+        require(frame.pixels.size() == 640u * 32u * 4u,
+                "CRTC frame does not use the Waffle 640-pixel source row stride.");
+        const auto pixelAt = [&frame](uint32_t x, uint32_t y) {
+            const size_t offset =
+                (static_cast<size_t>(y) * 640u + x) * 4u;
+            return std::array<uint8_t, 4>{
+                frame.pixels[offset + 0u],
+                frame.pixels[offset + 1u],
+                frame.pixels[offset + 2u],
+                frame.pixels[offset + 3u]};
+        };
+        const auto trianglePixel = pixelAt(6u, 6u);
+        require(trianglePixel[0] == 255u && trianglePixel[1] == 0u &&
+                trianglePixel[2] == 0u && trianglePixel[3] == 255u,
+                "CRTC frame did not contain the rasterized red triangle.");
+        const auto spritePixel = pixelAt(28u, 28u);
+        require(spritePixel[0] == 0u && spritePixel[1] == 0u &&
+                spritePixel[2] == 255u && spritePixel[3] == 255u,
+                "CRTC frame did not contain the rasterized blue sprite.");
+        const auto emptyPixel = pixelAt(60u, 30u);
+        require(emptyPixel[0] == 0u && emptyPixel[1] == 0u &&
+                emptyPixel[2] == 0u,
+                "CRTC frame contains unexpected color outside the rasterized primitives.");
 
         std::cout << "Android GS VRAM adapter tests passed.\n";
         return 0;
