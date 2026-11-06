@@ -33,3 +33,6 @@ jobs:
 
       - name: Check CLI help
         run: python tools/build_recompiler_host.py --help
+
+      - name: Build pinned host recompiler without game files
+        run: python tools/build_recompiler_host.py --build-only --work-dir /tmp/gowport
