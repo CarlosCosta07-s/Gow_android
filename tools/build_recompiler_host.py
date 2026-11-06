@@ -1287,7 +1287,7 @@ def main() -> int:
         "        {\n"
         "            std::fprintf(stderr, \"[VU1:native-required] native microprogram unavailable; stopping instead of interpreting.\");\n"
         "            m_stopRequested = true;\n"
-        "            return true;\n"
+        "            return;\n"
         "        }",
         "block exact-interpreter fallback when Android VU1 native dispatch misses",
     )
