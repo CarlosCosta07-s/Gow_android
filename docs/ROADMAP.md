@@ -84,12 +84,15 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Executar a verificação de instalações existentes fora da thread principal, informar bytes/arquivos verificados e permitir cancelamento; qualquer cancelamento ou verificação parcial permanece inválido. Teste de cancelamento e build ARM64 aprovados na CI `42240082689`.
 - [x] Separar o núcleo PS2 do ciclo host de janela/áudio: `initializeCoreHeadless()` inicializa memória e liga EE/IOP/VU sem Raylib; Android `android_main` chama a etapa via C ABI. O perfil Android usa `GSNullBackend`, bloqueia `initialize()` desktop e mantém `run()`/guest execution desativados. Validador do código Waffle preparado, testes host/VFS e APK ARM64 aprovados na CI `42243707680`.
 - [x] Preparar um worker EE Android separado da GameActivity: exige núcleo e entrypoint AOT, executa o scheduler numa thread própria e usa `join()` seguro no encerramento, sem `detach()`. Checker e compilação host aprovados nas CIs `42274965500`/`42274999877`.
-- [x] Ligar a tentativa de primeiro boot em `android_main()`, condicionada ao ELF/AOT privado válido, backend GS anexado e surface/presenter Vulkan prontos; informar início e encerramento pelo painel JNI. O teste inicial é silencioso até existir AAudio Android. CI #362 valida a integração; o APK público ainda tem tabela AOT vazia.
+- [x] Ligar a tentativa de primeiro boot em `android_main()`, condicionada ao ELF/AOT privado válido, backend GS anexado e surface/presenter Vulkan prontos; informar início e encerramento pelo painel JNI. O teste inicial é silencioso até existir AAudio Android. CI #362 passou no worker/GS e publicou o APK shell; as alterações posteriores de captura VU1/IOP e exportação dinâmica seguem nas CIs #381–#386.
 - [x] Ligar o backend GS Android de referência (CPU→VRAM→CRTC) e o presenter Vulkan ao ciclo da GameActivity para diagnóstico de primeiro boot.
 - [ ] Completar a semântica GS e a rota de renderização GPU nativa; integrar a saída SPU2 ao AAudio Android e validar som no aparelho.
 - [x] Encaminhar `cdRoot`/BOOT2 do FORGE à GameActivity, sincronizar a configuração JNI com `android_main()`, resetar BOOT2 entre sessões e chamar a porta ELF/AOT protegida após a inicialização headless; CIs `42250619735` e `42252442268` aprovaram checker, testes host/VFS e APK ARM64. A tabela AOT pública continua vazia; a tentativa de worker só ocorre quando código AOT privado válido e o presenter GS/Vulkan estão presentes.
 - [x] Implementar painel de diagnóstico da inicialização nativa na `GowGameActivity`, com callback JNI, atualização na thread principal e retenção de mensagens precoces; checker e build ARM64 passaram nas CIs `42250619735` e `42252442268`.
 - [x] Confirmar compilação JNI ARM64 com a API real de GameActivity: referência global registrada pela Activity, referência local por callback e liberação por identidade (CI `42246883029` e builds seguintes).
+- [x] Configurar armazenamento privado para capturas VU1/IOP e exportação ZIP pela GameActivity/SAF; APK ARM64 e bateria de testes do pipeline aprovados na CI #380 (artefato shell, sem dados proprietários).
+- [x] Orquestrar no host os modos explícitos `--capture-bootstrap` e `--aot-captures`: preparar Waffle, compilar EE e incorporar C++ VU1/IOP validado em staging Git-ignored. A CI #380 validou fixtures/CLI; execução com o ELF real ainda pendente.
+- [ ] Executar o ciclo de captura/exportação/build no aparelho com a imagem e o ELF NTSC-U do usuário; preservar ZIP/ELF/código gerado fora do Git/CI.
 - [ ] Validar visualmente as mensagens de progresso/sucesso/falha em aparelho Android e conferir o Logcat correspondente.
 - [ ] Configurar `PS2Runtime::loadELF()` para o ELF local e o `PS2IopHostAdapter`/`PS2Vfs` para usar o `cdRoot` local da instalação.
 - [x] Criar a ponte `gowRuntimeLoadElfAndCheckAot()`: recusar tabela AOT vazia, resolver BOOT2 dentro do `cdRoot` privado, carregar o ELF quando houver AOT e conferir a função de entrada sem chamar `run()`; testes de caminho privado e CI `42250619735` aprovados. Execução com ELF/AOT real ainda não testada.
@@ -119,10 +122,12 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 
 - [x] Importar os geradores KIexter/Waffle de VU1 e IOP para staging.
 - [ ] Capturar/obter localmente os microprogramas VU1 e módulos IRX da cópia do usuário, sem publicá-los.
-- [ ] Rodar `vu1n_gen.py` como ferramenta host e compilar os blocos C++ gerados para ARM64.
+- [x] Implementar geração VU1 parcial estritamente nativa (`--strict-partial`), ignorando blocos que chamariam o motor exato; integrar seis unidades geradas ao target `ps2_runtime` ARM64. A CI testa sintaxe/contrato; nenhuma captura do jogo foi compilada ainda.
+- [ ] Executar `vu1n_gen.py` sobre micro-memórias reais, resolver blocos ausentes por PCs dinâmicos (`vu1n_heads.txt)) e compilar as unidades C++ resultantes para ARM64.
 - [x] Ativar a política estrita `PS2X_VU1_NATIVE_ONLY` no Android: se um microprograma não tiver bloco nativo, a VU1 para com diagnóstico em vez de cair no interpretador. A compilação host/ARM64 foi aprovada em `42274965500`/`42274999877`; isso não comprova cobertura do microcódigo do jogo.
 - [ ] Garantir cobertura dos microprogramas usados pelo jogo; o caminho final não pode depender do fallback interpretado.
-- [ ] Rodar `iopn_gen.py` sobre os módulos IRX necessários e compilar as unidades geradas para ARM64.
+- [x] Implementar validação FNV-1a/manifesto e geração/registro CMake de unidades IRX/IOP privadas no target Android; a CI usa módulos sintéticos.
+- [ ] Executar `iopn_gen.py` sobre os módulos IRX reais necessários ao boot e compilar as unidades geradas para ARM64.
 - [ ] Garantir que os IRX necessários ao jogo não caiam em caminho interpretado no produto final.
 - [ ] Adaptar comandos VIF/GIF/DMA e sincronização do GS.
 - [x] Implementar a ponte de eventos Android para estado virtual DualShock 2 (porta 0/slot 0), deadzone/sensibilidade/inversão e API compartilhada para entrada física/touch. A CI compila a ponte; gamepads físicos ainda não foram testados no aparelho.
