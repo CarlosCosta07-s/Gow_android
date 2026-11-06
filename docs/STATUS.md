@@ -312,3 +312,20 @@ A extração usa buffer de 1 MiB e atualiza o callback de progresso/cancelamento
 **[DECISÃO DE INTEGRIDADE]** Na instalação nova, cada buffer de origem é hasheado enquanto os mesmos bytes são enviados ao arquivo de destino; os arquivos e diretórios são sincronizados antes da publicação atômica. Por isso, o FORGE não faz uma segunda leitura integral imediata dos mesmos gigabytes após a cópia. Ao reconhecer uma instalação existente, verifyExistingInstallationAsync() continua realizando a verificação SHA-256 completa antes de aceitá-la.
 
 **[PENDENTE]** O ganho real depende da proporção de setores ocupados pelos arquivos na imagem e do desempenho do provedor SAF/armazenamento do aparelho. Não anunciar um fator de aceleração antes de medir novamente no dispositivo.
+
+
+## [VERIFICADO NA ANDROID CI #342] Instalação ISO com menos I/O — 06/11/2026
+
+- A análise e a gravação de `.disc_meta` agora percorrem somente os intervalos fora dos extents de arquivos ISO. Os setores dos arquivos são lidos uma vez durante a extração; os setores não pertencentes a arquivos continuam preservados quando contêm dados.
+- O scanner usa lotes de 512 setores (1 MiB) e os registros `.disc_meta` são escritos em lotes. As fixtures de duas camadas continuam exigindo os LSNs não pertencentes a arquivos `16, 20, 24, 32, 36` e comparam o conteúdo de cada setor com a ISO sintética.
+- A extração usa buffer de 1 MiB, calcula SHA-256 no mesmo fluxo de cópia e atualiza progresso a cada 4 MiB e no fim de cada arquivo. O cancelamento continua disponível antes da publicação atômica.
+- Uma instalação nova não relê imediatamente todos os arquivos para outra verificação SHA-256: os bytes foram hasheados durante a cópia e sincronizados antes da publicação. Instalações existentes ainda recebem a verificação SHA-256 completa antes de serem aceitas.
+- O teste de cancelamento no limite de publicação e os testes de leitura/metadados passaram novamente; a Android CI #342 compilou e publicou o APK Debug ARM64.
+- **[PENDENTE]** Medir o tempo real em um aparelho Android com a mesma imagem de disco. Não há ainda um fator de aceleração comprovado.
+
+## [EM VALIDAÇÃO] Paralelismo limitado para build AOT local
+
+- `tools/build_recompiler_host.py` usa `GOW_BUILD_JOBS` (padrão `1`, intervalo `1–16`) nos builds CMake do host.
+- `tools/build_android_game.py` limita o Gradle a um worker; o CMake Android usa um job pool de compilação nativa configurável, padrão `1`.
+- O objetivo é reduzir picos de memória ao compilar o runtime e as unidades C++ geradas pelo PS2Recomp. A CI dos commits `c022047`, `182e8bc` e `6fb6377` ainda precisa concluir antes de marcar essa parte como verificada.
+
