@@ -277,7 +277,7 @@ Cobertura atual exercitada em `android_gs_vulkan_backend_test.cpp`:
 - Composição dos circuitos 1/2 com PMODE, ALP/MMOD e SLBG/BGCOLOR.
 - Testes FBP/VRAM e quadro CRTC com pixels esperados.
 
-**[VERIFICADO NA CI HOST]** Run `42266913226` passou no verificador de lifecycle, comparator de cenas, escritor de captura PPM, bateria nativa de entrada/disco/GS e VFS; o APK Debug ARM64 estava em compilação na última consulta. Run `42266994501` repetiu os testes do comparator, captura, bateria nativa e VFS; a etapa seguinte era compilar o APK ARM64. Essas execuções não usam ELF, ISO ou conteúdo proprietário do jogo.
+**[VERIFICADO NA CI, run `42268386758`]** A execução completa passou pelo verificador de lifecycle (incluindo controle de captura Debug), comparador PPM, gravador PPM, bateria nativa de entrada/disco/GS, VFS privado e compilação/publicação do APK Debug ARM64. Artefato `gow-android-arm64-shell`, ID `13528990480`. A CI usa apenas fixtures sintéticas; não recebe ELF, ISO, IRX nem imagens do jogo. A execução comprova build e integração do botão/caminho de captura, não que o runtime tenha produzido um frame real.
 
 **Limites ainda existentes:** fog/FGE e antialiasing são rejeitados pelo rasterizador; dithering GS, mipmapping e todas as particularidades de filtering/blending ainda não foram demonstrados; interlace/overscan de vídeo não estão completos; a cobertura de PSM não equivale à implementação de todos os render targets e estados do GS. A rota de desenho é CPU/readback para correção inicial, não a solução final de desempenho móvel. Nenhuma GPU física Android foi validada por esses testes.
 
