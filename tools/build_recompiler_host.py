@@ -117,7 +117,7 @@ def main() -> int:
 
     funcmap = repo_root / "recompiler/config/funcmap.csv"
     template_path = repo_root / "recompiler/config/recomp.template.toml"
-    if not args.build_only and (not funcmap.is_file() or not template_path.is_file()):
+    if not (args.build_only or args.android_runtime_only) and (not funcmap.is_file() or not template_path.is_file()):
         parser.error("The imported function map or recompilation template is missing.")
 
     sources = work / "sources"
