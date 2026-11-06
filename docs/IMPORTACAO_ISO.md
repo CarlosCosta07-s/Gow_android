@@ -18,7 +18,9 @@ A extração é seletiva e dirigida por manifesto. O projeto não assume que tod
 5. A ponte JNI entrega o descritor, o diretório privado e duas entradas explícitas ao instalador nativo.
 6. O instalador resolve todos os caminhos no ISO antes de escrever, valida os destinos e calcula o total.
 7. Os arquivos são copiados em blocos de 64 KiB para uma pasta de staging privada. O callback reporta bytes e arquivos concluídos e pode cancelar a operação.
-8. Cada arquivo é sincronizado; a pasta de staging é sincronizada e publicada por rename no mesmo filesystem. Falhas e cancelamentos removem o staging.
+8. Cada arquivo e o diretório que o contém são sincronizados; a pasta de staging é sincronizada e publicada por rename no mesmo filesystem. Falhas e cancelamentos removem o staging.
+9. Antes da cópia, o instalador consulta o espaço disponível no armazenamento privado. O FORGE oferece janela de progresso e cancelamento.
+10. Depois da publicação, o FORGE abre a pasta `disc` no provider nativo `CdRootVfs`.
 
 ## Manifesto inicial
 
@@ -38,13 +40,15 @@ A versão atual reconhece os executáveis `SCUS_973.99` (NTSC-U) e `SCES_531.33`
 - Manifestos vazios, destinos repetidos, colisões arquivo/diretório, arquivos ausentes e tamanhos incompatíveis são rejeitados antes da cópia.
 - A extração não carrega a imagem inteira na memória; usa um buffer de 64 KiB.
 - A pasta publicada é `files/installations/gow_boot_seed`, no armazenamento privado do aplicativo.
+- O `CdRootVfs` é somente leitura, faz acesso por descritores relativos à raiz, rejeita traversal e symlinks, aceita apenas arquivos regulares, limita listagens a 65.536 entradas e mantém handles para leituras por offset.
+- O provider expõe a API C ABI `gowAndroidCdRootOpenFile/ReadFile/CloseFile` e o sinalizador `gowAndroidCdRootIsReady`. O patch local do runtime Waffle foi atualizado para usar o prefixo `gowcdroot:/` no lugar do provider direto da ISO; a compilação desse patch ainda está em validação na CI.
 - Se essa pasta já existir, a importação não a substitui automaticamente.
 
 ## O que esta etapa NÃO significa
 
-A pasta `gow_boot_seed` não é uma instalação completa. Ela contém apenas `SYSTEM.CNF` e o executável indicado por `BOOT2`. Ainda precisamos identificar os arquivos de dados e módulos realmente acessados no boot e no gameplay, incorporá-los ao manifesto versionado, ligar a árvore privada ao VFS e integrar o carregamento do ELF ao pipeline PS2Recomp.
+A pasta `gow_boot_seed` não é uma instalação completa. Ela contém apenas `SYSTEM.CNF` e o executável indicado por `BOOT2`. Ainda precisamos identificar os arquivos de dados e módulos realmente acessados no boot e no gameplay, incorporá-los ao manifesto versionado, integrar a chamada do VFS ao fluxo real de inicialização do PS2Runtime e ligar o carregamento do ELF ao pipeline PS2Recomp.
 
-A importação bem-sucedida também não significa que o jogo inicializa. O runtime ainda não foi conectado a um caminho completo de boot, e não foi executado gameplay real nesta etapa.
+A importação bem-sucedida também não significa que o jogo inicializa. O provider cdRoot já existe e está exposto ao patch de preparação do runtime, mas o PS2Runtime ainda não é iniciado pelo launcher e não foi executado gameplay real nesta etapa.
 
 ## Referências de engenharia
 
