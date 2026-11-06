@@ -3,7 +3,6 @@
 #include "iso9660_installer.h"
 #include "iso9660_reader.h"
 #include "ps2_elf_validator.h"
-#include "ps2x/iop/disc_source.h"
 
 #include <jni.h>
 
@@ -20,6 +19,14 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+extern "C" bool gowRuntimePrepareIoPaths(
+    const char *bootRelativePath, char *message, size_t capacity) noexcept
+    __attribute__((weak));
+extern "C" bool gowRuntimeValidateDiscSource(
+    const char *privateRoot, const char *bootRelativePath,
+    char *message, size_t capacity) noexcept
+    __attribute__((weak));
 
 namespace {
 std::mutex g_discMutex;
@@ -243,61 +250,57 @@ Java_org_gowandroid_app_MainActivity_nativeValidateDiscSource(
             rootPath = g_cdRootPath;
         }
         if (rootPath.empty()) {
-            return makeResult("A raiz privada cdRoot ainda não foi montada no runtime.");
+            return makeResult("A raiz privada cdRoot ainda não foi montada.");
         }
-
-        auto source = ps2x::iop::DiscSource::openExtracted(
-            std::filesystem::u8path(rootPath));
-        if (!source) {
+        if (gowRuntimeValidateDiscSource == nullptr) {
             return makeResult(
-                "DiscSource::openExtracted() rejeitou a instalação privada. "
-                "Verifique .disc_layout, .disc_meta e os arquivos extraídos.");
+                "A biblioteca Waffle/IOP não está preparada neste build; DiscSource indisponível.");
         }
 
-        std::array<uint8_t, ps2x::iop::DiscSource::kSectorSize> sector{};
-        if (!source->readSectors(16u, 1u, sector.data()) ||
-            std::memcmp(sector.data() + 1u, "CD001", 5u) != 0) {
-            return makeResult(
-                "DiscSource abriu, mas a leitura do descritor primário no LSN 16 falhou.");
-        }
-
-        const uint32_t layer1Start = source->layer1Start();
-        if (layer1Start != 0u) {
-            const uint64_t layer1PvdLsn =
-                static_cast<uint64_t>(layer1Start) + 16u;
-            if (layer1PvdLsn > std::numeric_limits<uint32_t>::max() ||
-                !source->readSectors(
-                    static_cast<uint32_t>(layer1PvdLsn), 1u, sector.data()) ||
-                std::memcmp(sector.data() + 1u, "CD001", 5u) != 0) {
-                return makeResult(
-                    "DiscSource detectou a segunda camada, mas o descritor ISO9660 dela não pôde ser lido.");
-            }
-        }
-
-        std::replace(bootPath.begin(), bootPath.end(), '/', '\\');
-        const std::string guestBootPath = "cdrom0:\\" + bootPath;
-        const auto bootFile = source->findFile(guestBootPath);
-        if (!bootFile || bootFile->directory || bootFile->size == 0u) {
-            return makeResult(
-                "DiscSource não encontrou o executável BOOT2 pelo caminho CDROM0.");
-        }
-
-        if (!source->readSectors(bootFile->lsn, 1u, sector.data())) {
-            return makeResult(
-                "DiscSource encontrou o BOOT2, mas não conseguiu ler seu setor inicial.");
-        }
-
-        char summary[256]{};
-        std::snprintf(
-            summary, sizeof(summary),
-            "OK: DiscSource::openExtracted · setores por LSN válidos · camada 1=%u · BOOT2 LSN=%u · %u bytes",
-            layer1Start, bootFile->lsn, bootFile->size);
-        return makeResult(summary);
+        std::array<char, 512> message{};
+        const bool valid = gowRuntimeValidateDiscSource(
+            rootPath.c_str(), bootPath.c_str(), message.data(), message.size());
+        if (message[0] != '\0') return makeResult(message.data());
+        return makeResult(valid
+            ? "OK: DiscSource validou a instalação por LSN."
+            : "DiscSource recusou a instalação sem fornecer um diagnóstico.");
     } catch (const std::exception &exception) {
         return makeResult(
             std::string("Falha interna ao validar DiscSource: ") + exception.what());
     } catch (...) {
         return makeResult("Falha interna desconhecida ao validar DiscSource.");
+    }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_gowandroid_app_MainActivity_nativePrepareRuntimeIoPaths(
+    JNIEnv *env, jclass, jstring bootRelativePath) {
+    auto makeResult = [env](const std::string &message) -> jstring {
+        return env->NewStringUTF(message.c_str());
+    };
+
+    try {
+        std::string bootPath;
+        if (!copyJavaString(env, bootRelativePath, bootPath) || bootPath.empty()) {
+            return makeResult("O caminho BOOT2 está vazio ou inválido.");
+        }
+        if (gowRuntimePrepareIoPaths == nullptr) {
+            return makeResult(
+                "A biblioteca PS2Runtime não está preparada neste build; IoPaths indisponível.");
+        }
+
+        std::array<char, 512> message{};
+        const bool valid = gowRuntimePrepareIoPaths(
+            bootPath.c_str(), message.data(), message.size());
+        if (message[0] != '\0') return makeResult(message.data());
+        return makeResult(valid
+            ? "OK: IoPaths do PS2Runtime configurado."
+            : "PS2Runtime não conseguiu configurar IoPaths.");
+    } catch (const std::exception &exception) {
+        return makeResult(
+            std::string("Falha interna ao configurar IoPaths: ") + exception.what());
+    } catch (...) {
+        return makeResult("Falha interna desconhecida ao configurar IoPaths.");
     }
 }
 
