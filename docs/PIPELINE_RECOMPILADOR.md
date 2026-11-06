@@ -22,7 +22,7 @@ Pré-requisitos no computador:
 - Compilador C++20 compatível com CMake (MSVC, GCC ou Clang).
 - Acesso à internet durante a primeira configuração, pois o CMake baixa as dependências fixadas pelo PS2Recomp.
 
-O usuário precisa extrair o ELF da própria cópia do jogo. O arquivo deve corresponder ao perfil SCUS_973.99; o script não autentica a procedência nem substitui a validação da revisão.
+O usuário precisa extrair o ELF da própria cópia do jogo. O arquivo deve corresponder ao perfil SCUS_973.99; o script não autentica a procedência nem substitui a validação da revisão. Antes de copiar o arquivo para o workspace privado, o preflight verifica a estrutura ELF32 little-endian, `ET_EXEC`, `EM_MIPS`, tabela de program headers, limites dos segmentos `PT_LOAD` e cobertura do entry point. Essa verificação de formato não autentica o serial nem a identidade do conteúdo.
 
 Na raiz do repositório, execute:
 
@@ -51,9 +51,12 @@ Por segurança, o script:
 7. configura e compila ps2_recomp no host;
 8. configura ps2xIOP em um build separado, compila ps2_iop com PS2X_IOP_NATIVE_ONLY=ON e usa compile_commands.json para confirmar que core/iop_cpu.cpp não foi compilado;
 9. configura e compila o alvo ps2_runtime host com PS2X_VU1_NATIVE_ONLY=ON, verificando compile_commands.json para confirmar o define VU1 e a exclusão das fontes de diagnóstico PCSX2;
-10. no modo --elf, copia o ELF e o mapa para a pasta privada, preenche @ELF@, @MAP@ e @OUT@ no template, gera os arquivos C++ (inclusive os diretórios aninhados do modo individual) e valida register_functions.cpp e os cabeçalhos de registro.
+10. no modo --elf, pré-valida a estrutura ELF32/MIPS e os segmentos carregáveis antes de copiar o arquivo; essa checagem não substitui a identificação da revisão do jogo;
+11. copia o ELF e o mapa para a pasta privada, preenche @ELF@, @MAP@ e @OUT@ no template, gera os arquivos C++ (inclusive os diretórios aninhados do modo individual) e valida register_functions.cpp e os cabeçalhos de registro.
 
 O script limpa alterações locais dentro das duas cópias Git privadas antes de reaplicar a revisão fixada. Não coloque arquivos próprios dentro de sources/PS2Recomp ou sources/KIexster.
+
+A suíte `tools/test_elf_validation.py` constrói ELF sintéticos em memória temporária e cobre um ELF32/MIPS válido, classe/endian/arquitetura/tipo incompatíveis, tabela de program headers fora dos limites, segmentos `PT_LOAD` inválidos, entry point fora dos segmentos, arquivo curto e magic inválido. Ela não usa executável ou dados do jogo. A CI host executou essa suíte com sucesso nos runs `42186639665` e `42186655605`; a compilação integral do host recompiler continuava em andamento no último polling desses runs.
 
 A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. A execução 42150329023 compilou ps2_recomp, ps2_iop e ps2_runtime no host, verificando os perfis estritos. A execução 42150853233 validou a cópia do shim NEON e a seleção condicional no header Waffle no host x86-64. O smoke Android ARM64 separado passou em 42150765223. Em seguida, a execução 42152175783 compilou com sucesso o alvo estático ps2_runtime e suas dependências para arm64-v8a usando NDK 30.0.16248370/API 28; a checagem do compile database confirmou o perfil estrito IOP/VU1 e a ausência de iop_cpu.cpp e das fontes diferenciais PCSX2. O runner NativeActivity não foi construído. A mesma execução concluiu a compilação do APK Debug FORGE. Nenhuma ISO/ELF, IRX ou microcódigo do jogo foi usada.
 
