@@ -29,6 +29,8 @@
 
 **[CORREÇÃO ENVIADA, CI PENDENTE]** Os commits `e531ea1`, `1741d98`, `d124812` e `a7f93b4` removem a dependência do token virtual `gowcdroot:/` como caminho físico: o JNI disponibiliza o caminho real da instalação, e o PS2 VFS encaminha `cdrom0:` com base no dispositivo já analisado. Os workflows `42213387878` (Android) e `42213387898` (host) ainda precisam concluir na revisão atual. Isso corrige a fronteira de montagem, não comprova o boot.
 
+**[VERIFICADO NO HOST, CI ANDROID PENDENTE] Gerador `.disc_layout`/`.disc_meta`:** `iso9660_disc_layout.cpp` existia, mas não compilava com `-Wall -Wextra -Werror` (variável não usada) e não estava no CMake nem na CI. Foi corrigido e ligado ao alvo `android-game`; um teste host sintético (`iso9660_disc_layout_test.cpp`, ISO de dupla camada fabricada) passa com g++ e clang++ e cobre: conteúdo exato de `.disc_layout`, registros de `.disc_meta` (LSN little-endian + setor original), arquivo extraído ausente/com tamanho errado/symlink, layout divergente da imagem, raiz inválida e ausência de temporários após falha. Dois defeitos reais foram corrigidos: uma recusa por metadados já existentes **apagava** esses arquivos, e temporários órfãos de uma execução interrompida bloqueavam novas tentativas. `.disc_layout` agora é publicado por último. **Limites:** o instalador ainda não chama o gerador, o formato não foi validado contra `DiscSource::openExtracted()` real (apenas contra o contrato documentado) e o alvo ARM64 só é confirmado pela CI Android.
+
 **Próxima prioridade:** completar o leitor/instalador de disco de dupla camada, gerar os dois metadados no formato esperado pelo runtime e validar o contrato com fixtures sintéticas sem dados proprietários.
 
 ## [VERIFICADO] Leitor ISO9660 e importador privado

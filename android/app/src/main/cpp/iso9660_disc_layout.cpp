@@ -69,7 +69,6 @@ bool buildIntervals(const IsoDiscLayout &layout,
                     std::string *error) {
     intervals.clear();
     intervals.reserve(layout.files.size());
-    std::string previousPath;
     for (const IsoDiscFile &file : layout.files) {
         std::vector<std::string> parts;
         if (!splitSafePath(file.path, parts)) {
@@ -91,7 +90,6 @@ bool buildIntervals(const IsoDiscLayout &layout,
             }
             intervals.push_back({begin, end});
         }
-        previousPath = file.path;
     }
     return true;
 }
@@ -163,7 +161,6 @@ bool readNonFileSectorCount(const Iso9660Reader &reader,
     for (uint64_t first = 0u; first < layout.sectorCount;) {
         const uint32_t batch = static_cast<uint32_t>(
             std::min<uint64_t>(kSectorBatch, layout.sectorCount - first));
-        const size_t bytes = static_cast<size_t>(batch) * kIsoSectorSize;
         if (!reader.readSectors(static_cast<uint32_t>(first), batch, buffer.data())) {
             setError(error, "Could not scan ISO sectors while measuring disc metadata.");
             return false;
@@ -317,31 +314,48 @@ bool writeIsoDiscMetadata(const Iso9660Reader &reader,
         return false;
     }
 
-    auto fail = [&](const std::string &message) {
+    // Removes only this call's temporary files. Published files are removed
+    // separately, and only if this call published them.
+    auto removeTemporaries = [&]() {
         ::unlinkat(rootFd, ".disc_layout.tmp", 0);
         ::unlinkat(rootFd, ".disc_meta.tmp", 0);
-        ::unlinkat(rootFd, ".disc_layout", 0);
-        ::unlinkat(rootFd, ".disc_meta", 0);
+    };
+    auto fail = [&](const std::string &message) {
+        removeTemporaries();
         ::close(rootFd);
         setError(error, message);
         return false;
     };
 
-    struct stat layoutStatus {};
-    struct stat metaStatus {};
-    if (::fstatat(rootFd, ".disc_layout", &layoutStatus, AT_SYMLINK_NOFOLLOW) == 0 ||
-        ::fstatat(rootFd, ".disc_meta", &metaStatus, AT_SYMLINK_NOFOLLOW) == 0) {
-        return fail("Disc metadata files already exist in the extracted root.");
-    }
-    if ((errno != ENOENT && ::fstatat(rootFd, ".disc_layout", &layoutStatus, AT_SYMLINK_NOFOLLOW) != 0) ||
-        (errno != ENOENT && ::fstatat(rootFd, ".disc_meta", &metaStatus, AT_SYMLINK_NOFOLLOW) != 0)) {
-        return fail("Could not inspect existing disc metadata files.");
+    // Never overwrite, and never delete, metadata that was already there.
+    for (const char *name : {".disc_layout", ".disc_meta"}) {
+        struct stat existing {};
+        if (::fstatat(rootFd, name, &existing, AT_SYMLINK_NOFOLLOW) == 0) {
+            ::close(rootFd);
+            setError(error, "Disc metadata files already exist in the extracted root.");
+            return false;
+        }
+        if (errno != ENOENT) {
+            ::close(rootFd);
+            setError(error, "Could not inspect existing disc metadata files.");
+            return false;
+        }
     }
 
     if (!validateExtractedFiles(rootFd, layout, error)) {
         ::close(rootFd);
         return false;
     }
+
+    std::vector<FileInterval> intervals;
+    if (!buildIntervals(layout, intervals, error)) {
+        ::close(rootFd);
+        return false;
+    }
+
+    // A previous interrupted run may have left temporaries; they are ours
+    // (dot-prefixed, never part of the disc), so clear them before O_EXCL.
+    removeTemporaries();
 
     struct statvfs storageInfo {};
     if (::fstatvfs(rootFd, &storageInfo) != 0 || storageInfo.f_frsize == 0u) {
@@ -376,12 +390,6 @@ bool writeIsoDiscMetadata(const Iso9660Reader &reader,
         O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (metaFd < 0) {
         return fail("Could not create the temporary .disc_meta file.");
-    }
-
-    std::vector<FileInterval> intervals;
-    if (!buildIntervals(layout, intervals, error)) {
-        ::close(metaFd);
-        return fail(error ? *error : "The disc layout contains invalid extents.");
     }
 
     std::vector<uint8_t> buffer(static_cast<size_t>(kSectorBatch) * kIsoSectorSize);
@@ -426,13 +434,17 @@ bool writeIsoDiscMetadata(const Iso9660Reader &reader,
         return fail("Could not generate a complete .disc_meta sector index.");
     }
 
-    if (::renameat(rootFd, ".disc_layout.tmp", rootFd, ".disc_layout") != 0) {
-        return fail("Could not publish .disc_layout.");
-    }
+    // .disc_layout is published last: its presence marks a complete pair.
     if (::renameat(rootFd, ".disc_meta.tmp", rootFd, ".disc_meta") != 0) {
         return fail("Could not publish .disc_meta.");
     }
+    if (::renameat(rootFd, ".disc_layout.tmp", rootFd, ".disc_layout") != 0) {
+        ::unlinkat(rootFd, ".disc_meta", 0);
+        return fail("Could not publish .disc_layout.");
+    }
     if (::fsync(rootFd) != 0) {
+        ::unlinkat(rootFd, ".disc_layout", 0);
+        ::unlinkat(rootFd, ".disc_meta", 0);
         return fail("Could not synchronize the extracted disc metadata directory.");
     }
 
