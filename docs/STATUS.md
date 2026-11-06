@@ -223,3 +223,10 @@ O painel informa explicitamente que o jogo ainda não iniciou quando o núcleo h
 **[VERIFICADO NA CI `42252442268`]** A configuração BOOT2 é zerada ao registrar uma nova `GowGameActivity`; a Activity registra sua referência JNI antes de `super.onCreate()`, que inicia o ciclo nativo. `android_main()` aguarda a configuração recebida, e a limpeza da referência JNI também libera a espera quando a Activity encerra. O APK Debug ARM64 compilou e os testes host/VFS passaram.
 
 **Limite:** a verificação da CI não substitui a execução em aparelho. Ainda falta abrir o APK com uma instalação privada real, observar o painel, verificar se a mensagem da tabela AOT vazia é apresentada e recolher Logcat `GowAndroid`. O APK ainda não contém AOT do jogo e permanece não jogável.
+## Orquestrador local ELF → C++ AOT → APK — 06/11/2026
+
+**[IMPLEMENTADO; TESTES DE ORQUESTRADOR EM CI]** `tools/build_android_game.py` coordena o recompilador host, staging de C++ gerado e `gradlew assembleDebug`. Exige o ELF `SCUS_973.99` fora do repositório, workspace ASCII fora do repositório e diretório de staging ignorado pelo Git. Também rejeita `SCES_531.33` porque o mapa/template atual é NTSC-U. O C++ gerado fica em `android/app/build/gow-generated-game/`; nenhum conteúdo derivado do jogo é enviado à CI.
+
+**Uso:** consulte `docs/ANDROID_AOT_LOCAL_BUILD.md`. O script possui `--plan-only` e `--generate-only`. A CI verifica regras de caminho, perfil regional, comando Windows/Gradle, CLI e sintaxe; ela não gera C++ do jogo real, pois não recebe o ELF do usuário.
+
+**Limite:** este fluxo local ainda não foi executado com um ELF real do usuário. Mesmo com a tabela AOT ligada, `PS2Runtime::run()` permanece bloqueado até GS/Vulkan, presenter, boot/IRX/VU1 e áudio estarem conectados.
