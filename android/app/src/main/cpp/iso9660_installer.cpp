@@ -446,6 +446,12 @@ IsoInstallResult installIsoManifest(
         copySucceeded = false;
         result.error = "Could not flush the private staging directory.";
     }
+    // Give the UI one final opportunity to cancel after all file and directory
+    // synchronization, but before the staging tree becomes visible as complete.
+    if (copySucceeded) {
+        notifyProgress(result, progressCallback, userData, keepGoing);
+        if (!keepGoing) copySucceeded = false;
+    }
 
     ::close(stageFd);
     if (!copySucceeded) {
