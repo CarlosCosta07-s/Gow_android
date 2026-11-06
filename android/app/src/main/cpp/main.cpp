@@ -1029,12 +1029,10 @@ extern "C" void android_main(android_app* app) {
     reportRuntimeStatus(
         app, "Preparando o núcleo PS2 (memória, EE, IOP e VU)...", false);
     PS2Runtime *runtime = gowCreatePs2Runtime();
-    bool coreReady = false;
     if (runtime != nullptr) {
         std::array<char, 512> coreMessage{};
         if (gowInitializePs2RuntimeCoreHeadless(
                 runtime, coreMessage.data(), coreMessage.size())) {
-            coreReady = true;
             __android_log_print(
                 ANDROID_LOG_INFO, kTag,
                 "PS2Runtime core ready: %s", coreMessage.data());
