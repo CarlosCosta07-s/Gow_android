@@ -926,8 +926,10 @@ public final class MainActivity extends AppCompatActivity {
                 .setMessage("A pasta de instalação já existe no armazenamento privado. "
                         + detail + "\n\n" + runtimeStatus);
         if (installationValid) {
-            discStatus.setText("Integridade e fontes de disco verificadas. O boot ainda não foi iniciado.");
-            resultDialog.setPositiveButton("Continuar", null);
+            discStatus.setText("Integridade e fontes de disco verificadas. O runtime ainda não foi iniciado.");
+            resultDialog.setPositiveButton(
+                    "Verificar runtime",
+                    (dialog, which) -> openRuntimeDiagnostics());
         } else {
             discStatus.setText("A instalação precisa ser reparada antes de qualquer execução.");
             resultDialog
@@ -1189,7 +1191,9 @@ public final class MainActivity extends AppCompatActivity {
                                     + ".disc_meta foram gerados e publicados junto com os dados. "
                                     + preparedElfSummary + ". A instalação foi preparada e a "
                                     + "fonte de disco foi validada; o jogo ainda não foi iniciado.")
-                    .setPositiveButton("Continuar", null)
+                    .setPositiveButton(
+                            "Verificar runtime",
+                            (dialog, which) -> openRuntimeDiagnostics())
                     .show();
         } else {
             String message = error == null || error.isEmpty()
@@ -1206,6 +1210,41 @@ public final class MainActivity extends AppCompatActivity {
                     .setPositiveButton("Fechar", null)
                     .show();
         }
+    }
+
+    private void openRuntimeDiagnostics() {
+        if (selectedDiscSerial == null || selectedDiscSerial.isEmpty()
+                || selectedDiscBootPath == null || selectedDiscBootPath.isEmpty()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("BOOT2 indisponível")
+                    .setMessage("Valide novamente o disco para recuperar o caminho BOOT2 antes de abrir o diagnóstico.")
+                    .setPositiveButton("Fechar", null)
+                    .show();
+            return;
+        }
+
+        File cdRoot = new File(
+                new File(
+                        new File(getFilesDir(), "installations"),
+                        installationDirectoryName(selectedDiscSerial)),
+                "disc");
+        if (!cdRoot.isDirectory()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Instalação privada não encontrada")
+                    .setMessage("A pasta do disco não existe. Reinstale e valide a imagem antes de continuar.")
+                    .setPositiveButton("Fechar", null)
+                    .show();
+            return;
+        }
+
+        Intent intent = new Intent(this, GowGameActivity.class);
+        intent.putExtra(
+                GowGameActivity.EXTRA_PRIVATE_CD_ROOT,
+                cdRoot.getAbsolutePath());
+        intent.putExtra(
+                GowGameActivity.EXTRA_BOOT_RELATIVE_PATH,
+                selectedDiscBootPath);
+        startActivity(intent);
     }
 
     private void showSettingsDialog() {
