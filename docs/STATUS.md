@@ -91,78 +91,23 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 
 ## [NÃO TESTADO] Runtime e jogo
 
-- Geração do C++ do ELF privado com PS2Recomp (o executável host foi compilado, mas o ELF ainda não foi processado).
-- Compilação do código gerado para Android ARM64.
-- Ligação do runtime Waffle estático ao alvo android-game/Gradle e integração da API nativa com GowGameActivity (o runtime e o shell compilam separadamente, mas ainda não estão ligados entre si).
-- Geração VU1 AOT cobrindo todos os microprogramas usados pelo jogo; o gate --strict foi testado com entradas sintéticas, ainda sem capturas reais.
-- Geração AOT dos módulos IRX necessários e teste da proteção com IRX real; a proteção foi compilada sem esses módulos, mas ainda não foi executada.
-- Runner conectado à `GowGameActivity` mantendo o FORGE como launcher.
-- Cache/VFS dos arquivos do disco no layout de setores que o runtime KIexter espera.
-- Backend GS/Vulkan apresentando comandos e frames reais do jogo.
-- Menus, gameplay, áudio, FMVs, controles, saves, desempenho e compatibilidade em GPUs diferentes.
+- Geração do C++ do ELF privado com PS2Recomp e compilação do código gerado para Android ARM64; nenhum ELF de God of War foi fornecido.
+- Cobertura VU1 AOT para todos os microprogramas reais e geração AOT dos módulos IRX necessários.
+- Envio efetivo do FD selecionado em MainActivity para GowGameActivity; a recepção JNI/EXTRA_DISC_FD está preparada, mas o launcher ainda não inicia a Activity.
+- Acesso de uma imagem real pelo provider ISO, enumeração de diretórios e chamadas reais de CD/DVD/IOP.
+- Cache privado do ELF e dos arquivos pequenos de boot realmente necessários.
+- Backend GS/Vulkan Android, presenter e saída de áudio Android.
+- Boot, primeira imagem, menus, controles touch visuais, áudio, FMVs, saves, desempenho e compatibilidade em aparelhos reais.
 
 ## Próximos bloqueios reais
 
-1. Validar em aparelho o parser `SYSTEM.CNF` com a imagem NTSC-U fornecida pelo usuário.
-2. Executar PS2Recomp com o ELF privado e confirmar as saídas geradas; nenhum ELF foi fornecido a esta revisão.
-3. Compilar as fontes C++ geradas para ARM64 e validar o contrato de registro da tabela real de funções.
-4. Criar o VFS/cache privado que conecta a imagem de disco SAF aos caminhos PS2 esperados pelo runtime.
-5. Substituir `GSHwBackend` OpenGL e `GSHostPresentation` Raylib pelo backend GS/Vulkan Android e seu presenter; conferir [GS/Vulkan Android](GS_VULKAN_ANDROID.md).
-6. Substituir a saída desktop de áudio por adaptador Android e só então liberar `PS2Runtime::initialize()`.
-7. Gerar e integrar VU1/IRX AOT com cobertura comprovada para o jogo.
-8. Abrir a sessão real a partir do botão JOGAR, atingir o boot, primeira imagem, menus e primeiro combate.
+1. Passar o descritor SAF selecionado pelo MainActivity para GowGameActivity sem abrir uma tela de jogo vazia antes do runtime estar pronto.
+2. Validar o provider ISO com imagem NTSC-U legítima no aparelho e rastrear arquivos que o IOP solicita no boot.
+3. Implementar cache privado do ELF e arquivos pequenos realmente necessários, após rastreamento.
+4. Fornecer o ELF privado ao PS2Recomp, gerar C++ e ligar a tabela real para ARM64.
+5. Implementar o GS/Vulkan Android e presenter, substituindo OpenGL/Raylib desktop.
+6. Substituir a saída de áudio desktop por adaptador Android.
+7. Gerar e integrar VU1/IRX AOT com cobertura comprovada.
+8. Integrar CD/DVD, SIF/DMA e demais serviços de boot; somente então liberar JOGAR e validar primeira imagem, menus e combate.
 
-1. Validar em aparelho o parser `SYSTEM.CNF` com a imagem NTSC-U do usuário.
-2. Executar e validar o pipeline host criado para PS2Recomp, usando o ELF NTSC-U correto e mantendo a saída privada.
-3. Integrar e vincular a biblioteca estática Waffle já compilada para arm64-v8a ao alvo android-game, mantendo a Activity FORGE/GowGameActivity.
-4. Implementar a ponte JNI e o lifecycle entre GowGameActivity e o runtime; adaptar VFS/cache do disco, áudio e entrada para Android.
-5. Reaproveitar frontend GS/formatos portáveis e implementar o backend Vulkan Android.
-6. Executar VU1 e IRX necessários por AOT, sem fallback interpretado.
-7. Atingir boot, primeira imagem, menus e primeiro combate.
-
-**Nenhum gameplay foi testado ou declarado funcional.** Os arquivos importados são preparação da base; não constituem ainda um runtime jogável.
-
-## [VERIFICADO] Shell Android ligado com tabela vazia de funções recompiladas
-
-- Em 2026-11-06, a execução GitHub Actions [42155712137](https://github.com/CarlosCosta07-s/Gow_android/actions/runs/42155712137), no commit 262b1f2f4087c3d8d8c28176bb42dbaca73b0ff8, concluiu todas as etapas com sucesso, incluindo preparação do runtime Waffle, assembleDebug e upload do APK.
-- Artefato: gow-android-arm64-shell. O artefato contém o shell de desenvolvimento, não os dados do jogo.
-- A tabela g_ps2RecompiledFunctionTable ligada nesta etapa é explicitamente vazia (zero slots). Ela resolve apenas o contrato de link do shell enquanto não existe C++ gerado a partir do ELF privado do usuário.
-- A conclusão do build não prova boot, rendering GS, áudio, controles ou gameplay. Nenhum ELF, IRX, microcódigo ou dado de jogo foi adicionado ao repositório.
-- A construção/inicialização do objeto PS2Runtime e a integração do seu ciclo de vida com GameActivity ainda precisam de um smoke test controlado; PS2Runtime::initialize() não deve ser chamado antes da substituição dos adaptadores desktop de janela, gráficos e áudio.
-
-## [VERIFICADO NA CI] Codificação DualShock 2 e leitor ISO9660 nativo
-
-- O teste host do pacote DualShock 2 passou na execução Android `42160254242`.
-- O teste host do leitor ISO9660 passou na primeira etapa do workflow `42160790601`; ele constrói uma imagem ISO sintética e verifica PVD, lookup em diretório, sufixo de versão, caminho traversal e leitura aleatória atravessando setor.
-- `iso9660_reader.cpp` está incluído no target Android `android-game`; a compilação final do APK desse workflow ainda está pendente.
-- Os testes não usam uma ISO real de God of War e não comprovam montagem no VFS do runtime.
-- O leitor ainda não recebe o FD do SAF via GowGameActivity, não substitui o `PS2IopHostAdapter` e não liga `cdRoot` à ISO. Consulte `docs/DISC_VFS_ANDROID.md`.
-
-## [COMPILADO NA CI; EXECUÇÃO EM APARELHO NÃO TESTADA] Ciclo GameActivity e ponte Android de controle
-
-- O alvo `android-game` cria o objeto `PS2Runtime` no início de `android_main` e o destrói ao encerrar a atividade. É um teste de construção/destruição no código; a CI compila, mas não inicia a Activity num aparelho Android.
-- O perfil Android define `PS2X_ANDROID_LIFECYCLE_MANAGED`; o patch privado evita consultar `IsAudioDeviceReady()` quando o host Android não inicializou o dispositivo Raylib.
-- Eventos físicos de gamepad/teclado são lidos de `android_input_buffer` por `android_app_swap_input_buffers`; não existe callback `android_app::onInputEvent` no glue GameActivity utilizado.
-- `GameActivityKeyEvent` e `GameActivityMotionEvent` são convertidos para o pacote DualShock 2 ativo-baixo/analógico. A primeira implementação suporta porta 0/slot 0, botões, eixos, gatilhos, deadzone, sensibilidade e inversão.
-- O estado de toque tem API para alimentar o mesmo pad virtual, mas o overlay visual, a configuração no menu do jogo e a vibração Android ainda não foram implementados.
-- A CI Android `42159084825` aprovou o lifecycle/entrada; as revisões posteriores `42159359100` e `42159363088` também aprovaram o build Android com a preparação CMake do código gerado.
-- Não há teste físico automatizado de gamepad nem prova de que GameActivity executou a construção/destruição em aparelho.
-
-**Bloqueio preservado:** `PS2Runtime::initialize()`, `loadELF()` e `run()` continuam sem chamada no Android. O runtime host ainda depende de Raylib/OpenGL para GS/apresentação e áudio; a tabela de funções recompiladas permanece vazia enquanto não houver C++ gerado do ELF privado.
-
-- O código nativo cria o objeto PS2Runtime no início do android_main e o destrói ao encerrar a atividade. Este é um smoke de construção/destruição, não inicialização do runtime nem execução do jogo.
-- O perfil Android define PS2X_ANDROID_LIFECYCLE_MANAGED; a preparação privada protege o destrutor para não consultar IsAudioDeviceReady() sem inicialização do áudio Raylib.
-- Eventos físicos de gamepad e teclado são recebidos por android_app::onInputEvent e convertidos para o formato ativo-baixo/analógico do DualShock 2. Porta 0/slot 0 é a primeira implementação.
-- A ponte contém deadzone, sensibilidade, inversão dos eixos e fontes virtuais de toque para permitir que o futuro overlay injete o mesmo estado do controle físico.
-- Rumbling/haptics Android, overlay gráfico de toque e UI de remapeamento ainda não estão implementados.
-- A CI precisa compilar esta alteração. Não há teste físico automatizado de gamepad nem prova de que GameActivity executou o smoke em aparelho.
-
-**Bloqueio preservado:** PS2Runtime::initialize(), loadELF() e run() continuam sem chamada no Android. O host Raylib/OpenGL ainda não foi substituído pelos adaptadores GS/Vulkan e áudio Android, e a tabela de funções recompiladas continua vazia.
-
-## [DECISÃO DE ARQUITETURA] Instalação híbrida de ISO
-
-- A estratégia do projeto passa a seguir o fluxo do Dragon Rage BT4: permissão SAF persistente, cópia privada do ELF original e dos arquivos pequenos de boot que forem comprovadamente necessários; os dados grandes permanecem na ISO.
-- A imagem será aberta por `ParcelFileDescriptor` no início da sessão e seu FD será transferido/duplicado para a camada nativa com ownership explícito.
-- `Iso9660Reader` será o provider de leitura aleatória; o próximo trabalho é ligá-lo ao `PS2IopHostAdapter` para atender caminhos `cdrom0:`.
-- A estratégia não está implementada no launcher/runtime ainda. O leitor isolado e seus testes host não significam que o jogo já consegue abrir arquivos da ISO.
-- Referência de código: `GameDataInstaller.kt`, `Bt4Installer.kt` e `Bt4Activity.kt` do Dragon Rage. Detalhes em `docs/DISC_VFS_ANDROID.md`.
+**Nenhum gameplay foi testado ou declarado funcional.** Nenhum ELF, ISO, IRX, microcódigo, save ou dado proprietário foi enviado ao repositório ou à CI pública.
