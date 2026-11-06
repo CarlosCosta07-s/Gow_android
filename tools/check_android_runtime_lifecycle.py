@@ -255,7 +255,23 @@ def main() -> int:
         "The experimental GS renderer must not start guest execution.",
     )
 
+    for required in (
+        "nativeRequestGsSceneCapture",
+        'setText("Capturar cena")',
+        "BuildConfig.DEBUG",
+    ):
+        require(required in activity, f"Debug GS scene capture control is missing: {required}")
+    for required in (
+        "Java_org_gowandroid_app_GowGameActivity_nativeRequestGsSceneCapture",
+        "gGsSceneCaptureRequested.exchange(",
+        "kMaxRequestedGsSceneCaptures",
+        "gow_android_scene_%02u.ppm",
+        "writeRgbaPpmCapture(",
+    ):
+        require(required in native_main, f"Local GS scene capture path is missing: {required}")
+
     print("Verified: Android PS2 core initialization is headless, uses a null GS backend,")
+    print("and exposes bounded, on-demand local GS scene captures in Debug.")
     print("and cannot enter Raylib desktop initialization or guest execution.")
     return 0
 
