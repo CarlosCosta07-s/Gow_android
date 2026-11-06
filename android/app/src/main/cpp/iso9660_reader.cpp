@@ -532,7 +532,7 @@ bool Iso9660Reader::listDirectory(std::string_view path,
 bool Iso9660Reader::lookupFile(std::string_view path, IsoFile &file,
                                std::string *error) const {
     file = {};
-    if (descriptor_ < 0) {
+    if (descriptor_ < 0 || volumes_.empty()) {
         setError(error, "No ISO image is open.");
         return false;
     }
@@ -545,65 +545,82 @@ bool Iso9660Reader::lookupFile(std::string_view path, IsoFile &file,
         return false;
     }
 
-    Directory current = root_;
+    std::vector<std::string> components;
     size_t cursor = 0u;
-    unsigned int depth = 0u;
     while (cursor < path.size()) {
         while (cursor < path.size() &&
                (path[cursor] == '/' || path[cursor] == '\\')) {
             ++cursor;
         }
         if (cursor >= path.size()) break;
-
         const size_t end = path.find_first_of("/\\", cursor);
-        const size_t componentEnd = end == std::string_view::npos ? path.size() : end;
-        const std::string_view component = path.substr(cursor, componentEnd - cursor);
+        const size_t componentEnd =
+            end == std::string_view::npos ? path.size() : end;
+        const std::string_view component =
+            path.substr(cursor, componentEnd - cursor);
+        if (component.empty() || component == "." || component == ".." ||
+            component.size() > 255u || components.size() >= 32u) {
+            setError(error, "The ISO path contains an unsafe component or exceeds the depth limit.");
+            return false;
+        }
+        const std::string normalized = normalizeIdentifier(component);
+        if (!safeIsoIdentifier(normalized) || normalized == "." || normalized == "..") {
+            setError(error, "The ISO path contains an unsafe normalized component.");
+            return false;
+        }
+        components.push_back(normalized);
         cursor = componentEnd;
-
-        if (component.empty() || component == "." || component == "..") {
-            setError(error, "The ISO path contains an empty or traversal component.");
-            return false;
-        }
-        if (component.size() > 255u || ++depth > 32u) {
-            setError(error, "The ISO path exceeds a supported component or depth limit.");
-            return false;
-        }
-
-        const bool last =
-            path.find_first_not_of("/\\", cursor) == std::string_view::npos;
-        std::vector<IsoDirectoryEntry> entries;
-        if (!readDirectoryEntries(current, entries, error)) return false;
-
-        const std::string wanted = normalizeIdentifier(component);
-        const auto found = std::find_if(entries.begin(), entries.end(),
-            [&wanted](const IsoDirectoryEntry &entry) { return entry.name == wanted; });
-        if (found == entries.end()) {
-            setError(error, "The requested file was not found in the ISO image.");
-            return false;
-        }
-        if (found->multiExtent) {
-            setError(error, "Multi-extent ISO9660 files are not supported yet.");
-            return false;
-        }
-
-        if (last) {
-            if (found->isDirectory) {
-                setError(error, "The requested ISO path identifies a directory, not a file.");
-                return false;
-            }
-            file = found->file;
-            return true;
-        }
-        if (!found->isDirectory) {
-            setError(error, "An ISO path component is not a directory.");
-            return false;
-        }
-
-        current.byteOffset = found->file.byteOffset;
-        current.size = found->file.size;
+    }
+    if (components.empty()) {
+        setError(error, "The ISO path does not identify a file.");
+        return false;
     }
 
-    setError(error, "The ISO path does not identify a file.");
+    for (const Volume &volume : volumes_) {
+        Directory current = volume.root;
+        bool missingInThisVolume = false;
+        for (size_t index = 0u; index < components.size(); ++index) {
+            std::vector<IsoDirectoryEntry> entries;
+            if (!readDirectoryEntries(current, entries, error)) return false;
+
+            const auto found = std::find_if(
+                entries.begin(), entries.end(),
+                [&components, index](const IsoDirectoryEntry &entry) {
+                    return entry.name == components[index];
+                });
+            if (found == entries.end()) {
+                missingInThisVolume = true;
+                break;
+            }
+            if (found->multiExtent) {
+                setError(error, "Multi-extent ISO9660 files are not supported yet.");
+                return false;
+            }
+
+            const bool last = index + 1u == components.size();
+            if (last) {
+                if (found->isDirectory) {
+                    missingInThisVolume = true;
+                    break;
+                }
+                file = found->file;
+                return true;
+            }
+            if (!found->isDirectory) {
+                missingInThisVolume = true;
+                break;
+            }
+
+            current.byteOffset = found->file.byteOffset;
+            current.size = found->file.size;
+            // The child remains in the same ISO volume/layer.
+            current.baseLsn = volume.baseLsn;
+            current.volumeSectors = volume.sectorCount;
+        }
+        if (!missingInThisVolume) break;
+    }
+
+    setError(error, "The requested file was not found in any ISO9660 volume.");
     return false;
 }
 
