@@ -78,7 +78,8 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 - [x] Validar o produto do instalador com a implementação real de `ps2x::iop::DiscSource` compilada da árvore Waffle: `openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` em ISO sintética de dupla camada (CI `42225710064`).
 - [x] Configurar e verificar o caminho estático `PS2Runtime::IoPaths` para a instalação privada, sem iniciar o runtime; a CI compila a ponte Android ARM64 (run `42225710064`).
 - [x] Exercitar `IopCdvd::dispatchImport()` em host com `IopMemory`, `IopKernel` e um `IopHost` de fixture: `sceCdSearchFile`, `sceCdRead` nas duas camadas e rejeição de LSN fora do disco (run `42226830317`).
-- [ ] Compilar e validar em aparelho o probe JNI `nativeValidateIopCdvd()`, que repete a busca do BOOT2 e a leitura do setor ELF com a raiz privada. Build Android em andamento no run `42227233881`.
+- [x] Compilar e ligar o probe JNI `nativeValidateIopCdvd()`, que prepara a busca do BOOT2 e a leitura do setor ELF com a raiz privada; CI Android `42227233881` aprovou e publicou o APK Debug.
+- [ ] Executar o probe JNI em aparelho com a ISO do usuário e conferir os diagnósticos da instalação privada.
 - [ ] Disponibilizar os módulos IRX no layout `IOP_MOD/` esperado pelo jogo, sem enviar módulos do disco para Git/CI.
 - [x] Testar `DiscSource::openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` com ISO sintética de dupla camada e validar a checagem JNI pós-instalação (CI `42225710064`).
 - [ ] Remover o uso residual do provider ISO transitório `gowdisc:/` do caminho normal de gameplay após validar a instalação local completa; não manter um FD da ISO aberto durante a partida.

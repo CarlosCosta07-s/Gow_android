@@ -88,21 +88,22 @@ O contrato do runtime Waffle/KIexter também inclui `ps2x::iop::DiscSource::open
 
 ### Limite atual
 
-**[IMPLEMENTAÇÃO ADICIONADA, CI PENDENTE]** O JNI `nativeInstallIsoDisc()` chama o instalador completo. O instalador produz `.disc_layout` e `.disc_meta` no diretório `disc/` e só publica a instalação depois da geração dos dois arquivos. O FORGE abre esse `cdRoot` e valida o ELF local.
+**[VERIFICADO NA CI ANDROID, run `42225710064`]** O JNI `nativeInstallIsoDisc()` chama o instalador completo. O instalador produz `.disc_layout` e `.disc_meta` em `disc/` e só publica a instalação depois da geração dos dois arquivos. Após a publicação, o FORGE monta o `cdRoot`, configura os caminhos estáticos do `PS2Runtime`, valida o ELF local e abre a pasta com a implementação real de `ps2x::iop::DiscSource::openExtracted()`.
 
-**[VALIDAÇÃO PENDENTE]** Um novo teste de host liga `installIsoDisc()` à implementação real de `ps2x::iop::DiscSource` exportada pelo workflow, e verifica `openExtracted()`, `readSectors()`, `findFile()` e `layer1Start()` em uma ISO sintética de dupla camada. O resultado da CI ainda será registrado após a execução.
+**[VERIFICADO NO HOST, run `42226830317`]** Um teste compila os fontes reais de `IopCdvd`, `IopMemory` e `IopKernel`, injeta apenas um `IopHost` de fixture e chama `IopCdvd::dispatchImport()`: ordinal 10 (`sceCdSearchFile`) encontra um arquivo aninhado e devolve LSN/tamanho; ordinal 6 (`sceCdRead`) copia setores das duas camadas para a RAM IOP; uma leitura além do fim do disco é recusada.
 
-**[NÃO IMPLEMENTADO]** O runtime de gameplay ainda não chama `DiscSource::openExtracted()` nem `sceCdRead` durante uma sessão real. Nenhuma ISO real, ELF real ou sequência de boot foi testada nesta etapa.
+**[COMPILADO NA CI ANDROID, run `42227233881`]** O FORGE chama `nativeValidateIopCdvd()` após a instalação. A ponte C ABI prepara uma instância isolada do dispatcher CDVD apontada para a raiz privada, procura BOOT2 e lê seu primeiro setor na RAM IOP para conferir a assinatura ELF. O build ARM64 e o APK Debug foram aprovados e publicados. O probe ainda não foi executado em aparelho.
+
+**[NÃO IMPLEMENTADO]** As verificações anteriores não inicializam `PS2Runtime`, não chamam `loadELF()`/`run()` e não exercitam o dispatcher CDVD que pertence a uma sessão real. O runtime base ainda depende da inicialização host Raylib para gráficos/áudio; a Activity Android não está conectada a um runner PS2 jogável. Nenhuma ISO real, ELF real ou sequência de boot foi testada nesta etapa.
 
 A auditoria do contrato de referência e o formato dos metadados estão em [DISC_RUNTIME_AUDIT.md](DISC_RUNTIME_AUDIT.md).
 
 ## 6. Próximas etapas
 
-1. Validar em aparelho a instalação e as checagens `IoPaths`/DiscSource com a ISO do usuário, sem compartilhar a imagem ou os dados extraídos.
+1. Validar em aparelho a instalação e os probes `IoPaths`/DiscSource/CDVD com a ISO do usuário, sem compartilhar a imagem ou os dados extraídos.
 2. Adicionar verificação de integridade persistente e recuperação/reinstalação por serial/revisão.
-3. Validar em aparelho o novo probe JNI `nativeValidateIopCdvd()` com a ISO do usuário.
-4. Disponibilizar os IRX no layout esperado e instrumentar os caminhos de arquivo e CDVD usados durante o boot.
-5. Conectar o IOP/CDVD ao IOP vivo do runtime e verificar chamadas `sceCdRead` originadas pelo código do jogo; o fixture host atual testa o dispatcher isoladamente.
+3. Disponibilizar os IRX no layout esperado e instrumentar os caminhos de arquivo e CDVD usados durante o boot.
+4. Conectar o serviço CDVD ao IOP vivo do runtime e verificar chamadas `sceCdRead` originadas pelo código do jogo; os fixtures atuais exercitam o dispatcher em instância isolada.
 5. Adaptar a inicialização do PS2Runtime para GameActivity, separando GS, áudio e serviços que hoje dependem de Raylib.
 6. Gerar/compilar o C++ privado do ELF e ligar `loadELF()` ao runner Android.
 7. Integrar GS/Vulkan e apresentar a primeira imagem real.
