@@ -8,6 +8,10 @@
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml) [![Host recompiler](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml)
 
+## Build AOT Android a partir do ELF privado
+
+O fluxo local está documentado em [docs/ANDROID_AOT_LOCAL_BUILD.md](docs/ANDROID_AOT_LOCAL_BUILD.md). Ele recebe o ELF NTSC-U `SCUS_973.99` da própria cópia do usuário, mantém o workspace fora do repositório, exporta o C++ para `android/app/build/gow-generated-game/` (Git-ignored) e compila o APK Debug ARM64. A CI testa o orquestrador e as regras de privacidade com fixtures, sem ler ou enviar conteúdo do jogo. Esse APK poderá validar a ligação da tabela AOT e a porta de carga ELF; ainda não libera gameplay.
+
 ## Objetivo
 
 Construir uma aplicação Android que execute o código original de God of War por **recompilação estática MIPS R5900 → C++/ARM64**, com runtime nativo para os subsistemas de PS2 usados pelo jogo e renderização do Graphics Synthesizer por Vulkan.
