@@ -132,3 +132,20 @@ O adaptador Android deixou de depender da fila de geometria desenhada diretament
 **Evidência:** CI `42261321872` aprovou testes CT32 de triângulo/sprite e CRTC 64×32, cores, stride de 640 pixels e região não desenhada; aprovou também VRAM/transferências 4 MiB e compilação Debug ARM64. Artefato `gow-android-arm64-shell` ID `13524359107`.
 
 **Limites do rasterizador:** rejeita draws com TME, ABE, fog, alpha test ou ZTE. Não há sampling de textura/CLUT, mipmapping, filtragem, perspective correction, Z-buffer, DATE, equações de blending GS, PABE/FBA, dithering, formatos depth, circuitos duplos, PMODE/ALP/SLBG, nem tratamento completo de display. Essa prova é sintética; não é ainda uma cena de God of War.
+## 12. Estado atual do caminho CPU GS→VRAM→CRTC→Vulkan — 06/11/2026
+
+Esta seção registra a implementação posterior aos marcos históricos acima. Os parágrafos anteriores descrevem o estado nas respectivas datas e não devem ser interpretados como o estado corrente.
+
+`AndroidGSVulkanBackend::Submit()` agora decodifica a textura de `GSTextureStore` quando TME está ativo e envia o lote para `rasterizeGsBatchToVram()`. O rasterizador grava em VRAM por FBP/FBW/PSM e já cobre texturas CT32 e indexadas T8/T4/T4HL/T4HH/T8H, CLUT CSM1/CSM2, modos de clamp testados, nearest/bilinear e os combinadores TFX. A cobertura de UV/STQ é inicial; não representa todo o pipeline de mipmap, perspective correction, filtering ou formatos do PS2.
+
+A etapa de fragmento inclui teste e escrita Z para Z32/Z24/Z16/Z16S, modos ZTST, alpha test/AFAIL, DATE, equação ALPHA AB/CD/FIX, PABE, FBA e COLCLAMP. Os testes presentes exercitam Z32/GEQUAL, AFAIL KEEP, DATE e uma equação AB/CD com color clamp. Fog/FGE e antialiasing continuam rejeitados; dithering, os demais casos de Z/alpha e os modos de blend ainda precisam de fixtures de referência.
+
+`presentGsVramCircuit()` lê DISPFB/DISPLAY e compõe os dois circuitos ativos; aplica MMOD/ALP, alpha do circuito 1 e SLBG/BGCOLOR. Fixtures sintéticas verificam composição, alpha fixo e fundo. Interlace, overscan e todos os casos dos registradores de display ainda não foram validados.
+
+**Evidência host:** a execução `42266913226` passou pelos testes offline de comparação, captura PPM, suíte nativa GS e VFS; o APK ARM64 estava em compilação. A execução `42266994501` repetiu as etapas host e VFS; a compilação Android ARM64 estava em andamento. Nenhum desses testes usa arquivos do jogo.
+
+### Captura e comparação de cena
+
+O helper `android_gs_scene_capture.cpp` grava o primeiro frame compacto RGBA fornecido pelo frontend GS em `gow_android_first_gs_frame.ppm`, no diretório de arquivos externos da aplicação (fallback para o interno). O Logcat registra o caminho. `tools/compare_gs_scene.py` compara capturas PPM P6 com a mesma resolução e produz métricas e um mapa de diferenças.
+
+**Ainda não é validação real:** a tabela AOT pública está vazia, a porta de carga recusa uma tabela vazia e `PS2Runtime::run()` continua bloqueado. Não há um frame de God of War produzido pelo runtime Android, nem comparação com a mesma cena em um renderer de referência. O capture/comparator prepara a etapa seguinte, mas só uma execução real no aparelho poderá concluir esse marco.
