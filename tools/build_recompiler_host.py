@@ -302,12 +302,12 @@ def main() -> int:
     shutil.copy2(neon_compat_source, neon_compat_target)
     replace_exactly_once(
         native_header,
-        "#include <immintrin.h>\\n",
-        "#if defined(__aarch64__) && defined(__ARM_NEON)\\n"
-        '#include "runtime/ps2_vu1_neon_compat.h"\\n'
-        "#else\\n"
-        "#include <immintrin.h>\\n"
-        "#endif\\n",
+        "#include <immintrin.h>\n",
+        "#if defined(__aarch64__) && defined(__ARM_NEON)\n"
+        '#include "runtime/ps2_vu1_neon_compat.h"\n'
+        "#else\n"
+        "#include <immintrin.h>\n"
+        "#endif\n",
         "select NEON compatibility layer on Android ARM64 and SSE on host x86-64",
     )
 
