@@ -27,11 +27,11 @@ diff --git a/ps2xIOP/CMakeLists.txt b/ps2xIOP/CMakeLists.txt
 +    set(PS2X_IOP_NATIVE_ONLY ON CACHE BOOL "" FORCE)
 +endif()
  
-@@ -34,1 +38,6 @@
+@@ -35,2 +35,6 @@
  )
  
 +if(PS2X_IOP_NATIVE_ONLY)
 +    target_compile_definitions(ps2_iop PRIVATE PS2X_IOP_NATIVE_ONLY=1)
 +endif()
 +
- # GOW-Port: IRX modules compiled ahead of time (tools/iop/iopn_gen.py)
+
