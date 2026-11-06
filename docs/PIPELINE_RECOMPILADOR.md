@@ -45,14 +45,17 @@ Por segurança, o script:
 1. baixa/atualiza cópias de trabalho do KIexter e do PS2Recomp nos commits fixados;
 2. aplica o patch-base ps2recomp-waffle-runtime.patch, em uma cópia privada do PS2Recomp;
 3. aplica transformações ancoradas no código Waffle para ativar PS2X_IOP_NATIVE_ONLY: se um IRX não tiver bloco AOT, o IOP registra PC/RA e interrompe aquela execução em vez de chamar o interpretador de instruções;
-4. no modo estrito, extrai a rotina de exceções para helper independente, condiciona a construção de IopCpuCore e remove core/iop_cpu.cpp da lista do alvo ps2_iop;
-5. configura e compila apenas ps2_recomp no host;
-6. configura ps2xIOP em um build separado, compila a biblioteca estática ps2_iop com PS2X_IOP_NATIVE_ONLY=ON e inspeciona compile_commands.json para garantir que core/iop_cpu.cpp não foi compilado;
-7. no modo --elf, copia o ELF e o mapa para a pasta privada, preenche @ELF@, @MAP@ e @OUT@ no template e gera os arquivos .cpp na pasta privada generated.
+4. no modo IOP estrito, extrai a rotina de exceções para helper independente, condiciona a construção de IopCpuCore e remove core/iop_cpu.cpp da lista do alvo ps2_iop;
+5. aplica PS2X_VU1_NATIVE_ONLY ao runtime: força despacho nativo, bloqueia fallback para stepInterpreted, desativa gravação/replay e verificação A/B que usam a engine exata e remove fontes de comparação PCSX2 do alvo estrito;
+6. copia o shim NEON do projeto para a árvore privada Waffle e adapta ps2_vu1_native.h para usar intrínsecos NEON sob __aarch64__/__ARM_NEON, mantendo SSE nos builds host x86-64;
+7. configura e compila ps2_recomp no host;
+8. configura ps2xIOP em um build separado, compila ps2_iop com PS2X_IOP_NATIVE_ONLY=ON e usa compile_commands.json para confirmar que core/iop_cpu.cpp não foi compilado;
+9. configura e compila o alvo ps2_runtime host com PS2X_VU1_NATIVE_ONLY=ON, verificando compile_commands.json para confirmar o define VU1 e a exclusão das fontes de diagnóstico PCSX2;
+10. no modo --elf, copia o ELF e o mapa para a pasta privada, preenche @ELF@, @MAP@ e @OUT@ no template e gera os arquivos .cpp na pasta privada generated.
 
 O script limpa alterações locais dentro das duas cópias Git privadas antes de reaplicar a revisão fixada. Não coloque arquivos próprios dentro de sources/PS2Recomp ou sources/KIexster.
 
-A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. A execução 42148409363 compilou com sucesso ps2_recomp e a biblioteca ps2_iop com a política nativa estrita; compile_commands.json confirmou que core/iop_cpu.cpp não fazia parte da build. O build IOP usou iop_native_none.cpp, sem módulos IRX reais: isso valida a exclusão da unidade de interpretação e a compilação da trava, não a cobertura AOT com arquivos de jogo.
+A CI executa o modo build-only em runner público, sem ISO/ELF, sem geração de código do jogo e sem publicação de artefatos privados. A execução 42150329023 compilou ps2_recomp, ps2_iop e ps2_runtime no host. O banco de compilação confirmou que core/iop_cpu.cpp não entrou no alvo estrito, que ps2_vu1_core.cpp recebeu PS2X_VU1_NATIVE_ONLY=1 e que as fontes diferenciais PCSX2 foram excluídas. O build IOP usou iop_native_none.cpp e não recebeu microcódigo VU1: isso valida compilação e política de fallback no host, não cobertura AOT do jogo nem a execução no Android. A adaptação NEON também está em validação separada.
 
 ## Dependências do host
 
@@ -76,6 +79,7 @@ O alvo ps2xRecomp também declara um include privado para ps2xRuntime/include. P
 - Não gera nem compila os módulos IRX do jogo (compila somente o núcleo de serviços ps2_iop e o bloqueio de fallback).
 - Não captura nem gera microprogramas VU1.
 - Não compila o C++ produzido para ARM64.
+- Não compila ps2_runtime para Android NDK; a build Waffle feita aqui é host/Linux x86-64. O smoke NEON compila a camada de compatibilidade isoladamente no APK, mas não equivale ao runtime completo.
 - Não conecta o runtime à GowGameActivity.
 - Não implementa GS/Vulkan, áudio Android, controles ou cache/VFS.
 - Não prova boot ou gameplay.
