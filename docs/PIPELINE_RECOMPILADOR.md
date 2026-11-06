@@ -26,7 +26,7 @@ O usuário precisa extrair o ELF da própria cópia do jogo. O arquivo deve corr
 
 Na raiz do repositório, execute:
 
-**python tools/build_recompiler_host.py --elf "D:/Jogos/GOW/SCUS_973.99"**
+**python tools/build_recompiler_host.py --elf "D:/Jogos/GOW/SCUS_973.99" --work-dir "D:/gowport" --export-game-cpp-dir "android/app/build/gow-generated-game"**
 
 Para compilar e validar somente a ferramenta host, sem fornecer ou acessar qualquer arquivo do jogo:
 
@@ -51,7 +51,7 @@ Por segurança, o script:
 7. configura e compila ps2_recomp no host;
 8. configura ps2xIOP em um build separado, compila ps2_iop com PS2X_IOP_NATIVE_ONLY=ON e usa compile_commands.json para confirmar que core/iop_cpu.cpp não foi compilado;
 9. configura e compila o alvo ps2_runtime host com PS2X_VU1_NATIVE_ONLY=ON, verificando compile_commands.json para confirmar o define VU1 e a exclusão das fontes de diagnóstico PCSX2;
-10. no modo --elf, copia o ELF e o mapa para a pasta privada, preenche @ELF@, @MAP@ e @OUT@ no template e gera os arquivos .cpp na pasta privada generated.
+10. no modo --elf, copia o ELF e o mapa para a pasta privada, preenche @ELF@, @MAP@ e @OUT@ no template, gera os arquivos C++ (inclusive os diretórios aninhados do modo individual) e valida register_functions.cpp e os cabeçalhos de registro.
 
 O script limpa alterações locais dentro das duas cópias Git privadas antes de reaplicar a revisão fixada. Não coloque arquivos próprios dentro de sources/PS2Recomp ou sources/KIexster.
 
@@ -99,7 +99,7 @@ O alvo ps2xRecomp também declara um include privado para ps2xRuntime/include. P
 - Não implementa GS/Vulkan, áudio Android, controles ou cache/VFS.
 - Não prova boot ou gameplay.
 
-O primeiro resultado esperado é apenas um conjunto não vazio de arquivos C++ gerados em generated/. Para marcar esta etapa como verificada, ainda será necessário executar o script com o ELF correto e registrar o resultado sem publicar o ELF, o código gerado ou logs que contenham dados privados.
+O primeiro resultado esperado é um conjunto não vazio de fontes C++ gerados em generated/, incluindo register_functions.cpp, ps2_recompiled_functions.h e ps2_recompiled_stubs.h. Com --export-game-cpp-dir, o script copia somente fontes e cabeçalhos para android/app/build/gow-generated-game (diretório ignorado pelo Git). O CMake Android detecta esse conjunto, inclui recursivamente os .cpp gerados no alvo android-game e desativa a tabela vazia de shell; sem código gerado completo, mantém a tabela vazia de zero slots. O build com código gerado ainda depende do ELF privado do usuário e precisa ser validado separadamente, sem publicar o ELF nem o C++ gerado.
 
 
 
