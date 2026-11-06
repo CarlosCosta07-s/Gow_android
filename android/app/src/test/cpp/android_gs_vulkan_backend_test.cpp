@@ -303,6 +303,88 @@ int main() {
         }
         backend.Submit(csm1Sprite);
 
+        // T4HL/T4HH select one of the two high nibbles in a 32-bit word.
+        GSTex0Reg t4hlTex0 = indexed4Tex0;
+        t4hlTex0.psm = GS_PSM_T4HL;
+        backend.LoadClut(t4hlTex0, indexed4Clut);
+        backend.WriteVram(GS_PSM_T4HL, 224u, 1u, 0u, 0u, 1u);
+        GSPrimitiveBatch t4hlSprite{};
+        t4hlSprite.vertexCount = 2u;
+        t4hlSprite.state.context.frame = triangle.state.context.frame;
+        t4hlSprite.state.context.scissor = triangle.state.context.scissor;
+        t4hlSprite.state.context.tex0 = t4hlTex0;
+        t4hlSprite.state.prim.type = GS_PRIM_SPRITE;
+        t4hlSprite.state.prim.tme = true;
+        t4hlSprite.state.prim.fst = true;
+        t4hlSprite.state.textureWidth = 1u;
+        t4hlSprite.state.textureHeight = 1u;
+        t4hlSprite.vertices[0].x = 8.0f;
+        t4hlSprite.vertices[0].y = 24.0f;
+        t4hlSprite.vertices[1].x = 12.0f;
+        t4hlSprite.vertices[1].y = 28.0f;
+        for (auto &vertex : t4hlSprite.vertices) {
+            vertex.r = 128u; vertex.g = 128u; vertex.b = 128u; vertex.a = 128u;
+        }
+        backend.Submit(t4hlSprite);
+
+        GSTex0Reg t4hhTex0 = indexed4Tex0;
+        t4hhTex0.psm = GS_PSM_T4HH;
+        backend.LoadClut(t4hhTex0, indexed4Clut);
+        backend.WriteVram(GS_PSM_T4HH, 240u, 1u, 0u, 0u, 4u);
+        GSPrimitiveBatch t4hhSprite = t4hlSprite;
+        t4hhSprite.state.context.tex0 = t4hhTex0;
+        t4hhSprite.vertices[0].x = 12.0f;
+        t4hhSprite.vertices[0].y = 24.0f;
+        t4hhSprite.vertices[1].x = 16.0f;
+        t4hhSprite.vertices[1].y = 28.0f;
+        backend.Submit(t4hhSprite);
+
+        // T8H reads indices from the high byte plane and resolves them via CSM2.
+        const std::array<uint32_t, 4> palette8h = {
+            0xFF000000u, 0xFFFFFF00u, 0xFF00FFFFu, 0xFFFF00FFu};
+        for (uint32_t index = 0u; index < palette8h.size(); ++index) {
+            backend.WriteVram(
+                GS_PSM_CT32, 512u, 4u, index, 0u, palette8h[index]);
+        }
+        backend.WriteVram(GS_PSM_T8H, 480u, 1u, 0u, 0u, 1u);
+        backend.WriteVram(GS_PSM_T8H, 480u, 1u, 1u, 0u, 2u);
+        backend.WriteVram(GS_PSM_T8H, 480u, 1u, 0u, 1u, 3u);
+        backend.WriteVram(GS_PSM_T8H, 480u, 1u, 1u, 1u, 4u);
+        GSTex0Reg t8hTex0{};
+        t8hTex0.tbp0 = 480u;
+        t8hTex0.tbw = 1u;
+        t8hTex0.psm = GS_PSM_T8H;
+        t8hTex0.tcc = 1u;
+        t8hTex0.cbp = 512u;
+        t8hTex0.cpsm = GS_PSM_CT32;
+        t8hTex0.csm = 1u;
+        t8hTex0.cld = 1u;
+        GSTexClutReg t8hClut{};
+        t8hClut.cbw = 4u;
+        backend.LoadClut(t8hTex0, t8hClut);
+        GSPrimitiveBatch t8hSprite{};
+        t8hSprite.vertexCount = 2u;
+        t8hSprite.state.context.frame = triangle.state.context.frame;
+        t8hSprite.state.context.scissor = triangle.state.context.scissor;
+        t8hSprite.state.context.tex0 = t8hTex0;
+        t8hSprite.state.prim.type = GS_PRIM_SPRITE;
+        t8hSprite.state.prim.tme = true;
+        t8hSprite.state.prim.fst = true;
+        t8hSprite.state.textureWidth = 2u;
+        t8hSprite.state.textureHeight = 2u;
+        t8hSprite.vertices[0].x = 16.0f;
+        t8hSprite.vertices[0].y = 24.0f;
+        t8hSprite.vertices[0].u = 0u;
+        t8hSprite.vertices[0].v = 0u;
+        t8hSprite.vertices[1].x = 20.0f;
+        t8hSprite.vertices[1].y = 28.0f;
+        t8hSprite.vertices[1].u = 32u;
+        t8hSprite.vertices[1].v = 32u;
+        for (auto &vertex : t8hSprite.vertices) {
+            vertex.r = 128u; vertex.g = 128u; vertex.b = 128u; vertex.a = 128u;
+        }
+        backend.Submit(t8hSprite);
+
         GSPresentationRequest presentation{};
         presentation.pmode = 1u;
         presentation.dispfb1 =
