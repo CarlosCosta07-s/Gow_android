@@ -17,6 +17,8 @@
 
 namespace {
 gow::disc::CdRootVfs g_cdRoot;
+uint32_t g_cdRootOpenCalls = 0u;
+std::string g_lastCdRootOpenPath;
 
 int fail(const char *message) {
     std::cerr << "FAIL: " << message << '\n';
@@ -41,6 +43,8 @@ bool writeFixture(const std::filesystem::path &path,
 extern "C" uint64_t gowAndroidCdRootOpenFile(
     const char *path, uint64_t *fileSize) noexcept {
     if (fileSize != nullptr) *fileSize = 0u;
+    ++g_cdRootOpenCalls;
+    g_lastCdRootOpenPath = path != nullptr ? path : "<null>";
     if (path == nullptr || path[0] == '\0' || fileSize == nullptr) return 0u;
 
     gow::disc::CdRootFile file{};
@@ -108,6 +112,25 @@ int main() {
         return fail(("could not mount synthetic private cdRoot: " + error).c_str());
     }
 
+    const auto parsedCdPath = ps2x::iop::parsePs2Path("cdrom0:/data/boot.bin;1");
+    if (!parsedCdPath ||
+        parsedCdPath.device != ps2x::iop::Ps2PathDevice::Cdrom ||
+        parsedCdPath.path != "data/boot.bin") {
+        g_cdRoot.close();
+        std::filesystem::remove_all(root);
+        return fail("PS2 cdrom path parser returned an unexpected device or suffix");
+    }
+
+    uint64_t directFileSize = 0u;
+    const uint64_t directHandle =
+        gowAndroidCdRootOpenFile("data/boot.bin", &directFileSize);
+    if (directHandle == 0u || directFileSize != payload.size()) {
+        g_cdRoot.close();
+        std::filesystem::remove_all(root);
+        return fail("direct Android cdRoot bridge could not open the synthetic file");
+    }
+    gowAndroidCdRootCloseFile(directHandle);
+
     PS2Vfs vfs;
     PS2VfsMounts mounts;
     // The runtime keeps the real private directory for DiscSource/LSN access.
@@ -119,6 +142,10 @@ int main() {
     const int32_t descriptor = vfs.open(
         "cdrom0:/data/boot.bin;1", PS2_FIO_O_RDONLY, mounts, rom);
     if (descriptor < 0) {
+        std::cerr << "DEBUG: parsed device=" << parsedCdPath.deviceName
+                  << " parsed path=" << parsedCdPath.path
+                  << " bridge calls=" << g_cdRootOpenCalls
+                  << " last bridge path=" << g_lastCdRootOpenPath << '\\n';
         g_cdRoot.close();
         std::filesystem::remove_all(root);
         return fail("PS2Vfs could not open cdrom0 path through the private-root bridge");
