@@ -8,13 +8,13 @@ A direção de arte é minimalista e moderna: superfícies grafite, tipografia s
 
 ## Ícone
 
-O ícone adaptativo do aplicativo é uma **bigorna com uma faísca** (referência ao nome FORGE), em aço claro sobre um fundo grafite iluminado por um brilho de brasa vermelha na parte inferior. É arte vetorial original do projeto, composta por três camadas em `res/drawable/`:
+O ícone adaptativo do aplicativo é um **Ômega branco sobre um fundo vermelho em degradê para preto, com pontos simulando brasas**. É arte vetorial original do projeto, composta por três camadas em `res/drawable/`:
 
-- `ic_app_icon_background.xml`: fundo em gradiente radial (grafite `#0D0F12` → brasa `#C5222D`);
-- `ic_app_icon_foreground.xml`: bigorna, ponto de calor e faíscas, dentro da zona segura de 66 dp;
-- `ic_app_icon_monochrome.xml`: a mesma silhueta em um único tom, para ícones temáticos do Android.
+- `ic_app_icon_background.xml`: gradiente linear do vermelho (`#D42C38`, canto superior) ao preto (`#08090B`, canto inferior), com pontos de brasa em âmbar, laranja e dourado claro, em opacidades e tamanhos variados;
+- `ic_app_icon_foreground.xml`: o Ômega branco em traço, reduzido a 85% e centralizado para ficar inteiro dentro da zona segura de 66 dp (máscaras circulares não o cortam);
+- `ic_app_icon_monochrome.xml`: o mesmo Ômega em um único tom, para ícones temáticos do Android.
 
-O emblema Ômega usado dentro do launcher (`drawable/ic_launcher_emblem.xml`) é um recurso separado e não foi alterado.
+O traçado do Ômega é o mesmo do emblema usado dentro do launcher (`drawable/ic_launcher_emblem.xml`), que continua sendo um recurso separado e não foi alterado.
 
 Não são usados retratos de Kratos, screenshots ou materiais extraídos do jogo.
 

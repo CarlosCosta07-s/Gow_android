@@ -38,7 +38,7 @@ Não queremos um emulador genérico, uma ISO dentro do APK ou um caminho final b
 
 **FORGE** é o nome da interface de biblioteca do projeto. Sua organização moderna inclui navegação lateral, biblioteca do jogo, ações rápidas e cartões de status. A direção visual combina tons grafite, tipografia limpa e detalhes vermelhos, com referência sutil à identidade grega de God of War I.
 
-O ícone adaptativo instalado é uma **bigorna com uma faísca** sobre um fundo grafite com brilho de brasa, desenhada como vetor original, com camada monocromática para ícones temáticos do Android. O recurso do ícone do aplicativo é separado do emblema usado dentro do launcher FORGE, então a atualização do ícone não altera os elementos visuais da biblioteca. O cabeçalho do launcher mostra a hora e a bateria do aparelho. Não são utilizados retratos de Kratos, capturas do jogo ou artes promocionais.
+O ícone adaptativo instalado é um **Ômega branco sobre um fundo vermelho em degradê para preto, com pontos simulando brasas**, desenhado como vetor original, com camada monocromática para ícones temáticos do Android. O recurso do ícone do aplicativo é separado do emblema usado dentro do launcher FORGE, então a atualização do ícone não altera os elementos visuais da biblioteca. O cabeçalho do launcher mostra a hora e a bateria do aparelho. Não são utilizados retratos de Kratos, capturas do jogo ou artes promocionais.
 
 ## Controles do port dentro do jogo
 

@@ -63,7 +63,7 @@
 
 ## [COMPILADO, NÃO TESTADO EM APARELHO] Refinamento do launcher, novo ícone, hora e bateria
 
-- Novo ícone adaptativo original (bigorna com faísca; fundo, primeiro plano e camada monocromática). Conferido por renderização de prévia em círculo, quadrado arredondado e tema monocromático, com a arte dentro da zona segura. Não foi instalado nem visto em um launcher real.
+- Novo ícone adaptativo original: Ômega branco sobre fundo vermelho em degradê para preto com pontos de brasa (fundo, primeiro plano e camada monocromática). A revisão por prévia renderizada (círculo, quadrado arredondado e tema monocromático) mostrou o Ômega grande demais para a zona segura; ele foi reduzido a 85% e recentralizado. A prévia é uma renderização dos próprios XML, não uma captura de launcher: o ícone ainda não foi instalado nem visto em um aparelho.
 - Cabeçalho do FORGE com hora/data e bateria (`DeviceStatusMonitor`, `BatteryGaugeView`, `BatteryReading`). A lógica de `BatteryReading` tem teste JVM (que passa no host e foi adicionado à CI). As classes Android compilam sem avisos novos contra o `android.jar` da API 34; o comportamento em tela, o receptor e o layout em aparelhos reais **não foram exercitados**.
 - Correções: duas caixas de diálogo exibiam `\n\n` literal em vez de quebra de linha; a versão exibida agora vem do pacote (antes estava duplicada no código); o modo imersivo é reaplicado ao recuperar o foco; rótulos de 7–8 sp foram aumentados para 8–9 sp onde havia espaço.
 - Pendente: validar legibilidade e proporções em outros tamanhos de tela (item já aberto na Fase 1).
