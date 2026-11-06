@@ -24,6 +24,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from build_recompiler_host import validate_ps2_elf
+from sync_android_aot_captures import (
+    NoDeviceCaptures,
+    pull_private_aot_captures,
+)
 
 
 @dataclass(frozen=True)
@@ -409,6 +413,11 @@ def main() -> int:
         default=str(default_work),
         help="private ASCII-only build workspace outside the repository",
     )
+    parser.add_argument(
+        "--device-serial",
+        default=None,
+        help=argparse.SUPPRESS,
+    )
     build_mode = parser.add_mutually_exclusive_group()
     build_mode.add_argument(
         "--capture-bootstrap",
@@ -503,6 +512,20 @@ def main() -> int:
         prepared_runtime = True
         elf_path = extract_iso_elf(iso_path, work, root)
         print(f"Automatically extracted private ELF: {elf_path}")
+        if captures_zip is None:
+            try:
+                captures_zip = pull_private_aot_captures(
+                    work,
+                    root,
+                    device_serial=args.device_serial,
+                )
+                print("Private VU1/IOP captures were synchronized automatically; no manual export is required.")
+            except NoDeviceCaptures as error:
+                print(
+                    "No private Android AOT captures are available yet; "
+                    "continuing with the first strict capture bootstrap. "
+                    f"Details: {error}"
+                )
     elif elf_path is not None and args.plan_only:
         plan = create_build_plan(root, elf_path, work)
         print("Private ELF: " + str(plan.elf))
