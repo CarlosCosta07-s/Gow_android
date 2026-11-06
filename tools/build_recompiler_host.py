@@ -479,6 +479,33 @@ def main() -> int:
     )
 
     runtime_header = recompiler_source / "ps2xRuntime/include/ps2_runtime.h"
+
+    replace_exactly_once(
+        runtime_header,
+        "#include <unordered_set>\\n",
+        "#include <unordered_set>\\n"
+        "#include <thread>\\n",
+        "include thread ownership for the Android guest worker",
+    )
+    replace_exactly_once(
+        runtime_header,
+        "    void run();\\n",
+        "    void run();\\n"
+        "    // Android-only guest worker; presentation stays on the GameActivity thread.\\n"
+        "    bool startGuestExecutionAndroid();\\n"
+        "    void stopGuestExecutionAndroid() noexcept;\\n"
+        "    [[nodiscard]] bool isGuestExecutionFinishedAndroid() const noexcept;\\n",
+        "expose a Raylib-free Android guest execution lifecycle",
+    )
+    replace_exactly_once(
+        runtime_header,
+        "    std::atomic<bool> m_stopRequested{false};\\n",
+        "    std::atomic<bool> m_stopRequested{false};\\n"
+        "    std::thread m_androidGuestThread;\\n"
+        "    std::atomic<bool> m_androidGuestStarted{false};\\n"
+        "    std::atomic<bool> m_androidGuestFinished{true};\\n",
+        "track the Android guest worker independently from Raylib presentation",
+    )
     replace_exactly_once(
         runtime_header,
         "    bool initialize(const char *title = \"PS2 Game\");\n",
@@ -1031,6 +1058,114 @@ def main() -> int:
         "    }\n",
         "block Android guest execution until presentation and AOT prerequisites are met",
     )
+
+    replace_exactly_once(
+        runtime_cpp,
+        "PS2Runtime::~PS2Runtime()\\n{\\n    try\\n    {\\n        requestStop();\\n",
+        "PS2Runtime::~PS2Runtime()\\n{\\n    try\\n    {\\n"
+        "        stopGuestExecutionAndroid();\\n"
+        "        requestStop();\\n",
+        "join the Android guest worker before destroying IOP and memory",
+    )
+
+    replace_exactly_once(
+        runtime_cpp,
+        "void PS2Runtime::run()\\n{\\n"
+        "#if defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\\n",
+        "bool PS2Runtime::startGuestExecutionAndroid()\\n"
+        "{\\n"
+        "#if !defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\\n"
+        "    std::cerr << \\"Android guest execution is unavailable in the desktop runtime profile.\\" << std::endl;\\n"
+        "    return false;\\n"
+        "#else\\n"
+        "    if (!m_coreInitialized || !m_eeScheduler || m_cpuContext.pc == 0u || !hasFunction(m_cpuContext.pc))\\n"
+        "    {\\n"
+        "        std::cerr << \\"Android guest execution requires an initialized core, a loaded ELF and a registered AOT entrypoint.\\" << std::endl;\\n"
+        "        return false;\\n"
+        "    }\\n"
+        "    if (m_androidGuestThread.joinable())\\n"
+        "    {\\n"
+        "        std::cerr << \\"The previous Android guest worker must be joined before starting another session.\\" << std::endl;\\n"
+        "        return false;\\n"
+        "    }\\n"
+        "    bool expected = false;\\n"
+        "    if (!m_androidGuestStarted.compare_exchange_strong(expected, true, std::memory_order_acq_rel))\\n"
+        "        return false;\\n"
+        "    m_androidGuestFinished.store(false, std::memory_order_release);\\n"
+        "    m_stopRequested.store(false, std::memory_order_release);\\n"
+        "    try\\n"
+        "    {\\n"
+        "        ps2_stubs::resetSifState();\\n"
+        "        resetIop();\\n"
+        "        ps2_stubs::resetAudioStubState();\\n"
+        "        ps2_stubs::resetMpegStubState();\\n"
+        "        initializeEeKernelState(m_memory.getRDRAM());\\n"
+        "        m_cpuContext.r[4] = _mm_setzero_si128();\\n"
+        "        m_cpuContext.r[5] = _mm_setzero_si128();\\n"
+        "        m_cpuContext.r[29] = _mm_set_epi64x(0, static_cast<int64_t>(PS2_RAM_SIZE - 0x10u));\\n"
+        "        m_debugPc.store(m_cpuContext.pc, std::memory_order_relaxed);\\n"
+        "        m_debugRa.store(static_cast<uint32_t>(_mm_extract_epi32(m_cpuContext.r[31], 0)), std::memory_order_relaxed);\\n"
+        "        m_debugSp.store(static_cast<uint32_t>(_mm_extract_epi32(m_cpuContext.r[29], 0)), std::memory_order_relaxed);\\n"
+        "        m_debugGp.store(static_cast<uint32_t>(_mm_extract_epi32(m_cpuContext.r[28], 0)), std::memory_order_relaxed);\\n"
+        "        RUNTIME_LOG(\\"Starting Android guest execution at 0x\\" << std::hex << m_cpuContext.pc << std::dec);\\n"
+        "        m_eeScheduler->reset(m_memory.getRDRAM(), m_cpuContext);\\n"
+        "        m_androidGuestThread = std::thread([this]()\\n"
+        "        {\\n"
+        "            ThreadNaming::SetCurrentThreadName(\\"GowAndroidGuest\\");\\n"
+        "            try\\n"
+        "            {\\n"
+        "                m_eeScheduler->run();\\n"
+        "                RUNTIME_LOG(\\"Android guest worker returned. PC=0x\\" << std::hex << m_debugPc.load(std::memory_order_relaxed) << std::dec);\\n"
+        "            }\\n"
+        "            catch (const std::exception &e)\\n"
+        "            {\\n"
+        "                std::cerr << \\"Android guest execution failed: \\" << e.what() << std::endl;\\n"
+        "            }\\n"
+        "            catch (...)\\n"
+        "            {\\n"
+        "                std::cerr << \\"Android guest execution failed: unknown exception\\" << std::endl;\\n"
+        "            }\\n"
+        "            m_androidGuestFinished.store(true, std::memory_order_release);\\n"
+        "            m_androidGuestStarted.store(false, std::memory_order_release);\\n"
+        "        });\\n"
+        "    }\\n"
+        "    catch (const std::exception &e)\\n"
+        "    {\\n"
+        "        m_androidGuestStarted.store(false, std::memory_order_release);\\n"
+        "        m_androidGuestFinished.store(true, std::memory_order_release);\\n"
+        "        m_stopRequested.store(true, std::memory_order_release);\\n"
+        "        std::cerr << \\"Could not start Android guest worker: \\" << e.what() << std::endl;\\n"
+        "        return false;\\n"
+        "    }\\n"
+        "    return true;\\n"
+        "#endif\\n"
+        "}\\n\\n"
+        "void PS2Runtime::stopGuestExecutionAndroid() noexcept\\n"
+        "{\\n"
+        "#if defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\\n"
+        "    requestStop();\\n"
+        "    if (m_androidGuestThread.joinable())\\n"
+        "    {\\n"
+        "        if (m_androidGuestThread.get_id() == std::this_thread::get_id())\\n"
+        "            m_androidGuestThread.detach();\\n"
+        "        else\\n"
+        "        {\\n"
+        "            try { m_androidGuestThread.join(); }\\n"
+        "            catch (...) { m_androidGuestThread.detach(); }\\n"
+        "        }\\n"
+        "    }\\n"
+        "    m_androidGuestStarted.store(false, std::memory_order_release);\\n"
+        "#endif\\n"
+        "}\\n\\n"
+        "bool PS2Runtime::isGuestExecutionFinishedAndroid() const noexcept\\n"
+        "{\\n"
+        "    return m_androidGuestFinished.load(std::memory_order_acquire);\\n"
+        "}\\n\\n"
+        "void PS2Runtime::run()\\n{\\n"
+        "#if defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\\n",
+        "add a dedicated Android guest worker without Raylib window or drawing calls",
+    )
+
     replace_exactly_once(
         runtime_cpp,
         "static bool gowUsePcsx2Vu1()\n{",
