@@ -31,6 +31,6 @@ extern "C" __attribute__((visibility("hidden"))) float gow_vu1_neon_compat_smoke
     _mm_setcsr(saved);
 
     _mm_storeu_ps(lanes, roundTrip);
-    _mm_store_ps(lanes, _mm_add_ps(roundTrip, _mm_castsi128_ps(_mm_set1_epi32(0))));
+    _mm_storeu_ps(lanes, _mm_add_ps(roundTrip, _mm_castsi128_ps(_mm_set1_epi32(0))));
     return static_cast<float>(scalar ^ floatMask ^ byteMask);
 }
