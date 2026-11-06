@@ -118,11 +118,14 @@ def main() -> int:
         require(forbidden not in worker_body, f"Android guest worker touches Raylib presentation: {forbidden}")
     stop_start = runtime.find("void PS2Runtime::stopGuestExecutionAndroid()")
     stop_end = runtime.find("bool PS2Runtime::isGuestExecutionFinishedAndroid()", stop_start)
+    stop_body = runtime[stop_start:stop_end]
     require(
         stop_start >= 0 and stop_end > stop_start
-        and "requestStop()" in runtime[stop_start:stop_end]
-        and "m_androidGuestThread.join()" in runtime[stop_start:stop_end],
-        "Android guest worker shutdown does not request stop and join its thread.",
+        and "requestStop()" in stop_body
+        and "m_androidGuestThread.join()" in stop_body
+        and "std::terminate()" in stop_body
+        and ".detach()" not in stop_body,
+        "Android guest worker shutdown must request stop, join, and never detach a thread that can still access the runtime.",
     )
     require(
         "stopGuestExecutionAndroid();" in runtime[
