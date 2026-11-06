@@ -2,13 +2,19 @@
 
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
-> Estado em 06/11/2026: as CIs Android #381–#389 validaram a captura incremental VU1/IOP, exportação ZIP privada, registro de PCs VU1 dinâmicos, checker do primeiro boot, compilação ARM64 e assinatura; o APK Debug mais recente foi publicado no artefato `13542334085` (run #389). A CI host #98 também compilou o runtime/recompilador estrito sem dados do jogo. **Ainda não há gameplay nem cena real validada:** não recebemos o ELF NTSC-U nem as capturas privadas do jogo, e nenhuma sessão real foi executada no aparelho. O worker não interpreta instruções ausentes: ele para com diagnóstico. Áudio Android, cobertura completa do GS, FMVs, saves e GPU física continuam pendentes.
+> Estado em 06/11/2026: a base Android ARM64 e o runtime estrito têm builds de CI anteriores aprovadas. O fluxo de desenvolvimento está sendo consolidado para aceitar **somente a ISO original** como entrada do jogo: o host prepara o recompilador fixado, extrai ELF/IRX/pacotes automaticamente e gera a build Android; capturas VU1/IOP posteriores serão sincronizadas do armazenamento privado do aparelho via ADB, sem exportações manuais. As alterações do fluxo ISO-only e da sincronização ADB ainda precisam passar pela nova CI. **Ainda não há boot real, gameplay ou cena real validada.** O produto final continua Android ARM64; o host é apenas ferramenta de geração/compilação AOT.
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml) [![Host recompiler](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml)
 
-## Build AOT Android a partir do ELF privado
+## Build AOT Android usando somente a ISO original
 
-O fluxo local está documentado em [docs/ANDROID_AOT_LOCAL_BUILD.md](docs/ANDROID_AOT_LOCAL_BUILD.md). Ele recebe o ELF NTSC-U `SCUS_973.99` da própria cópia do usuário, mantém o workspace fora do repositório e prepara o runtime Waffle no host. O primeiro APK usa `--capture-bootstrap`; a execução estrita Android captura microprogramas VU1 e módulos IRX/IOP em armazenamento privado. O botão Debug **Exportar dados AOT** cria um ZIP via seletor Android, que o host valida e converte em C++ nativo para ARM64 com `--aot-captures`. O ciclo pode ser repetido com capturas parciais; nenhum bloco sem implementação nativa cai em interpretação. ELF, ZIP, IRX, microcódigo e C++ gerado permanecem fora do repositório e da CI. **Esse fluxo ainda não foi executado com a mídia do usuário nem em aparelho.**
+O fluxo está documentado em [docs/ANDROID_ISO_ONLY_BUILD.md](docs/ANDROID_ISO_ONLY_BUILD.md). O comando de desenvolvimento recebe a própria ISO:
+
+```powershell
+python tools/build_android_game.py --iso "D:\GowPrivate\God of War.iso" --work-dir "C:\gowport"
+```
+
+O host prepara as ferramentas fixadas, extrai automaticamente `SYSTEM.CNF`, `SCUS_973.99`, IRX, pacotes e metadados de setores, gera o C++ privado do EE e compila o APK Android ARM64. O ELF não é uma entrada fornecida pelo usuário. A primeira build é um bootstrap AOT estrito; depois que o aparelho carrega o jogo, as capturas VU1/IOP ficam no armazenamento privado e o mesmo comando tenta sincronizá-las via ADB para a geração nativa seguinte. **Não há botões para exportar ELF, ZIP de capturas ou logs.** Nenhum dado derivado do jogo vai para o GitHub ou CI. A geração ainda precisa ser validada com a ISO do usuário e numa sessão real Android.
 
 ## Pipeline gráfico GS experimental (Debug)
 
@@ -75,7 +81,7 @@ Referências adicionais:
 ## Roadmap
 
 1. Validar em aparelho a identificação ISO9660/SYSTEM.CNF e preparar a leitura dos dados do disco no layout exigido pelo runtime.
-2. Executar PS2Recomp com a configuração e o mapa de funções do KIexter para gerar C++ do ELF privado (o executável host já compila na CI).
+2. Receber somente a ISO, extrair automaticamente o ELF NTSC-U e executar PS2Recomp com o mapa de funções KIexster para gerar C++ privado.
 3. Adaptar os módulos portáveis do runtime Waffle/KIexter e os overrides específicos do jogo para ARM64.
 4. Integrar a geração AOT de VU1 e dos módulos IRX necessários, sem fallback interpretado no produto final.
 5. Adaptar a entrada nativa do jogo ao Android e desenvolver o backend GS/Vulkan.
@@ -109,6 +115,7 @@ A licença GPL-3.0 deste repositório cobre somente o código que seus autores p
 - [Referências de ports Android e integração dos controles no jogo](docs/REFERENCIAS_ANDROID.md)
 - [Arquitetura técnica](docs/ARQUITETURA.md)
 - [Base KIexter: arquivos, origem e adaptação Android](docs/BASE_KIEXTER.md)
+- [Fluxo de build com somente a ISO original](docs/ANDROID_ISO_ONLY_BUILD.md)
 - [Pipeline host do recompilador](docs/PIPELINE_RECOMPILADOR.md)
 - [Auditoria do GS e plano de backend Vulkan Android](docs/GS_VULKAN_ANDROID.md)
 - [Leitor ISO9660, cdRoot e integração do VFS Android](docs/DISC_VFS_ANDROID.md)
