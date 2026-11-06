@@ -2,15 +2,19 @@
 
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
-> Estado em 06/11/2026: o APK Debug ARM64 foi compilado e publicado pela CI [42250619735](https://github.com/CarlosCosta07-s/Gow_android/actions/runs/42250619735). O FORGE valida e instala a imagem do usuário, verifica integridade/ISO9660/CDVD em fixtures e agora abre a `GowGameActivity` com o caminho privado do BOOT2. O ciclo nativo aguarda a configuração JNI e executa uma porta de validação ELF/AOT protegida: o APK público ainda usa a tabela AOT vazia e não carrega/executa o jogo. A carga só passa quando o ELF privado é acessível, existe código AOT ligado e a função de entrada está registrada. **Não há gameplay:** a ponte experimental de apresentação RGBA→Vulkan foi compilada, mas o backend GS Vulkan (rasterização, render targets, PSM/CLUT, depth/blend) ainda não existe; áudio Android, cobertura VU1/IOP AOT e cadeia real de boot também continuam pendentes. A CI `42252442268` também aprovou o reset da configuração BOOT2 entre sessões e o registro da Activity antes do início da thread nativa. As CIs `42255177609` e `42255283925` também aprovaram o presenter de transferência RGBA e a invalidação do cache após recriação da swapchain. A CI prova compilação e testes sintéticos, não funcionamento em aparelho com a ISO do usuário.
-
-
+> Estado em 06/11/2026: o APK Debug ARM64 agora compila o pipeline Vulkan experimental para primitivas coloridas (pontos, linhas, triângulos e sprites), e o FORGE encaminha `cdRoot`/BOOT2 à `GowGameActivity`. A CI `42258945494` aprovou a compilação com `GOW_ANDROID_ENABLE_GS_VULKAN=ON`; o artefato é `gow-android-arm64-shell` ID `13524346408`. **Não há gameplay ainda:** o pipeline não rasteriza texturas/CLUT, render targets VRAM/FBP, depth, alpha test/DATE, blending, fog nem composição de DISPLAY/PMODE; o áudio Android e a cobertura AOT VU1/IOP/boot também faltam. A tabela AOT do APK público está vazia e `PS2Runtime::run()` continua bloqueado. A CI comprova compilação e testes sintéticos, não funcionamento gráfico num aparelho nem a execução do jogo.
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml) [![Host recompiler](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml)
 
 ## Build AOT Android a partir do ELF privado
 
 O fluxo local está documentado em [docs/ANDROID_AOT_LOCAL_BUILD.md](docs/ANDROID_AOT_LOCAL_BUILD.md). Ele recebe o ELF NTSC-U `SCUS_973.99` da própria cópia do usuário, mantém o workspace fora do repositório, exporta o C++ para `android/app/build/gow-generated-game/` (Git-ignored) e compila o APK Debug ARM64. A CI testa o orquestrador e as regras de privacidade com fixtures, sem ler ou enviar conteúdo do jogo. Esse APK poderá validar a ligação da tabela AOT e a porta de carga ELF; ainda não libera gameplay.
+
+## Pipeline Vulkan GS experimental (Debug)
+
+O APK Debug ativa `GOW_ANDROID_ENABLE_GS_VULKAN=ON` e, quando a `ANativeWindow` está pronta, substitui o backend GS nulo pelo adaptador experimental. Ele encaminha lotes do frontend Waffle para pipelines Vulkan point/line/triangle e os desenha como cor sólida na surface Android. A fila é protegida entre a thread GS e a thread da surface e é limpa na perda/recriação da janela.
+
+Esse estágio é **somente uma prova da ligação da geometria e do pipeline**. Não representa a memória de framebuffer GS correta e ainda ignora texturas, CLUT no shader, depth, alpha test/DATE, blending, fog, FBP/PSM render targets e composição do sinal de vídeo. A compilação não prova que God of War iniciou ou que uma cena foi apresentada. Consulte [docs/GS_VULKAN_ANDROID.md](docs/GS_VULKAN_ANDROID.md).
 
 ## Objetivo
 
