@@ -352,3 +352,12 @@ A extração usa buffer de 1 MiB e atualiza o callback de progresso/cancelamento
 - A Android shell #352 passou após corrigir a configuração Gradle. A CI #353 adiciona a verificação `apksigner` e a impressão do fingerprint no resumo; ainda falta configurar e validar os Secrets com uma chave privada do mantenedor. Os APKs antigos não mudam retroativamente de assinatura.
 - Não desinstalar um APK Debug antigo apenas para instalar uma execução diferente: isso apaga o armazenamento privado, incluindo a instalação do disco. A migração/backup dessa instalação ainda não foi implementada.
 
+
+## Correção da CI de assinatura do APK — 06/11/2026
+
+- **[DIAGNÓSTICO CONFIRMADO]** Na Android shell #355, as etapas de testes e `assembleDebug` terminaram com sucesso. A falha ocorreu exclusivamente em `Verify APK signature and print certificate`.
+- A saída real do `apksigner` do runner usou o formato `V2 Signer: certificate SHA-256 digest: <fingerprint>`; o parser anterior procurava somente `Signer #1 certificate SHA-256 digest:`. Assim, o APK estava assinado e verificável, mas a variável do fingerprint ficava vazia e o step encerrava com código 1.
+- **[CORREÇÃO ENVIADA À main]** Commit `786264d367ccf4ba79fdbc2a60b9ee0c8018a321` altera o parser para capturar o último campo após `: ` e exige exatamente 64 caracteres hexadecimais. Se o formato voltar a ser desconhecido, o step imprime a saída de diagnóstico e falha com mensagem explícita.
+- A execução #356 (`42290930731`) foi iniciada para validar a correção. Até esta revisão, ainda estava em andamento; não declarar APK publicado antes do resultado final.
+- Os quatro secrets de assinatura persistente continuam não configurados. Na ausência deles, o runner usa uma chave Debug efêmera: o APK pode ser instalado numa instalação nova, mas não é garantido que atualize uma instalação criada por outra execução. Não desinstalar o app antigo enquanto os dados privados do disco não estiverem preservados.
+
