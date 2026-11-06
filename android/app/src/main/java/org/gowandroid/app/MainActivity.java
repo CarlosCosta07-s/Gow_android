@@ -75,6 +75,8 @@ public final class MainActivity extends AppCompatActivity {
     private static native String nativeInstallIsoDisc(
             int descriptor, String privateRoot, String finalDirectoryName,
             InstallProgressCallback progressCallback);
+    private static native String nativeRemoveInstallationDirectory(
+            String privateRoot, String installationDirectoryName);
 
     private static native boolean nativeSetCdRootDirectory(String privateCdRoot);
     private static native String nativeValidateCdRootElf(String relativePath);
@@ -705,6 +707,11 @@ public final class MainActivity extends AppCompatActivity {
         return view;
     }
 
+    private String installationDirectoryName(String serial) {
+        return "gow_" + serial.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
+    }
+
     private void onPlayPressed() {
         if (selectedDiscUri == null) {
             new AlertDialog.Builder(this)
@@ -731,6 +738,23 @@ public final class MainActivity extends AppCompatActivity {
             return;
         }
 
+        File installationRoot = new File(getFilesDir(), "installations");
+        File existingInstallation = new File(
+                installationRoot, installationDirectoryName(selectedDiscSerial));
+        if (existingInstallation.exists()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Verificar disco instalado")
+                    .setMessage(
+                            "Já existe uma instalação privada para " + selectedDiscSerial
+                                    + ". O FORGE vai conferir o ELF, os metadados do disco "
+                                    + "e o serviço CDVD antes de permitir qualquer próxima etapa. "
+                                    + "Esta verificação não inicia o jogo.")
+                    .setPositiveButton("Verificar", (dialog, which) -> startFullDiscInstall())
+                    .setNegativeButton("Cancelar", null)
+                    .show();
+            return;
+        }
+
         new AlertDialog.Builder(this)
                 .setTitle("Preparar instalação do disco")
                 .setMessage(
@@ -746,6 +770,10 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void startFullDiscInstall() {
+        startFullDiscInstall(false);
+    }
+
+    private void startFullDiscInstall(boolean repairExisting) {
         if (installingDisc || selectedDiscUri == null
                 || selectedDiscBootPath == null || !selectedDiscValid) {
             return;
@@ -754,12 +782,11 @@ public final class MainActivity extends AppCompatActivity {
         final Uri sourceUri = selectedDiscUri;
         final String expectedSerial = selectedDiscSerial;
         final String bootPath = selectedDiscBootPath;
-        final String installationName = "gow_" + expectedSerial.toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
+        final String installationName = installationDirectoryName(expectedSerial);
         final File installationRoot = new File(getFilesDir(), "installations");
         final File finalInstallation = new File(installationRoot, installationName);
 
-        if (finalInstallation.exists()) {
+        if (finalInstallation.exists() && !repairExisting) {
             File cdRoot = new File(finalInstallation, "disc");
             boolean metadataReady =
                     new File(cdRoot, ".disc_layout").isFile()
@@ -797,17 +824,24 @@ public final class MainActivity extends AppCompatActivity {
                             + "\nCDVD/IOP: " + iopCdvdValidation;
             String runtimeStatus = installationValid
                     ? "DiscSource e o dispatcher CDVD do IOP passaram na verificação privada; o runtime de gameplay ainda não foi iniciado."
-                    : "A instalação precisa ser reparada ou reinstalada antes de ser utilizada.";
-            new AlertDialog.Builder(this)
+                    : "A instalação não será utilizada enquanto a validação falhar. Você pode solicitar uma reinstalação dos arquivos desta revisão.";
+            AlertDialog.Builder resultDialog = new AlertDialog.Builder(this)
                     .setTitle(installationValid
                             ? "Instalação do disco verificada"
                             : "Instalação existente incompleta")
                     .setMessage(
                             "A pasta de instalação já existe no armazenamento privado. "
                                     + detail + "\n\n"
-                                    + runtimeStatus)
-                    .setPositiveButton("Entendi", null)
-                    .show();
+                                    + runtimeStatus);
+            if (installationValid) {
+                resultDialog.setPositiveButton("Continuar", null);
+            } else {
+                resultDialog
+                        .setPositiveButton("Reinstalar", (dialog, which) ->
+                                confirmInstallationRepair())
+                        .setNegativeButton("Cancelar", null);
+            }
+            resultDialog.show();
             return;
         }
 
@@ -844,6 +878,15 @@ public final class MainActivity extends AppCompatActivity {
                     throw new IOException(
                             "A identidade da imagem mudou desde a validação inicial. "
                                     + "Selecione e valide novamente o disco.");
+                }
+
+                if (repairExisting) {
+                    String removalError = nativeRemoveInstallationDirectory(
+                            installationRoot.getAbsolutePath(), installationName);
+                    if (removalError != null && !removalError.isEmpty()) {
+                        throw new IOException(
+                                "A instalação anterior não foi removida: " + removalError);
+                    }
                 }
 
                 final int[] lastPercent = {-1};
@@ -931,6 +974,20 @@ public final class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void confirmInstallationRepair() {
+        new AlertDialog.Builder(this)
+                .setTitle("Confirmar reinstalação")
+                .setMessage(
+                        "A pasta privada da instalação atual será removida e recriada "
+                                + "a partir da imagem selecionada. Outros arquivos e instalações "
+                                + "não serão afetados. A reinstalação só começa depois de a imagem "
+                                + "ser reaberta e sua identidade ser confirmada.")
+                .setPositiveButton("Apagar e reinstalar", (dialog, which) ->
+                        startFullDiscInstall(true))
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
     private void showDiscInstallProgressDialog() {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -985,7 +1042,8 @@ public final class MainActivity extends AppCompatActivity {
             installDiscButton.setEnabled(true);
             installDiscButton.setAlpha(1f);
             installDiscButton.setText(success ? "DISCO INSTALADO" : "TENTAR NOVAMENTE");
-            if (success) installDiscButton.setEnabled(false);
+            installDiscButton.setContentDescription(
+                    success ? "Verificar instalação existente" : "Tentar a instalação novamente");
         }
 
         if (success) {
@@ -996,8 +1054,8 @@ public final class MainActivity extends AppCompatActivity {
             new AlertDialog.Builder(this)
                     .setTitle("Instalação do disco concluída")
                     .setMessage(
-                            "Os arquivos ISO9660 foram extraídos para a pasta privada "
-                                    + "diretório privado do aplicativo. Os metadados .disc_layout e "
+                            "Os arquivos ISO9660 foram extraídos para o armazenamento "
+                                    + "privado do aplicativo. Os metadados .disc_layout e "
                                     + ".disc_meta foram gerados e publicados junto com os dados. "
                                     + preparedElfSummary + ". A instalação foi preparada e a "
                                     + "fonte de disco foi validada; o jogo ainda não foi iniciado.")

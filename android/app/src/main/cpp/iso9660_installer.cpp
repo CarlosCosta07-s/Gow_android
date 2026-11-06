@@ -588,6 +588,62 @@ IsoInstallResult installIsoManifestImpl(
 
 } // namespace
 
+bool removeIsoDiscInstallation(
+    const std::string &privateRoot,
+    const std::string &installationDirectoryName,
+    std::string *error) {
+    auto setError = [error](const char *message) {
+        if (error != nullptr) *error = message;
+    };
+    if (!isSafeNameComponent(installationDirectoryName)) {
+        setError("The installation directory name is unsafe.");
+        return false;
+    }
+    if (privateRoot.empty()) {
+        setError("The private application directory is empty.");
+        return false;
+    }
+
+    const int rootFd = ::open(
+        privateRoot.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (rootFd < 0) {
+        setError("Could not open the private application directory.");
+        return false;
+    }
+
+    struct stat status {};
+    if (::fstatat(rootFd, installationDirectoryName.c_str(), &status,
+                  AT_SYMLINK_NOFOLLOW) != 0) {
+        const int savedError = errno;
+        ::close(rootFd);
+        if (savedError == ENOENT) {
+            if (error != nullptr) error->clear();
+            return true;
+        }
+        setError("Could not inspect the requested installation directory.");
+        return false;
+    }
+    if (!S_ISDIR(status.st_mode)) {
+        ::close(rootFd);
+        setError("The requested installation path is not a real directory.");
+        return false;
+    }
+
+    if (!removeDirectoryContentsAt(rootFd, installationDirectoryName.c_str())) {
+        ::close(rootFd);
+        setError("Could not safely remove the private installation directory.");
+        return false;
+    }
+    if (::fsync(rootFd) != 0) {
+        ::close(rootFd);
+        setError("The installation was removed, but its parent directory could not be synchronized.");
+        return false;
+    }
+    ::close(rootFd);
+    if (error != nullptr) error->clear();
+    return true;
+}
+
 IsoInstallResult installIsoManifest(
     const Iso9660Reader &reader,
     const std::vector<IsoInstallFile> &manifest,

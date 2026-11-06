@@ -62,4 +62,11 @@ IsoInstallResult installIsoDisc(
     IsoInstallProgressCallback progressCallback = nullptr,
     void *userData = nullptr);
 
+// Removes exactly one app-owned installation directory. The basename is
+// validated and every child is traversed with openat/O_NOFOLLOW.
+bool removeIsoDiscInstallation(
+    const std::string &privateRoot,
+    const std::string &installationDirectoryName,
+    std::string *error = nullptr);
+
 } // namespace gow::disc

@@ -409,6 +409,75 @@ int main() {
         return fail("installer replaced an existing published installation");
     }
 
+    const std::filesystem::path siblingFile =
+        std::filesystem::path(privateRoot) / "keep-unrelated.txt";
+    const std::filesystem::path outsideFile =
+        std::filesystem::path(privateRoot).parent_path() /
+        (std::filesystem::path(privateRoot).filename().string() + "-outside.txt");
+    {
+        std::ofstream sibling(siblingFile, std::ios::binary);
+        std::ofstream outside(outsideFile, std::ios::binary);
+        sibling << "keep";
+        outside << "outside";
+    }
+    std::error_code symlinkError;
+    std::filesystem::create_symlink(
+        outsideFile, installedRoot / "outside-link", symlinkError);
+    if (symlinkError) {
+        std::filesystem::remove_all(privateRoot);
+        std::filesystem::remove(outsideFile);
+        std::fclose(file);
+        return fail("could not create a symlink inside the installation fixture");
+    }
+
+    if (!gow::disc::removeIsoDiscInstallation(
+            privateRoot, "gow-test-install", &error) ||
+        std::filesystem::exists(installedRoot) ||
+        !std::filesystem::is_regular_file(siblingFile) ||
+        !std::filesystem::is_regular_file(outsideFile)) {
+        std::filesystem::remove_all(privateRoot);
+        std::filesystem::remove(outsideFile);
+        std::fclose(file);
+        return fail("safe installation removal escaped its exact target or failed: " + error);
+    }
+
+    const std::filesystem::path outsideDirectory =
+        std::filesystem::path(privateRoot).parent_path() /
+        (std::filesystem::path(privateRoot).filename().string() + "-outside-directory");
+    std::filesystem::create_directories(outsideDirectory);
+    {
+        std::ofstream marker(outsideDirectory / "marker.txt", std::ios::binary);
+        marker << "keep";
+    }
+    const std::filesystem::path topLevelLink =
+        std::filesystem::path(privateRoot) / "gow-link-install";
+    std::filesystem::create_directory_symlink(
+        outsideDirectory, topLevelLink, symlinkError);
+    if (symlinkError ||
+        gow::disc::removeIsoDiscInstallation(
+            privateRoot, "gow-link-install", &error) ||
+        !std::filesystem::is_regular_file(outsideDirectory / "marker.txt") ||
+        !std::filesystem::is_symlink(topLevelLink)) {
+        std::filesystem::remove_all(privateRoot);
+        std::filesystem::remove(outsideFile);
+        std::filesystem::remove_all(outsideDirectory);
+        std::fclose(file);
+        return fail("safe installation removal followed a top-level symlink");
+    }
+    std::filesystem::remove(topLevelLink);
+    std::filesystem::remove_all(outsideDirectory);
+    std::filesystem::remove(outsideFile);
+
+    if (gow::disc::removeIsoDiscInstallation(
+            privateRoot, "../outside", &error) ||
+        gow::disc::removeIsoDiscInstallation(
+            privateRoot, "nested/install", &error) ||
+        !std::filesystem::is_regular_file(siblingFile)) {
+        std::filesystem::remove_all(privateRoot);
+        std::fclose(file);
+        return fail("safe installation removal accepted an unsafe directory name");
+    }
+
     const auto unsafeInstallNameResult = gow::disc::installIsoManifest(
         reader, manifest, privateRoot, "nested/escape");
     if (unsafeInstallNameResult.success ||

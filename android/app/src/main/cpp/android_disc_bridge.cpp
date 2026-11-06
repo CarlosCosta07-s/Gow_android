@@ -216,6 +216,40 @@ Java_org_gowandroid_app_GowGameActivity_nativeSetDiscFileDescriptor(
     return setDiscDescriptor(descriptor) ? JNI_TRUE : JNI_FALSE;
 }
 
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_gowandroid_app_MainActivity_nativeRemoveInstallationDirectory(
+    JNIEnv *env, jclass, jstring privateRoot, jstring installationDirectoryName) {
+    auto makeResult = [env](const std::string &message) -> jstring {
+        return env->NewStringUTF(message.c_str());
+    };
+    try {
+        std::string rootPath;
+        std::string directoryName;
+        if (!copyJavaString(env, privateRoot, rootPath) || rootPath.empty() ||
+            !copyJavaString(env, installationDirectoryName, directoryName) ||
+            directoryName.empty()) {
+            return makeResult("O caminho privado ou o nome da instalação é inválido.");
+        }
+
+        // MainActivity invokes repair only after explicit confirmation and
+        // while no gameplay Activity is running. Release every cdRoot FD first.
+        gowAndroidCdRootClose();
+
+        std::string error;
+        if (!gow::disc::removeIsoDiscInstallation(rootPath, directoryName, &error)) {
+            return makeResult(error.empty()
+                ? "Não foi possível remover com segurança a instalação privada."
+                : error);
+        }
+        return makeResult("");
+    } catch (const std::exception &exception) {
+        return makeResult(
+            std::string("Falha ao remover a instalação privada: ") + exception.what());
+    } catch (...) {
+        return makeResult("Falha desconhecida ao remover a instalação privada.");
+    }
+}
+
 extern "C" JNIEXPORT jboolean JNICALL
 Java_org_gowandroid_app_MainActivity_nativeSetCdRootDirectory(
     JNIEnv *env, jclass, jstring privateCdRoot) {
