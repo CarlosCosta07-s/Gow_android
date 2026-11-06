@@ -171,7 +171,7 @@ def main() -> int:
         "gBootPathCondition.notify_all()",
         "gBootPathConfigurationReceived",
         "gowRuntimeLoadElfAndCheckAot(",
-        "gBootRelativePath = std::move(candidate)",
+        "gBootRelativePath = rootReady ? std::move(candidate) : std::string{}",
     ):
         require(required in native_main, f"GameActivity BOOT2 handoff is missing: {required}")
     require(
