@@ -13,6 +13,12 @@
 - O leitor ISO e a ponte híbrida já compilada serão reaproveitados onde fizer sentido, mas o provider que mantém a ISO aberta durante o jogo é transitório e não define a arquitetura final.
 - O objetivo de desempenho em aparelhos modestos será avaliado por frame time, 1% low, memória, I/O e temperatura em hardware real. A instalação BT3, isoladamente, não comprova aumento de FPS.
 
+## Prioridade atual
+
+**Fazer God of War funcionar vem antes de otimização fina.** O projeto ainda não comprovou boot real nem gameplay. O foco é gerar e integrar o código do jogo, completar runtime/IOP/VU1, GS/Vulkan, serviços de boot e alcançar primeira imagem, menu e primeiro combate. O tuning para aparelhos modestos fica para depois dessa linha de base.
+
+**Referência futura de otimização:** [Black for Android](https://github.com/RanggaCasper/Black-Android), documentada em [ANDROID_LOW_END_OPTIMIZATION.md](ANDROID_LOW_END_OPTIMIZATION.md). Não estamos adotando agora suas opções nem assumindo equivalência entre Xbox e PS2.
+
 ## [VERIFICADO] Shell FORGE
 
 - O aplicativo FORGE foi aberto em pelo menos um aparelho Android real, conforme relato do mantenedor.
@@ -108,17 +114,18 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 - Backend GS/Vulkan Android, presenter e saída de áudio Android.
 - Boot, primeira imagem, menus, controles touch visuais, áudio, FMVs, saves, desempenho e compatibilidade em aparelhos reais.
 
-## Próximos bloqueios reais
+## Próximos bloqueios reais — ordem de prioridade
 
-1. Completar a enumeração ISO9660 e definir o manifesto BT3 específico da revisão NTSC-U suportada.
-2. Implementar a extração privada com estimativa de espaço, staging, progresso, cancelamento, integridade e publicação atômica.
-3. Apontar o loader ELF e o VFS para a instalação local; substituir o provider híbrido de FD no caminho normal de execução.
-4. Validar a instalação e o acesso local com uma ISO do usuário em aparelho real; nenhum teste desse tipo foi declarado ainda.
-5. Medir I/O, frame time, memória e temperatura em aparelhos modestos antes de dimensionar cache e prefetch.
-4. Fornecer o ELF privado ao PS2Recomp, gerar C++ e ligar a tabela real para ARM64.
-5. Implementar o GS/Vulkan Android e presenter, substituindo OpenGL/Raylib desktop.
-6. Substituir a saída de áudio desktop por adaptador Android.
-7. Gerar e integrar VU1/IRX AOT com cobertura comprovada.
-8. Integrar CD/DVD, SIF/DMA e demais serviços de boot; somente então liberar JOGAR e validar primeira imagem, menus e combate.
+1. Fornecer o ELF privado ao PS2Recomp, gerar C++ e ligar a tabela real para ARM64.
+2. Gerar e integrar VU1/IRX AOT com cobertura comprovada para os módulos realmente usados.
+3. Integrar CD/DVD, SIF/DMA e demais serviços necessários à cadeia de boot.
+4. Completar a enumeração ISO9660 e definir o manifesto BT3 específico da revisão NTSC-U suportada.
+5. Implementar a extração privada com estimativa de espaço, staging, progresso, cancelamento, integridade e publicação atômica.
+6. Apontar o loader ELF e o VFS para a instalação local; substituir o provider híbrido de FD no caminho normal de execução.
+7. Implementar e integrar o GS/Vulkan Android e presenter, de modo que a primeira imagem real possa ser apresentada.
+8. Validar instalação, boot, menu, novo jogo e primeiro combate com uma ISO do usuário em aparelho real.
+9. Integrar saída de áudio Android e concluir controles, saves e demais componentes de gameplay.
+
+**Adiado:** medir e otimizar FPS/1% low, cache/prefetch, resolução e comportamento térmico em aparelhos modestos. Essa etapa começa depois do primeiro gameplay funcional; a referência definida é Black for Android.
 
 **Nenhum gameplay foi testado ou declarado funcional.** Nenhum ELF, ISO, IRX, microcódigo, save ou dado proprietário foi enviado ao repositório ou à CI pública.
