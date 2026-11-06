@@ -1,6 +1,11 @@
 #include "ps2_runtime.h"
 #include "android_cdroot_bridge.h"
 #include "ps2x/iop/disc_source.h"
+#include "emulator/core/iop_cpu.h"
+#include "emulator/core/iop_kernel.h"
+#include "emulator/core/iop_memory.h"
+#include "emulator/imports/iop_cdvd.h"
+#include "ps2x/iop/iop_host.h"
 
 #include <algorithm>
 #include <array>
@@ -12,8 +17,49 @@
 #include <filesystem>
 #include <limits>
 #include <string>
+#include <utility>
 
 namespace {
+class RuntimeCdvdProbeHost final : public ps2x::iop::IopHost {
+public:
+    explicit RuntimeCdvdProbeHost(std::string cdRoot) : cdRoot_(std::move(cdRoot)) {}
+
+    bool readGuest(uint32_t, void *, size_t) const override { return false; }
+    bool writeGuest(uint32_t, const void *, size_t) override { return false; }
+    bool zeroGuest(uint32_t, size_t) override { return false; }
+    bool normalizeGuestAddress(uint32_t, uint32_t &normalized) const override {
+        normalized = 0u;
+        return false;
+    }
+    uint32_t allocateIopHandle(ps2x::iop::IopHandleKind) override { return nextHandle_++; }
+    uint32_t allocateGuest(uint32_t, uint32_t) override { return 0u; }
+    void freeGuest(uint32_t) override {}
+    void audioCommand(uint32_t, uint32_t, ps2x::iop::GuestBuffer,
+                      ps2x::iop::GuestBuffer) override {}
+    std::string hostPath(ps2x::iop::HostPathKind kind) const override {
+        return kind == ps2x::iop::HostPathKind::CdRoot ? cdRoot_ : std::string{};
+    }
+    std::string translateGuestPath(std::string_view) const override { return {}; }
+    uint64_t openHostFile(std::string_view) override { return 0u; }
+    bool hostFileSize(uint64_t, uint64_t &) const override { return false; }
+    bool readHostFile(uint64_t, uint64_t, void *, size_t, size_t &bytesRead) override {
+        bytesRead = 0u;
+        return false;
+    }
+    void closeHostFile(uint64_t) override {}
+    int32_t memoryCard(const ps2x::iop::MemoryCardRequest &) override { return -1; }
+    bool hasGuestFunction(uint32_t) const override { return false; }
+    bool invokeGuestFunction(uint64_t, uint32_t, uint32_t, uint32_t,
+                             uint32_t, uint32_t, uint32_t *) override {
+        return false;
+    }
+    void log(ps2x::iop::LogLevel, std::string_view) override {}
+
+private:
+    std::string cdRoot_;
+    uint32_t nextHandle_ = 1u;
+};
+
 bool writeMessage(char *destination, size_t capacity,
                   const std::string &message) noexcept {
     if (destination == nullptr || capacity == 0u) return false;
@@ -176,3 +222,125 @@ extern "C" __attribute__((visibility("default")))
 void gowDestroyPs2Runtime(PS2Runtime *runtime) noexcept {
     delete runtime;
 }
+
+extern "C" bool gowRuntimeValidateIopCdvd(
+    const char *privateRoot, const char *bootRelativePath,
+    char *message, size_t capacity) noexcept {
+    if (message != nullptr && capacity != 0u) message[0] = '\0';
+    try {
+        if (privateRoot == nullptr || privateRoot[0] == '\0' ||
+            bootRelativePath == nullptr || bootRelativePath[0] == '\0') {
+            writeMessage(message, capacity, "O caminho da instalação ou BOOT2 está vazio.");
+            return false;
+        }
+
+        RuntimeCdvdProbeHost host(privateRoot);
+        ps2x::iop::detail::IopMemory memory;
+        ps2x::iop::detail::IopKernel kernel(memory);
+        ps2x::iop::detail::IopCdvd cdvd(host, memory, kernel);
+
+        std::string bootPath(bootRelativePath);
+        std::replace(bootPath.begin(), bootPath.end(), '/', '\\');
+        const std::string guestPath = "cdrom0:\\" + bootPath;
+        constexpr uint32_t kGuestPathAddress = 0x6000u;
+        constexpr uint32_t kSearchResultAddress = 0x7000u;
+        constexpr uint32_t kReadBufferAddress = 0x8000u;
+        constexpr size_t kSectorSize = ps2x::iop::DiscSource::kSectorSize;
+
+        if (!memory.writeRam(
+                kGuestPathAddress, guestPath.c_str(), guestPath.size() + 1u) ||
+            !memory.zeroRam(kSearchResultAddress, 32u)) {
+            writeMessage(message, capacity,
+                         "Não foi possível preparar a RAM sintética do IOP para sceCdSearchFile.");
+            return false;
+        }
+
+        ps2x::iop::detail::IopCpuState searchCpu{};
+        searchCpu.gpr[4] = kSearchResultAddress;
+        searchCpu.gpr[5] = kGuestPathAddress;
+        if (!cdvd.dispatchImport(10u, searchCpu) || searchCpu.gpr[2] != 1u) {
+            writeMessage(
+                message, capacity,
+                "IopCdvd::dispatchImport(sceCdSearchFile) não encontrou o BOOT2.");
+            return false;
+        }
+
+        std::array<uint8_t, 32u> searchResult{};
+        if (!memory.readRam(
+                kSearchResultAddress, searchResult.data(), searchResult.size())) {
+            writeMessage(message, capacity,
+                         "Não foi possível ler o resultado de sceCdSearchFile.");
+            return false;
+        }
+        auto readLe32 = [](const uint8_t *bytes) {
+            return static_cast<uint32_t>(bytes[0]) |
+                   (static_cast<uint32_t>(bytes[1]) << 8u) |
+                   (static_cast<uint32_t>(bytes[2]) << 16u) |
+                   (static_cast<uint32_t>(bytes[3]) << 24u);
+        };
+        const uint32_t bootLsn = readLe32(searchResult.data());
+        const uint32_t bootSize = readLe32(searchResult.data() + 4u);
+        if (bootSize == 0u) {
+            writeMessage(message, capacity,
+                         "sceCdSearchFile retornou um BOOT2 vazio.");
+            return false;
+        }
+
+        std::array<uint8_t, kSectorSize> sector{};
+        if (!memory.zeroRam(kReadBufferAddress, sector.size())) {
+            writeMessage(message, capacity,
+                         "Não foi possível preparar a RAM sintética do IOP para sceCdRead.");
+            return false;
+        }
+
+        ps2x::iop::detail::IopCpuState pvdCpu{};
+        pvdCpu.gpr[4] = 16u;
+        pvdCpu.gpr[5] = 1u;
+        pvdCpu.gpr[6] = kReadBufferAddress;
+        if (!cdvd.dispatchImport(6u, pvdCpu) || pvdCpu.gpr[2] != 1u ||
+            !memory.readRam(kReadBufferAddress, sector.data(), sector.size()) ||
+            std::memcmp(sector.data() + 1u, "CD001", 5u) != 0) {
+            writeMessage(
+                message, capacity,
+                "IopCdvd::dispatchImport(sceCdRead) falhou ao reconstruir o PVD no LSN 16.");
+            return false;
+        }
+
+        if (!memory.zeroRam(kReadBufferAddress, sector.size())) {
+            writeMessage(message, capacity,
+                         "Não foi possível limpar a RAM antes da leitura do BOOT2.");
+            return false;
+        }
+        ps2x::iop::detail::IopCpuState bootCpu{};
+        bootCpu.gpr[4] = bootLsn;
+        bootCpu.gpr[5] = 1u;
+        bootCpu.gpr[6] = kReadBufferAddress;
+        if (!cdvd.dispatchImport(6u, bootCpu) || bootCpu.gpr[2] != 1u ||
+            !memory.readRam(kReadBufferAddress, sector.data(), sector.size()) ||
+            sector[0] != 0x7Fu || sector[1] != 'E' ||
+            sector[2] != 'L' || sector[3] != 'F') {
+            writeMessage(
+                message, capacity,
+                "IopCdvd::dispatchImport(sceCdRead) não conseguiu ler a assinatura ELF do BOOT2.");
+            return false;
+        }
+
+        char summary[320]{};
+        std::snprintf(
+            summary, sizeof(summary),
+            "OK: IopCdvd sceCdSearchFile + sceCdRead · BOOT2 LSN=%u · %u bytes · PVD LSN=16",
+            bootLsn, bootSize);
+        writeMessage(message, capacity, summary);
+        return true;
+    } catch (const std::exception &exception) {
+        writeMessage(
+            message, capacity,
+            std::string("Falha interna no probe CDVD do IOP: ") + exception.what());
+        return false;
+    } catch (...) {
+        writeMessage(message, capacity,
+                     "Falha desconhecida no probe CDVD do IOP.");
+        return false;
+    }
+}
+

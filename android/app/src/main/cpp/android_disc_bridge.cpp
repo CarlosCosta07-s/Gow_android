@@ -27,6 +27,10 @@ extern "C" bool gowRuntimeValidateDiscSource(
     const char *privateRoot, const char *bootRelativePath,
     char *message, size_t capacity) noexcept
     __attribute__((weak));
+extern "C" bool gowRuntimeValidateIopCdvd(
+    const char *privateRoot, const char *bootRelativePath,
+    char *message, size_t capacity) noexcept
+    __attribute__((weak));
 
 namespace {
 std::mutex g_discMutex;
@@ -301,6 +305,46 @@ Java_org_gowandroid_app_MainActivity_nativePrepareRuntimeIoPaths(
             std::string("Falha interna ao configurar IoPaths: ") + exception.what());
     } catch (...) {
         return makeResult("Falha interna desconhecida ao configurar IoPaths.");
+    }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_gowandroid_app_MainActivity_nativeValidateIopCdvd(
+    JNIEnv *env, jclass, jstring bootRelativePath) {
+    auto makeResult = [env](const std::string &message) -> jstring {
+        return env->NewStringUTF(message.c_str());
+    };
+
+    try {
+        std::string bootPath;
+        if (!copyJavaString(env, bootRelativePath, bootPath) || bootPath.empty()) {
+            return makeResult("O caminho BOOT2 está vazio ou inválido.");
+        }
+        std::string rootPath;
+        {
+            std::lock_guard<std::mutex> lock(g_cdRootPathMutex);
+            rootPath = g_cdRootPath;
+        }
+        if (rootPath.empty()) {
+            return makeResult("A raiz privada cdRoot ainda não foi montada.");
+        }
+        if (gowRuntimeValidateIopCdvd == nullptr) {
+            return makeResult(
+                "A ponte CDVD do runtime IOP não está disponível neste build.");
+        }
+
+        std::array<char, 512> message{};
+        const bool valid = gowRuntimeValidateIopCdvd(
+            rootPath.c_str(), bootPath.c_str(), message.data(), message.size());
+        if (message[0] != '\0') return makeResult(message.data());
+        return makeResult(valid
+            ? "OK: IopCdvd validou sceCdSearchFile e sceCdRead."
+            : "IopCdvd recusou a instalação sem fornecer um diagnóstico.");
+    } catch (const std::exception &exception) {
+        return makeResult(
+            std::string("Falha interna na validação CDVD do IOP: ") + exception.what());
+    } catch (...) {
+        return makeResult("Falha interna desconhecida na validação CDVD do IOP.");
     }
 }
 

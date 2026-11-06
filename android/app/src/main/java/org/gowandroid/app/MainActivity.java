@@ -80,6 +80,7 @@ public final class MainActivity extends AppCompatActivity {
     private static native String nativeValidateCdRootElf(String relativePath);
     private static native String nativePrepareRuntimeIoPaths(String bootRelativePath);
     private static native String nativeValidateDiscSource(String bootRelativePath);
+    private static native String nativeValidateIopCdvd(String bootRelativePath);
 
     static {
         System.loadLibrary("android-game");
@@ -779,15 +780,23 @@ public final class MainActivity extends AppCompatActivity {
                     ? nativeValidateDiscSource(installedBootPath)
                     : "A validação ELF precisa passar antes de abrir o DiscSource.";
             boolean discValid = discValidation != null && discValidation.startsWith("OK:");
-            boolean installationValid = runtimePathValid && elfValid && discValid;
+            String iopCdvdValidation = discValid
+                    ? nativeValidateIopCdvd(installedBootPath)
+                    : "A validação DiscSource precisa passar antes do probe CDVD do IOP.";
+            boolean iopCdvdValid = iopCdvdValidation != null
+                    && iopCdvdValidation.startsWith("OK:");
+            boolean installationValid =
+                    runtimePathValid && elfValid && discValid && iopCdvdValid;
             String detail = installationValid
                     ? "IoPaths do runtime: " + runtimePathValidation.substring(4).trim()
                             + ". Executável: " + elfValidation.substring(4).trim()
-                            + ". Fonte CD/DVD: " + discValidation.substring(4).trim() + "."
+                            + ". Fonte CD/DVD: " + discValidation.substring(4).trim()
+                            + ". CDVD/IOP: " + iopCdvdValidation.substring(4).trim() + "."
                     : "IoPaths: " + runtimePathValidation + "\nELF: " + elfValidation
-                            + "\nDiscSource: " + discValidation;
+                            + "\nDiscSource: " + discValidation
+                            + "\nCDVD/IOP: " + iopCdvdValidation;
             String runtimeStatus = installationValid
-                    ? "A leitura de disco por LSN foi verificada, mas o runtime ainda não executa o boot."
+                    ? "DiscSource e o dispatcher CDVD do IOP passaram na verificação privada; o runtime de gameplay ainda não foi iniciado."
                     : "A instalação precisa ser reparada ou reinstalada antes de ser utilizada.";
             new AlertDialog.Builder(this)
                     .setTitle(installationValid
@@ -892,9 +901,18 @@ public final class MainActivity extends AppCompatActivity {
                                         + "do runtime não conseguiu reconstruir o disco: "
                                         + (discValidation == null ? "resposta nativa vazia." : discValidation);
                             } else {
-                                preparedElfSummary = runtimePathValidation.substring(4).trim()
-                                        + " · " + elfValidation.substring(4).trim()
-                                        + " · " + discValidation.substring(4).trim();
+                                String iopCdvdValidation = nativeValidateIopCdvd(bootPath);
+                                if (iopCdvdValidation == null || !iopCdvdValidation.startsWith("OK:")) {
+                                    failure = "O DiscSource foi aberto, mas o dispatcher CDVD do IOP não "
+                                            + "conseguiu ler o BOOT2: "
+                                            + (iopCdvdValidation == null
+                                                ? "resposta nativa vazia." : iopCdvdValidation);
+                                } else {
+                                    preparedElfSummary = runtimePathValidation.substring(4).trim()
+                                            + " · " + elfValidation.substring(4).trim()
+                                            + " · " + discValidation.substring(4).trim()
+                                            + " · " + iopCdvdValidation.substring(4).trim();
+                                }
                             }
                         }
                     }
