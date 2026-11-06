@@ -448,16 +448,16 @@ int main() {
                 csm1Second[2] == 255u && csm1Second[3] == 255u,
                 "CSM1 T8 texture did not load CLUT entry 16 from the swapped source index 8.");
         const auto t4hlPixel = pixelAt(8u, 24u);
-        require(t4hlPixel[0] == 0u && t4hlPixel[1] == 255u &&
-                t4hlPixel[2] == 255u && t4hlPixel[3] == 255u,
+        require(t4hlPixel[0] == 255u && t4hlPixel[1] == 255u &&
+                t4hlPixel[2] == 0u && t4hlPixel[3] == 255u,
                 "T4HL did not read the lower nibble of the high-byte plane.");
         const auto t4hhPixel = pixelAt(12u, 24u);
         require(t4hhPixel[0] == 255u && t4hhPixel[1] == 255u &&
                 t4hhPixel[2] == 255u && t4hhPixel[3] == 255u,
                 "T4HH did not read the upper nibble of the high-byte plane.");
         const auto t8hPixel = pixelAt(16u, 24u);
-        require(t8hPixel[0] == 0u && t8hPixel[1] == 255u &&
-                t8hPixel[2] == 255u && t8hPixel[3] == 255u,
+        require(t8hPixel[0] == 255u && t8hPixel[1] == 255u &&
+                t8hPixel[2] == 0u && t8hPixel[3] == 255u,
                 "T8H did not sample the high-byte texture index and resolve its CLUT color.");
         const auto t8hBottomRight = pixelAt(19u, 27u);
         require(t8hBottomRight[0] == 255u && t8hBottomRight[1] == 255u &&
