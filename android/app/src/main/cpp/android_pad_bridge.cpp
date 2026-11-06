@@ -47,8 +47,13 @@ bool mapKeyCode(int32_t keyCode, uint16_t &mask) noexcept {
     }
 }
 
-float readAxis(const AInputEvent *event, int32_t axis) noexcept {
-    return std::clamp(AMotionEvent_getAxisValue(event, axis, 0), -1.0f, 1.0f);
+float readAxis(const GameActivityMotionEvent *event, int32_t axis) noexcept {
+    if (event == nullptr || event->pointerCount == 0u) {
+        return 0.0f;
+    }
+    return std::clamp(
+        GameActivityPointerAxes_getAxisValue(&event->pointers[0], axis),
+        -1.0f, 1.0f);
 }
 
 float applyAxisConfig(float value, bool invert) noexcept {
@@ -68,23 +73,66 @@ uint8_t axisToByte(float value, bool invert) noexcept {
 }
 } // namespace
 
-extern "C" int32_t gowAndroidPadHandleInputEvent(AInputEvent *event) noexcept {
-    if (!event) return 0;
-    const int32_t type = AInputEvent_getType(event);
-    if (type == AINPUT_EVENT_TYPE_KEY) {
-        uint16_t mask = 0u;
-        if (!mapKeyCode(AKeyEvent_getKeyCode(event), mask)) return 0;
-        const int32_t action = AKeyEvent_getAction(event);
-        if (action == AKEY_EVENT_ACTION_DOWN) setPhysicalButton(mask, true);
-        else if (action == AKEY_EVENT_ACTION_UP) setPhysicalButton(mask, false);
+extern "C" void gowAndroidPadEnableGamepadAxes() noexcept {
+    constexpr int32_t axes[] = {
+        AMOTION_EVENT_AXIS_X,
+        AMOTION_EVENT_AXIS_Y,
+        AMOTION_EVENT_AXIS_Z,
+        AMOTION_EVENT_AXIS_RZ,
+        AMOTION_EVENT_AXIS_RX,
+        AMOTION_EVENT_AXIS_RY,
+        AMOTION_EVENT_AXIS_LTRIGGER,
+        AMOTION_EVENT_AXIS_RTRIGGER,
+        AMOTION_EVENT_AXIS_BRAKE,
+        AMOTION_EVENT_AXIS_GAS
+    };
+    for (const int32_t axis : axes) {
+        GameActivityPointerAxes_enableAxis(axis);
+    }
+}
+
+extern "C" int32_t gowAndroidPadHandleKeyEvent(
+    const GameActivityKeyEvent *event) noexcept {
+    if (event == nullptr) {
+        return 0;
+    }
+    uint16_t mask = 0u;
+    if (!mapKeyCode(event->keyCode, mask)) {
+        return 0;
+    }
+    if (event->action == AKEY_EVENT_ACTION_DOWN) {
+        setPhysicalButton(mask, true);
+    } else if (event->action == AKEY_EVENT_ACTION_UP) {
+        setPhysicalButton(mask, false);
+    }
+    return 1;
+}
+
+extern "C" int32_t gowAndroidPadHandleMotionEvent(
+    const GameActivityMotionEvent *event) noexcept {
+    if (event == nullptr) {
+        return 0;
+    }
+    const int32_t source = event->source;
+    if ((source & AINPUT_SOURCE_JOYSTICK) != AINPUT_SOURCE_JOYSTICK &&
+        (source & AINPUT_SOURCE_GAMEPAD) != AINPUT_SOURCE_GAMEPAD) {
+        return 0;
+    }
+
+    const int32_t action = event->action & AMOTION_EVENT_ACTION_MASK;
+    if (action == AMOTION_EVENT_ACTION_CANCEL ||
+        action == AMOTION_EVENT_ACTION_OUTSIDE) {
+        g_leftX.store(0.0f, std::memory_order_relaxed);
+        g_leftY.store(0.0f, std::memory_order_relaxed);
+        g_rightX.store(0.0f, std::memory_order_relaxed);
+        g_rightY.store(0.0f, std::memory_order_relaxed);
+        setPhysicalButton(kL2, false);
+        setPhysicalButton(kR2, false);
         return 1;
     }
-    if (type != AINPUT_EVENT_TYPE_MOTION) return 0;
-
-    const int32_t source = AInputEvent_getSource(event);
-    if ((source & AINPUT_SOURCE_JOYSTICK) != AINPUT_SOURCE_JOYSTICK &&
-        (source & AINPUT_SOURCE_GAMEPAD) != AINPUT_SOURCE_GAMEPAD) return 0;
-    if ((AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK) != AMOTION_EVENT_ACTION_MOVE) return 0;
+    if (action != AMOTION_EVENT_ACTION_MOVE || event->pointerCount == 0u) {
+        return 0;
+    }
 
     const float lx = readAxis(event, AMOTION_EVENT_AXIS_X);
     const float ly = readAxis(event, AMOTION_EVENT_AXIS_Y);
@@ -97,10 +145,10 @@ extern "C" int32_t gowAndroidPadHandleInputEvent(AInputEvent *event) noexcept {
     g_rightX.store(rx, std::memory_order_relaxed);
     g_rightY.store(ry, std::memory_order_relaxed);
 
-    float lt = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_LTRIGGER, 0);
-    float rt = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_RTRIGGER, 0);
-    if (lt <= 0.001f) lt = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_BRAKE, 0);
-    if (rt <= 0.001f) rt = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_GAS, 0);
+    float lt = readAxis(event, AMOTION_EVENT_AXIS_LTRIGGER);
+    float rt = readAxis(event, AMOTION_EVENT_AXIS_RTRIGGER);
+    if (lt <= 0.001f) lt = readAxis(event, AMOTION_EVENT_AXIS_BRAKE);
+    if (rt <= 0.001f) rt = readAxis(event, AMOTION_EVENT_AXIS_GAS);
     setPhysicalButton(kL2, lt > 0.5f);
     setPhysicalButton(kR2, rt > 0.5f);
     return 1;
