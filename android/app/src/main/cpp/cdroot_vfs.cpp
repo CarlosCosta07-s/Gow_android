@@ -20,6 +20,7 @@ namespace {
 constexpr size_t kMaxPathLength = 1024u;
 constexpr size_t kMaxPathComponentLength = 255u;
 constexpr size_t kMaxPathDepth = 32u;
+constexpr size_t kMaxDirectoryEntries = 65536u;
 
 bool isSafeComponent(std::string_view component) {
     if (component.empty() || component == "." || component == ".." ||
@@ -194,6 +195,13 @@ bool CdRootVfs::listDirectory(
         if (std::strcmp(entry->d_name, ".") == 0 ||
             std::strcmp(entry->d_name, "..") == 0) {
             continue;
+        }
+
+        if (!isSafeComponent(entry->d_name) ||
+            parsed.size() >= kMaxDirectoryEntries) {
+            setError(error, "The cdRoot directory contains an unsafe name or too many entries.");
+            success = false;
+            break;
         }
 
         struct stat status {};
