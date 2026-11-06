@@ -217,6 +217,44 @@ def main() -> int:
         and on_create_register < on_create_super,
         "GameActivity must register the JNI reference before super.onCreate starts the native thread.",
     )
+    cmake_path = project_root / "android/app/src/main/cpp/CMakeLists.txt"
+    cmake_text = cmake_path.read_text(encoding="utf-8")
+    gradle_path = project_root / "android/app/build.gradle"
+    gradle_text = gradle_path.read_text(encoding="utf-8")
+    gs_renderer_source = project_root / "android/app/src/main/cpp/main.cpp"
+    gs_renderer = gs_renderer_source.read_text(encoding="utf-8")
+    gs_backend_path = project_root / "android/app/src/main/cpp/android_gs_vulkan_backend.cpp"
+    gs_geometry_path = project_root / "android/app/src/main/cpp/android_gs_geometry.cpp"
+    require(
+        gs_backend_path.is_file() and gs_geometry_path.is_file(),
+        "Android GS backend adapter or geometry converter is missing.",
+    )
+    for required in (
+        "android_gs_vulkan_backend.cpp",
+        "android_gs_geometry.cpp",
+        "GOW_ANDROID_ENABLE_GS_VULKAN",
+        "gow_android_gs_shaders",
+    ):
+        require(required in cmake_text, f"GS Vulkan CMake integration is missing: {required}")
+    for required in (
+        "arguments \"-DGOW_ANDROID_ENABLE_GS_VULKAN=ON\"",
+    ):
+        require(required in gradle_text, f"Debug GS Vulkan build setting is missing: {required}")
+    for required in (
+        "vkCreateGraphicsPipelines",
+        "vkCmdBindVertexBuffers",
+        "vkCmdDraw(",
+        "AndroidGSVulkanBackend",
+        "attachAndroidGsBackend()",
+        "detachAndroidGsBackend()",
+        "enqueueGsBatch(",
+    ):
+        require(required in gs_renderer, f"Android GS Vulkan draw path is missing: {required}")
+    require(
+        "runtime->run(" not in gs_renderer,
+        "The experimental GS renderer must not start guest execution.",
+    )
+
     print("Verified: Android PS2 core initialization is headless, uses a null GS backend,")
     print("and cannot enter Raylib desktop initialization or guest execution.")
     return 0
