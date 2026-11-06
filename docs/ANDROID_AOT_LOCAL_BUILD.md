@@ -2,6 +2,28 @@
 
 Este fluxo gera o C++ nativo do jogo na máquina do usuário e o compila dentro do APK ARM64. O ELF, os arquivos gerados e a área de trabalho do recompilador permanecem locais. **Não envie ISO, ELF, IRX, microcódigo, código C++ gerado ou saves para GitHub, CI, issues ou releases.**
 
+## Assinatura dos APKs Debug e atualizações
+
+O Android só permite atualizar um aplicativo existente quando o certificado de assinatura permanece o mesmo. Os APKs das CI #339, #344, #347, #348 e #349 foram assinados por chaves Debug efêmeras diferentes (os certificados SHA-256 foram inspecionados diretamente nos APKs). Portanto, **não instale um APK de outra execução por cima de um FORGE Debug já instalado**. Não desinstale o aplicativo apenas para contornar o conflito: o Android apaga o armazenamento privado do app, incluindo a instalação do disco.
+
+O Gradle agora aceita uma chave Debug persistente por meio de quatro secrets do GitHub Actions. Configure-os em *Settings → Secrets and variables → Actions*:
+
+- `GOW_ANDROID_DEBUG_KEYSTORE_BASE64`: conteúdo do keystore em Base64.
+- `GOW_ANDROID_DEBUG_KEYSTORE_PASSWORD`: senha do keystore.
+- `GOW_ANDROID_DEBUG_KEY_ALIAS`: alias da chave.
+- `GOW_ANDROID_DEBUG_KEY_PASSWORD`: senha da chave.
+
+Gere uma chave privada sua em um computador e guarde uma cópia segura fora do repositório. Exemplo (PowerShell; use senhas fortes):
+
+```powershell
+keytool -genkeypair -v -keystore gow-android-debug.p12 -storetype PKCS12 -alias forge-debug -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=FORGE Android Debug"
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("gow-android-debug.p12")) | Set-Clipboard
+```
+
+Cole o texto Base64 no secret `GOW_ANDROID_DEBUG_KEYSTORE_BASE64` e cadastre as outras três informações nos secrets correspondentes. Não cole a chave, o Base64 ou as senhas em issues, commits, mensagens de log ou arquivos versionados. Sem esses secrets, a CI ainda compila o APK, mas usa a chave efêmera padrão do runner e o artefato não é apropriado para atualizar uma instalação de outra execução.
+
+**Atenção:** adicionar a chave persistente resolve as atualizações futuras entre builds assinados por ela; não muda retroativamente a assinatura dos APKs antigos. Se um desses APKs efêmeros já estiver instalado com os dados do disco, preserve-o até existir um procedimento de migração/backup da instalação privada.
+
 ## Perfil atualmente suportado
 
 O mapa e a configuração em `recompiler/config/` estão fixados na revisão NTSC-U **SCUS_973.99**. Não use o executável PAL **SCES_531.33** com esse mapa: ele precisa de um mapa de funções e uma configuração próprios antes de ser compilado.
