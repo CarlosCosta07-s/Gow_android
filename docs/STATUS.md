@@ -60,7 +60,7 @@
 - O provider `CdRootVfs` continua atendendo operações por caminho. O JNI agora também valida a classe real `DiscSource` contra a instalação privada e verifica que o `IoPaths.cdRoot` está configurado para ela. Ainda não há teste com dados reais nem execução da rotina CDVD do IOP.
 
 
-## [VERIFICADO] Shell FORGE e importação de boot
+## [VERIFICADO] Shell FORGE e instalação privada do disco
 
 - O FORGE usa Storage Access Framework para selecionar a imagem e identifica `SYSTEM.CNF`/`BOOT2`, reconhecendo inicialmente `SCUS_973.99` (NTSC-U) e `SCES_531.33` (PAL).
 - A ação `INSTALAR JOGO` reabre e revalida a imagem, enumera a árvore ISO9660 completa suportada, extrai os arquivos para armazenamento privado e gera `.disc_layout`/`.disc_meta` dentro do staging antes da publicação.
@@ -87,7 +87,7 @@ Fonte: [KIexster/god-of-war-recomp](https://github.com/KIexster/god-of-war-recom
 - O projeto KIexster usa como base o runtime de [Waffle565/God-Of-War-Native-Port](https://github.com/Waffle565/God-Of-War-Native-Port), branch `runtime`, licença GPL-3.0 nessa branch.
 - Os cabeçalhos dos overrides e dos geradores VU1/IOP apontam para código originalmente derivado de Waffle565, commit `34f30d5e432751369177af115104f4d19af6d080`.
 - O build KIexster fixa [PS2Recomp](https://github.com/ran-j/PS2Recomp) no commit `c5a9d02573410a2085a4b4b831b0b68ba3515440`, licença GPL-3.0.
-- Nenhum runtime Waffle completo, PS2Recomp ou renderer desktop foi importado ainda. O antigo submódulo CodeAbhi foi removido.
+- Nenhuma árvore Waffle/PS2Recomp/renderer desktop foi copiada para a árvore versionada do projeto. O script prepara revisões fixadas em workspace privado e exporta a fonte Waffle para `android/app/build/gow-runtime-source` (ignorado pelo Git). O antigo submódulo CodeAbhi foi removido.
 
 ## [VERIFICADO] Bloqueios identificados na configuração Waffle
 
@@ -99,7 +99,7 @@ Auditoria estática do CMake e dos fontes na revisão Waffle de referência 49ca
 - ps2_pad_rumble_win.cpp é específico de Windows. ps2_android_runtime.cpp contém apenas um TODO de controles touch.
 - ps2_vif1_interpreter.cpp decodifica comandos VIF1/UNPACK; não é o interpretador de instruções MIPS do EE. A decisão sobre sua permanência é por função de hardware, separada da regra contra fallback de CPU.
 
-Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda não está integrado ao target Android do aplicativo; sua build estrita host é uma verificação privada de compilação.
+Essa revisão é referência para identificar fronteiras. O runtime Waffle/KIexter é preparado em `android/app/build/gow-runtime-source` (diretório ignorado), compilado e ligado ao alvo Android `android-game`. O runner Android ainda constrói e destrói `PS2Runtime`, mas não chama `initialize()`, `loadELF()` ou `run()`; a inicialização host Raylib/áudio continua sem adaptação Android.
 
 ## [VERIFICADO] Ferramenta PS2Recomp no host
 
@@ -137,7 +137,7 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 - O worker GS e ps2_runtime.cpp também selecionam o shim em ARM64, evitando includes diretos x86-only de xmmintrin.h.
 - A execução Android shell 42152175783 compilou ps2_runtime e suas dependências estáticas com Android NDK 30.0.16248370, ABI arm64-v8a e API 28. O compile database confirmou PS2X_VU1_NATIVE_ONLY=1 e excluiu iop_cpu.cpp e as fontes diferenciais PCSX2. O runner NativeActivity do Waffle não foi construído.
 - A mesma execução concluiu BUILD SUCCESSFUL para o APK Debug FORGE. O arquivo de smoke NEON continua incluído no alvo android-game, mas não é executado em runtime.
-- Isso comprova compilação ARM64 do runtime e do shell, não equivalência numérica bit-exata, execução em aparelho, ligação do runtime ao APK, chamada JNI ou gameplay. O runtime permanece como biblioteca estática produzida em workspace privado e não está integrado à GowGameActivity.
+- Isso comprova compilação ARM64 e ligação da biblioteca estática ao `android-game`, não equivalência numérica bit-exata, execução em aparelho, inicialização do runtime ou gameplay. A Activity Java ainda não controla o ciclo de vida do `PS2Runtime`; o runner GameActivity nativo apenas constrói e destrói o objeto.
 
 ## [PREPARADO, NÃO TESTADO] Geração do C++ do jogo
 
@@ -151,8 +151,8 @@ Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda
 - Ainda não foi executado um boot real do jogo, nem gameplay.
 - O launcher ainda não inicia a GameActivity/runtime depois da preparação.
 - O PS2Runtime ainda não recebe o ELF privado e não executa `loadELF()`/serviços de boot.
-- A pasta `gow_boot_seed` contém apenas SYSTEM.CNF e o ELF BOOT2. Ela não contém os assets, arquivos de dados, módulos IRX ou outros recursos necessários ao jogo.
-- O patch Waffle para rotear `cdRoot` para `gowcdroot:/` compilou no build host estrito (run `42186655605`) e o target Android ARM64 que consome a árvore preparada compilou no run `42187116530`; ainda falta exercitar uma chamada real do PS2 VFS/IOP contra arquivos no provider durante um boot.
+- A pasta legada `gow_boot_seed`, criada por versões anteriores do fluxo parcial, pode permanecer nos dados privados de instalações atualizadas; ela não é usada pelo fluxo atual. A instalação atual cria diretórios por serial e extrai a árvore ISO9660 completa, mas ainda não comprova a cadeia de boot nem a disponibilidade/cobertura AOT dos módulos IRX.
+- O patch Waffle para encaminhar `cdrom0:` ao `CdRootVfs` e configurar o caminho físico em `IoPaths.cdRoot` compilou no build host estrito e no target Android ARM64. A CI `42225710064` também configurou o `IoPaths` estático pelo mesmo método usado em `loadELF()` e validou a implementação real de `DiscSource::openExtracted()`; ainda falta exercitar o dispatcher CDVD/IOP e uma chamada real de `sceCdRead` durante uma sessão.
 - Não há cobertura comprovada de VU1 AOT/IRX para o conteúdo da cópia do usuário.
 - Backend GS/Vulkan Android, presenter completo e saída de áudio Android ainda não estão integrados ao ciclo de gameplay.
 - Primeira imagem, menus, controles touch visuais, áudio, FMVs, saves, desempenho e compatibilidade ainda não foram testados em aparelhos reais.
