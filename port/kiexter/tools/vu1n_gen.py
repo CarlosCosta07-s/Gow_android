@@ -4,10 +4,9 @@
 
 usage: python -I tools/vu1/vu1n_gen.py <out dir> <micro-memory dir or .bin files...> [--heads heads.txt] [--parts N]
 
-Reads the captured 16 KB VU1 micro-memories (GOW_VU1_CAPTURA), splits them into basic blocks (same rule as
-VU1Interpreter's nativeExtent in ps2_vu1_native.inl) and writes straight-line C++ for each distinct (pc, words) block:
-immediate semantics, no cycle model, MAC flags only where they can be observed. Output: vu1n_part<k>.cpp. The exact engine
-(ps2_vu1_core.cpp) remains the fallback for every block that is not here and the oracle for GOW_VU1N_VERIFY.
+Reads captured 16 KB VU1 micro-memories (GOW_VU1_CAPTURA), splits them into basic blocks and writes C++ for each distinct block.
+Normal development mode may emit callouts to the exact engine. Release qualification must use --strict: it rejects unsupported
+blocks and any generated block containing callLower/callUpper interpreter callouts. Output: vu1n_part<k>.cpp.
 heads.txt (optional): extra entry pcs (hex, one per line), e.g. misses logged by GOW_VU1N_DIAG.
 """
 import os
@@ -683,6 +682,12 @@ def main():
                 continue
             tail = []
             body = gen_block(pc, pairs, tail)
+            if strict and body is not None and any(
+                "VU1NativeAccess::callLower(" in line or "VU1NativeAccess::callUpper(" in line
+                for line in body
+            ):
+                # These are exact-engine interpreter callouts, not native AOT semantics.
+                body = None
             blocks[key] = (pc, len(pairs), body, tail[0] if tail else None)
             if body is None:
                 unsupported += 1
@@ -724,7 +729,7 @@ def main():
         if processed == 0 or count == 0 or unsupported != 0:
             print(
                 f"[vu1n_gen] STRICT AOT COVERAGE FAILED: valid_images={processed}, "
-                f"generated={count}, unsupported={unsupported}",
+                f"generated={count}, unsupported_or_interpreter_callout={unsupported}",
                 file=sys.stderr,
             )
             raise SystemExit(2)
