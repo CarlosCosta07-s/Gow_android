@@ -20,6 +20,8 @@ Documentação útil: [Input](https://github.com/dfdx047/Tenkaichi3DecompAndroid
 
 O README do projeto informa que o port executa nativamente em Android ARM64 e descreve a composição da engine com o código decompilado, renderer, áudio e camada de plataforma. Isso é uma referência de implementação e estado declarado pelo mantenedor, não uma medição reproduzida neste repositório.
 
+**Limite para a interface:** o BT3 também mantém uma tela ControlsScreen no aplicativo e permite editar o overlay durante o jogo. Não vamos copiar a tela externa de controles. Deste projeto aproveitaremos apenas os padrões técnicos de entrada, estado virtual de pad e overlay; toda a configuração do nosso port ficará no menu de opções de God of War, conforme a decisão abaixo.
+
 ### O que não será transplantado
 
 O caminho de BT3 parte de uma decompilação C de outro jogo e de uma camada de port própria. Não substitui o pipeline MIPS R5900 → C++/ARM64 de God of War baseado em PS2Recomp, nem fornece o estado de hardware, os serviços ou o código específico de God of War. Os fontes do jogo BT3 não serão copiados para este repositório.
