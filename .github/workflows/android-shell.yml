@@ -246,6 +246,29 @@ jobs:
           echo "exit_code=$BUILD_STATUS" >> "$GITHUB_OUTPUT"
           exit "$BUILD_STATUS"
 
+      - name: Verify APK signature and print certificate
+        if: steps.build.outputs.exit_code == '0'
+        shell: bash
+        env:
+          GOW_ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.GOW_ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/37.0.0/apksigner"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/gow-android-apk-signature.txt"
+          CERT_SHA256="$(awk -F': ' '/Signer #1 certificate SHA-256 digest:/ { print $2; exit }' "$RUNNER_TEMP/gow-android-apk-signature.txt")"
+          test -n "$CERT_SHA256"
+          if [ -n "$GOW_ANDROID_DEBUG_KEYSTORE_BASE64" ]; then
+            SIGNING_MODE="persistent GitHub Actions key"
+          else
+            SIGNING_MODE="ephemeral runner Debug key (not update-compatible)"
+          fi
+          {
+            echo "### Android APK signing"
+            echo "- Mode: $SIGNING_MODE"
+            echo "- Certificate SHA-256: $CERT_SHA256"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload debug APK
         if: success()
         uses: actions/upload-artifact@v4
