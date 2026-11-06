@@ -298,6 +298,83 @@ int main() {
                 backgroundPixel[2] == 0u,
                 "PMODE SLBG did not blend circuit 1 over BGCOLOR.");
 
+        // The fragment path must depth-test before writing both color and Z.
+        GSPrimitiveBatch depthPoint{};
+        depthPoint.vertexCount = 1u;
+        depthPoint.state.context.frame = triangle.state.context.frame;
+        depthPoint.state.context.scissor = triangle.state.context.scissor;
+        depthPoint.state.context.zbuf = {384u, GS_PSM_Z32, false};
+        depthPoint.state.context.test = (1ull << 16u) | (2ull << 17u);
+        depthPoint.state.prim.type = GS_PRIM_POINT;
+        depthPoint.vertices[0].x = 52.0f;
+        depthPoint.vertices[0].y = 20.0f;
+        depthPoint.vertices[0].z = 100.0;
+        depthPoint.vertices[0].r = 255u;
+        depthPoint.vertices[0].g = 0u;
+        depthPoint.vertices[0].b = 0u;
+        depthPoint.vertices[0].a = 255u;
+        backend.Submit(depthPoint);
+        depthPoint.vertices[0].z = 50.0;
+        depthPoint.vertices[0].r = 0u;
+        depthPoint.vertices[0].b = 255u;
+        backend.Submit(depthPoint);
+        require(backend.ReadVram(GS_PSM_Z32, 384u, 1u, 52u, 20u) == 100u,
+                "GS GEQUAL depth test did not preserve the nearest Z value.");
+
+        // A failed alpha test with AFAIL=KEEP must leave the framebuffer intact.
+        backend.WriteVram(GS_PSM_CT32, 0u, 1u, 54u, 20u, 0xFF00FF00u);
+        GSPrimitiveBatch alphaPoint{};
+        alphaPoint.vertexCount = 1u;
+        alphaPoint.state.context.frame = triangle.state.context.frame;
+        alphaPoint.state.context.scissor = triangle.state.context.scissor;
+        alphaPoint.state.context.test = 1ull | (4ull << 1u) | (128ull << 4u);
+        alphaPoint.state.prim.type = GS_PRIM_POINT;
+        alphaPoint.vertices[0].x = 54.0f;
+        alphaPoint.vertices[0].y = 20.0f;
+        alphaPoint.vertices[0].r = 255u;
+        alphaPoint.vertices[0].g = 0u;
+        alphaPoint.vertices[0].b = 0u;
+        alphaPoint.vertices[0].a = 64u;
+        backend.Submit(alphaPoint);
+        require(backend.ReadVram(GS_PSM_CT32, 0u, 1u, 54u, 20u) == 0xFF00FF00u,
+                "GS alpha-test KEEP action modified the framebuffer.");
+
+        // DATE compares the stored destination alpha bit before fragment writes.
+        backend.WriteVram(GS_PSM_CT32, 0u, 1u, 56u, 20u, 0xFF0000FFu);
+        GSPrimitiveBatch datePoint = alphaPoint;
+        datePoint.state.context.test = 1ull << 14u; // DATE=1, DATM=0
+        datePoint.vertices[0].x = 56.0f;
+        datePoint.vertices[0].r = 0u;
+        datePoint.vertices[0].g = 255u;
+        datePoint.vertices[0].b = 0u;
+        datePoint.vertices[0].a = 255u;
+        backend.Submit(datePoint);
+        require(backend.ReadVram(GS_PSM_CT32, 0u, 1u, 56u, 20u) == 0xFF0000FFu,
+                "GS DATE did not reject a destination with alpha bit set.");
+
+        // GS ALPHA=(Cs-Cd)*As/128+Cd blends the source red over destination blue.
+        backend.WriteVram(GS_PSM_CT32, 0u, 1u, 58u, 20u, 0xFFFF0000u);
+        GSPrimitiveBatch blendPoint{};
+        blendPoint.vertexCount = 1u;
+        blendPoint.state.context.frame = triangle.state.context.frame;
+        blendPoint.state.context.scissor = triangle.state.context.scissor;
+        blendPoint.state.context.alpha = 0x44u;
+        blendPoint.state.colclamp = 1u;
+        blendPoint.state.prim.type = GS_PRIM_POINT;
+        blendPoint.state.prim.abe = true;
+        blendPoint.vertices[0].x = 58.0f;
+        blendPoint.vertices[0].y = 20.0f;
+        blendPoint.vertices[0].r = 255u;
+        blendPoint.vertices[0].g = 0u;
+        blendPoint.vertices[0].b = 0u;
+        blendPoint.vertices[0].a = 64u;
+        backend.Submit(blendPoint);
+        const uint32_t blendedVram =
+            backend.ReadVram(GS_PSM_CT32, 0u, 1u, 58u, 20u);
+        require((blendedVram & 0xFFu) == 127u &&
+                ((blendedVram >> 16u) & 0xFFu) == 128u,
+                "GS ALPHA fixed-point equation did not produce the expected RGB blend.");
+
         std::cout << "Android GS VRAM adapter tests passed.\n";
         return 0;
     } catch (const std::exception &exception) {
