@@ -92,7 +92,11 @@ def safe_extract_archive(archive_path: Path, destination: Path) -> tuple[Path, P
                 len(pure.parts) == 2
                 and pure.parts[0] in ("vu1", "iop")
                 and pure.suffix == ".bin"
-            ) or name == "iop/modules.txt" or name == "capture_manifest.txt"
+            ) or name in (
+                "iop/modules.txt",
+                "vu1/vu1n_heads.txt",
+                "capture_manifest.txt",
+            )
             if not allowed:
                 raise ValueError(f"Unexpected file in AOT capture ZIP: {name}")
 
@@ -266,7 +270,34 @@ def generate_native_aot(
 
     vu1_generator = root / "port/kiexter/tools/vu1n_gen.py"
     iop_generator = root / "port/kiexter/tools/iopn_gen.py"
-    heads_file = root / "port/kiexter/tools/vu1n_heads.txt"
+    repository_heads = root / "port/kiexter/tools/vu1n_heads.txt"
+    captured_heads = vu1_dir / "vu1n_heads.txt"
+    head_values: set[int] = set()
+    for heads_source in (repository_heads, captured_heads):
+        if not heads_source.is_file():
+            continue
+        if heads_source.is_symlink() or heads_source.stat().st_size > 1024 * 1024:
+            raise ValueError(f"VU1 head list is unsafe or exceeds 1 MiB: {heads_source.name}")
+        for line_number, line in enumerate(
+            heads_source.read_text(encoding="ascii").splitlines(), start=1
+        ):
+            value = line.strip()
+            if not value:
+                continue
+            try:
+                head = int(value, 16) & 0x3FF8
+            except ValueError as error:
+                raise ValueError(
+                    f"Invalid hexadecimal VU1 head on {heads_source.name}:{line_number}."
+                ) from error
+            head_values.add(head)
+    heads_file: Path | None = None
+    if head_values:
+        heads_file = work / "vu1n_heads_combined.txt"
+        heads_file.write_text(
+            "".join(f"{head:04x}\\n" for head in sorted(head_values)),
+            encoding="ascii",
+        )
     for tool in (vu1_generator, iop_generator):
         if not tool.is_file():
             raise RuntimeError(f"Required AOT generator is missing: {tool}")
@@ -313,7 +344,7 @@ def generate_native_aot(
             python, "-I", str(vu1_generator),
             str(vu1_output), str(vu1_dir),
         ]
-        if heads_file.is_file():
+        if heads_file is not None:
             vu1_command.extend(["--heads", str(heads_file)])
         vu1_command.extend(["--parts", "6", "--strict-partial"])
         vu1_stdout = run_generator(vu1_command, cwd=root)
@@ -349,6 +380,7 @@ def generate_native_aot(
         ),
         "vu1_unsupported_blocks": vu1_unsupported,
         "vu1_interpreter_callouts": vu1_interpreter_callouts,
+        "vu1_extra_heads": len(head_values),
         "iop": iop_records,
         "sources": {
             "vu1": [path.name for path in vu1_sources],
