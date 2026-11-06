@@ -76,6 +76,17 @@ add_library(android-game SHARED
 # The Python preparation step exports the pinned and privately patched Waffle
 # source tree here. Keep it under app/build (ignored by Git), never as a submodule.
 set(GOW_WAFFLE_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../build/gow-runtime-source")
+set(GOW_ANDROID_GENERATED_IOP_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../build/gow-generated-iop")
+set(GOW_ANDROID_GENERATED_VU1_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../build/gow-generated-vu1")
+set(PS2X_IOP_NATIVE_SOURCE_DIR "${GOW_ANDROID_GENERATED_IOP_DIR}" CACHE PATH
+    "Private generated IRX AOT C++ directory" FORCE)
+file(GLOB GOW_ANDROID_GENERATED_VU1_SOURCES CONFIGURE_DEPENDS
+    "${GOW_ANDROID_GENERATED_VU1_DIR}/vu1n_part*.cpp")
+set(GOW_ANDROID_CAPTURE_BOOTSTRAP OFF)
+if("$ENV{GOW_ANDROID_CAPTURE_BOOTSTRAP}" STREQUAL "1")
+    set(GOW_ANDROID_CAPTURE_BOOTSTRAP ON)
+endif()
+
 if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
     set(PS2X_BUILD_RECOMP OFF CACHE BOOL "" FORCE)
     set(PS2X_BUILD_RUNTIME ON CACHE BOOL "" FORCE)
@@ -99,6 +110,29 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
 
     if(NOT TARGET ps2_runtime)
         message(FATAL_ERROR "Prepared Waffle tree did not define ps2_runtime.")
+    endif()
+
+    # Private VU1 blocks are generated from the user's captured 16 KiB micro-memory
+    # images. They are compiled into the Android runtime; no interpreter fallback
+    # is enabled in the shipped native-only profile.
+    if(GOW_ANDROID_GENERATED_VU1_SOURCES)
+        target_sources(ps2_runtime PRIVATE ${GOW_ANDROID_GENERATED_VU1_SOURCES})
+        set_source_files_properties(${GOW_ANDROID_GENERATED_VU1_SOURCES} PROPERTIES
+            SKIP_UNITY_BUILD_INCLUSION ON
+            SKIP_PRECOMPILE_HEADERS ON)
+        message(STATUS "FORGE Android target includes private native VU1 blocks.")
+    elseif(GOW_ANDROID_GENERATED_GAME_SOURCES AND NOT GOW_ANDROID_CAPTURE_BOOTSTRAP)
+        message(FATAL_ERROR
+            "The ELF AOT is present but generated VU1 blocks are missing. "
+            "Supply the private VU1 captures or use the explicit capture-bootstrap build.")
+    endif()
+
+    if(GOW_ANDROID_GENERATED_GAME_SOURCES
+            AND NOT EXISTS "${GOW_ANDROID_GENERATED_IOP_DIR}/iopn_registry.cpp"
+            AND NOT GOW_ANDROID_CAPTURE_BOOTSTRAP)
+        message(FATAL_ERROR
+            "The ELF AOT is present but the generated IOP registry is missing. "
+            "Supply private IRX captures or use the explicit capture-bootstrap build.")
     endif()
 
     # GameActivity owns the Android lifecycle. Raylib device teardown is gated
