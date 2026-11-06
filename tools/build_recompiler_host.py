@@ -1034,8 +1034,8 @@ def main() -> int:
     )
     replace_exactly_once(
         runtime_cpp,
-        "    return enabled;\n}\n\nbool PS2Runtime::initialize",
-        "    return enabled;\n}\n#endif\n\nbool PS2Runtime::initialize",
+        "    return enabled;\n}\n\nbool PS2Runtime::initializeCoreHeadless",
+        "    return enabled;\n}\n#endif\n\nbool PS2Runtime::initializeCoreHeadless",
         "close the optional PCSX2 VU1 environment switch guard",
     )
 
