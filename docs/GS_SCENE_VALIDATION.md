@@ -69,6 +69,6 @@ Manter uma cópia local de um CSV ou Markdown com estas colunas:
 
 ## Estado atual (06/11/2026)
 
-**[PREPARAÇÃO IMPLEMENTADA]** Existe captura automática do primeiro `PresentationFrame`, captura local adicional sob demanda no APK Debug (até 32 frames por processo), gravador PPM P6, comparador offline e testes host dessas ferramentas.
+**[PREPARAÇÃO IMPLEMENTADA; APK DEBUG ARM64 COMPILADO]** Existe captura automática do primeiro `PresentationFrame`, captura local adicional sob demanda no APK Debug (até 32 frames por processo), gravador PPM P6, comparador offline e testes host dessas ferramentas. A CI `42268386758` aprovou o build Debug ARM64 e publicou `gow-android-arm64-shell` (artefato `13528990480`).
 
 **[PENDENTE — PRIMEIRA CENA REAL]** A tabela AOT pública ainda está vazia. A porta de carga bloqueia ELF quando não há código AOT compatível, e `PS2Runtime::run()` permanece deliberadamente bloqueado. Nenhuma captura desta matriz foi produzida pelo God of War em Android. Não marcar qualquer linha como aprovada até haver captura real e referência pareada.
