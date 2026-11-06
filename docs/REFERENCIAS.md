@@ -1,61 +1,99 @@
-# Referências de engenharia — Gow_android
+# Referências e proveniência de código — Gow_android
 
-**Política do projeto:** referências externas serão usadas para estudar arquitetura, comportamento, métricas, organização de builds e compatibilidade. Não vamos copiar nem incorporar código-fonte dos ports, recompiladores, emuladores, runtimes, renderizadores, shaders, hooks ou sistemas de controles desses projetos. O código do FORGE e do port de God of War será desenvolvido neste repositório.
+**Estratégia atual:** reutilizar seletivamente o port nativo de PC do KIexster e seus componentes-base quando forem necessários para God of War; adaptar a plataforma para Android ARM64. Não vamos importar repositórios inteiros nem transplantar a camada de PC indiscriminadamente.
 
-## 1. Black para Android — RanggaCasper
+## 1. Base principal — KIexster/god-of-war-recomp
 
-Repositório: https://github.com/RanggaCasper/Black-Android
+Repositório: https://github.com/KIexster/god-of-war-recomp  
+Commit auditado: `a226151feb6ed22937e42be485aaf28a83acd166`  
+Licença declarada: GPL-3.0.  
+Jogo-alvo: God of War PS2 NTSC-U, `SCUS_973.99`.
 
-O README descreve um port nativo da versão Xbox original de Black. O projeto faz recompilação estática do código x86 para C++/ARM64, usa Vulkan para desenho e SDL3 para janela, entrada e áudio. Também documenta controles touch, giroscópio, controles físicos, configurações gráficas, opções de resolução e pausa em background.
+O README e a documentação do projeto descrevem recompilação estática de 6.414 funções MIPS R5900 para C++, boot, menus, novo jogo e combate no barco no PC. O projeto é baseado em PS2Recomp e, desde outubro de 2026, usa como base de runtime o port de Waffle565.
 
-**O que estudar:** separação entre recompilador, runtime, camada Android, renderer, áudio e entrada; instalação dos dados do usuário; escalabilidade de resolução; perfis de GPU e controles configuráveis.
+### Arquivos já importados
 
-**O que não fazer:** não importar XboxXBE-Recomp, runtime Xbox, renderer Vulkan, SDL glue, código de controles ou shaders do projeto. Xbox Direct3D 8 e PS2 GS são arquiteturas diferentes; o renderer de Black não é uma implementação do GS.
+| Destino neste projeto | Arquivo de origem | SHA-1/SHA do blob de origem | Estado |
+|---|---|---|---|
+| `recompiler/config/funcmap.csv` | `config/funcmap.csv` | `b1253abb001fbf1ac0622b751aa1ca95b35f634c` | Importado; 6.414 intervalos e sem sobreposição na verificação estrutural. |
+| `recompiler/config/recomp.template.toml` | `config/recomp.template.toml` | `8296991acfd428ab4c2702917725682ba67d26c7` | Importado; contém stubs, entry points, skips, patches e marcadores de caminho. |
+| `port/kiexter/gow_overrides.cpp` | `src/gow_overrides.cpp` | `6f73d16bc59d34f780317bf09c69c3a1f863fc0e` | Importado para staging; ainda não compilado no Android. |
+| `port/kiexter/tools/vu1n_gen.py` | `tools/vu1/vu1n_gen.py` | `4ddb2c1d81b1717240d9259af8457cc860d95eea` | Importado para staging; exige dumps privados de microcódigo e runtime compatível. |
+| `port/kiexter/tools/iopn_gen.py` | `tools/iop/iopn_gen.py` | `f1e540f6bac22435855ff0b22661167fe3f953da` | Importado para staging; exige dumps privados dos módulos IRX e runtime compatível. |
 
-## 2. Budokai Tenkaichi 3 para Android — Dragon Rage
+Os arquivos foram trazidos do commit acima sem alteração de conteúdo. Os cabeçalhos dos três arquivos de código indicam que eles foram originalmente copiados/adaptados de Waffle565; por isso, a origem Waffle também é registrada abaixo. Nenhum deles está conectado ao CMake/Gradle neste momento.
 
-Projeto: https://github.com/dfdx047/Tenkaichi3DecompAndroid
+A verificação estrutural do mapa encontrou 6.414 funções, intervalos ordenados, tamanhos consistentes e nenhuma sobreposição. O template contém exatamente os marcadores `@ELF@`, `@MAP@` e `@OUT@`. Isso não substitui a execução do recompilador nem a validação do código gerado.
 
-O README descreve uma aplicação Android separada da engine nativa, baseada em Tenkaichi3Decomp e no port para PC. A engine é compilada para ARM64; o launcher instala os dados do ISO do usuário e organiza arquivos, mods e saves em diretórios locais. O projeto informa execução de menus e batalhas a 30 FPS em dispositivos Snapdragon e também testes em GPUs Mali, com ajustes específicos para reduzir tráfego de memória e contornar diferenças de driver.
+## 2. Runtime-base — Waffle565/God-Of-War-Native-Port
 
-**O que estudar:** separação entre app e engine; verificação/checksum da imagem; cópia/organização eficiente dos dados; layout local previsível; relatórios de diagnóstico; validação em mais de uma família de GPU; otimização de memória para GPUs tile-based.
+Repositório: https://github.com/Waffle565/God-Of-War-Native-Port  
+Branch de runtime auditada: `runtime`.  
+Commit citado pelo pipeline KIexster para o código de overrides/geradores: `34f30d5e432751369177af115104f4d19af6d080`.  
+A documentação KIexster descreve a migração para o diff `c5a9d02..runtime`, associado a `49ca62c`.  
+A branch `runtime` consultada possui arquivo `LICENSE` GPL-3.0.
 
-**O que não fazer:** não copiar código de Tenkaichi3Decomp, do port de PC, da engine BT3, do renderer, do sistema de áudio, dos controles, dos patches LLVM ou do app Dragon Rage. O código-fonte do jogo e sua decompilação têm situação de direitos própria, distinta da licença MIT declarada para partes do port.
+O runtime Waffle substitui partes utilizadas do hardware PS2 por serviços nativos: GS OpenGL, serviços EE, VU1 AOT, IOP/IRX, SPU2/LIBSD, pad, memory card e integração DMA/VIF/GIF. É a base sobre a qual o KIexster construiu seu port de PC.
 
-## 3. God of War: Recomp — CodeAbhi826
+**Importante para Android:** a base Waffle é orientada ao desktop. Usa Raylib, renderer GS OpenGL e integração específica de host. O arquivo `ps2_android_runtime.cpp` consultado contém apenas um TODO para overlay de toque. O CMake reconhece Android e cria uma shared library, mas isso não significa que exista um port Android completo.
 
-Repositório: https://github.com/CodeAbhi826/God-Of-War-Recomp  
-Branch consultada: `android`  
-Commit analisado: `ea5f61bf61f3faf972a816cf9ba2309b0f9876ef`  
-Licença declarada pelo projeto: GPL-3.0.
+O que vamos avaliar/reutilizar:
+- Estado/memória/scheduler do EE e serviços PS2 que não dependem do host.
+- Frontend de comandos GS/GIF, formatos, VRAM/CLUT e swizzle que possam ser separados do backend OpenGL.
+- Serviços de áudio, pad, memory card e disco, depois de substituir APIs de host.
+- VU1 e IOP AOT, com pipeline de geração executado fora do APK.
 
-A documentação descreve o fluxo Android/ARM64, seleção SAF, leitura de ISO, extração de ELF, configuração de build e estado dos subsistemas PS2. Também informa limitações atuais do backend GS Android e a dependência de insumos privados para uma build completa.
+O que deve ser refeito/adaptado:
+- Runner e lifecycle Android, mantendo o FORGE.
+- Backend gráfico GS para Vulkan Android; não ligar diretamente o backend WGL/OpenGL do PC.
+- Entrada por toque/gamepad Android.
+- Saída de áudio Android e sincronização.
+- Leitura/extração/cache do disco a partir do ISO escolhido pelo usuário.
 
-**Uso permitido neste projeto:** referência documental para entender desafios específicos de God of War/PS2 e comparar critérios de boot. Não é a base de código do FORGE e não será importado como submódulo.
+O repositório Waffle na branch `main` não fornece licença na raiz; a branch `runtime` auditada possui licença GPL-3.0. Qualquer arquivo selecionado deve ser conferido quanto à origem e aos avisos antes de importar.
 
-## 4. Referências desktop para God of War
+## 3. Recompilador — ran-j/PS2Recomp
 
-- [god-of-war-recomp — KIexster](https://github.com/KIexster/god-of-war-recomp): documentação sobre mapa de funções, configuração NTSC-U e progresso de recompilação/gameplay no desktop.
-- [God-Of-War-Native-Port — Waffle565](https://github.com/Waffle565/God-Of-War-Native-Port): material descritivo sobre GS/OpenGL, VU1, IOP, DMA, áudio e saves. A documentação é voltada ao PC; não prova compatibilidade Android.
-- [PS2Recomp — ran-j](https://github.com/ran-j/PS2Recomp): referência conceitual para a tarefa de recompilação estática MIPS; o código do recompilador não será importado.
-- [PCSX2](https://github.com/PCSX2/pcsx2): documentação e testes comportamentais sobre EE, VU, GS, DMA e IOP. Não será usado como runtime nem como fonte de código.
+Repositório: https://github.com/ran-j/PS2Recomp  
+Commit fixado pelo script KIexter: `c5a9d02573410a2085a4b4b831b0b68ba3515440`.  
+Licença declarada: GPL-3.0.
 
-## 5. APIs e documentação de plataforma
+O projeto fornece analyzer, recompilador MIPS R5900 → C++ e runtime genérico de suporte. A proposta é usá-lo como ferramenta de build para o ELF privado do usuário, com a configuração e o mapa KIexter. O código C++ gerado deve ser compilado para `arm64-v8a`; o recompilador não executa dentro do APK nem durante a partida.
 
-- [Android NDK](https://developer.android.com/ndk): toolchain e APIs nativas.
-- [Vulkan no Android](https://developer.android.com/games/develop/vulkan/native-engine-support): integração com GPU e surface Android.
-- [Android NativeActivity](https://developer.android.com/reference/android/app/NativeActivity): lifecycle da atividade nativa.
-- [Android GameActivity](https://developer.android.com/games/agdk/game-activity): opção de integração para jogos C/C++; a dependência atual será revista na estratégia de minimizar bibliotecas externas.
-- [AAudio](https://developer.android.com/ndk/guides/audio/aaudio/aaudio): API de áudio nativa Android.
-- [ACTION_OPEN_DOCUMENT](https://developer.android.com/reference/android/content/Intent): escolha de arquivos e permissões de acesso.
+**Estado:** ainda não importado nem integrado ao pipeline Android. O próximo trabalho é fixar e obter essa revisão em um ambiente de build host e verificar a saída gerada para ARM64.
 
-## Decisão de engenharia
+## 4. Outras referências de engenharia
 
-1. Usar Black para estudar a arquitetura de recompilação estática, interface móvel, renderer e suporte a controles.
-2. Usar Dragon Rage para estudar integração de engine PS2 em ARM64, instalação do disco, estrutura de dados e validação em GPUs móveis.
-3. Usar CodeAbhi, KIexster e Waffle565 apenas para estudar problemas específicos de God of War e PS2.
-4. Implementar nosso próprio decoder/lifter MIPS R5900, runtime de serviços PS2, frontend GS e backend Vulkan.
-5. Gerar/compilar microprogramas VU1 antecipadamente, sem interpretador no caminho final.
-6. Fazer testes próprios com checkpoints, logs, imagens de referência e medições em aparelho físico.
+### Black para Android — RanggaCasper
+https://github.com/RanggaCasper/Black-Android
 
-**Regra de proveniência:** nenhum trecho de código dos projetos de referência será copiado para este repositório. Dependências genéricas de plataforma serão avaliadas separadamente e documentadas com versão e licença antes de serem adicionadas.
+Referência de arquitetura para recompilação estática x86 → C++/ARM64, Vulkan, camada Android, controles touch e gamepad. O Xbox e o PS2 têm arquiteturas diferentes; o código de Black não é renderer GS e não será usado como base direta de runtime.
+
+### Dragon Rage / Budokai Tenkaichi 3 para Android — dfdx047
+https://github.com/dfdx047/Tenkaichi3DecompAndroid
+
+Referência PS2/ARM64 para separar launcher e engine, instalar dados de ISO, organizar arquivos locais e testar Snapdragon/Mali. Não é o runtime do nosso jogo.
+
+### God of War: Recomp — CodeAbhi826
+https://github.com/CodeAbhi826/God-Of-War-Recomp
+
+Referência documental para fluxo Android/ARM64, boot e diagnóstico. O submódulo que havia sido adicionado anteriormente foi removido; não há código desse projeto no repositório atual.
+
+### PCSX2
+https://github.com/PCSX2/pcsx2
+
+Referência comportamental para EE, VU, GS, DMA e IOP. Componentes PCSX2 já usados por upstreams devem manter seus cabeçalhos e licença GPL-3.0-or-later; não vamos usar PCSX2 como runtime genérico do produto final.
+
+## 5. Plano de integração seletiva
+
+1. Usar mapa/configuração do KIexster para o alvo `SCUS_973.99`.
+2. Fixar PS2Recomp e gerar C++ a partir do ELF privado em ferramenta de build host.
+3. Selecionar do runtime Waffle/KIexster apenas módulos necessários ao jogo e que possam ser isolados das APIs desktop.
+4. Integrar overrides e serviços específicos de God of War, removendo diagnósticos e chamadas de host não necessários.
+5. Construir/compilar microprogramas VU1 e módulos IRX de forma antecipada. O produto final não deve recorrer a interpretadores de EE/VU1/IOP como caminho normal.
+6. Manter o frontend de comandos GS quando portável e desenvolver/adaptar backend Vulkan Android.
+7. Conectar o runner ao FORGE e validar em dispositivo real por etapas.
+
+**Não importar em bloco:** o patch de runtime Waffle/KIexster inclui o renderer OpenGL e dependências desktop; sua aplicação inteira ao app Android não está aprovada. A seleção deve acontecer por módulo, com build e testes depois de cada integração.
+
+Consulte [docs/BASE_KIEXTER.md](BASE_KIEXTER.md) para os arquivos e hashes importados, dependências conhecidas e lacunas Android.
