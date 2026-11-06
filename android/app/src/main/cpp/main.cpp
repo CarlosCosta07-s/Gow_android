@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <condition_variable>
 #include <string_view>
 #include <vector>
 #include <mutex>
@@ -42,7 +43,9 @@ std::mutex gActivityReferenceMutex;
 JavaVM *gActivityVm = nullptr;
 jobject gActivityReference = nullptr;
 std::mutex gBootPathMutex;
+std::condition_variable gBootPathCondition;
 std::string gBootRelativePath;
+bool gBootPathConfigurationReceived = false;
 
 void reportRuntimeStatus(android_app *app, const char *message, bool failed) {
     if (app == nullptr || message == nullptr) {
@@ -981,29 +984,49 @@ Java_org_gowandroid_app_GowGameActivity_nativeClearActivityReference(
     if (previousReference != nullptr) {
         env->DeleteGlobalRef(previousReference);
     }
+    {
+        std::lock_guard<std::mutex> lock(gBootPathMutex);
+        gBootPathConfigurationReceived = true;
+    }
+    gBootPathCondition.notify_all();
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_org_gowandroid_app_GowGameActivity_nativeSetBootRelativePath(
-    JNIEnv *env, jclass, jstring relativePath) noexcept {
-    if (env == nullptr || relativePath == nullptr) {
+Java_org_gowandroid_app_GowGameActivity_nativeConfigurePrivateBoot(
+    JNIEnv *env, jclass, jstring privateCdRoot,
+    jstring relativePath) noexcept {
+    if (env == nullptr) {
         return JNI_FALSE;
     }
-    const char *utf = env->GetStringUTFChars(relativePath, nullptr);
-    if (utf == nullptr) {
-        if (env->ExceptionCheck() == JNI_TRUE) env->ExceptionClear();
-        return JNI_FALSE;
+
+    std::string rootPath;
+    std::string candidate;
+    bool inputsValid = false;
+    if (privateCdRoot != nullptr && relativePath != nullptr) {
+        const char *rootUtf = env->GetStringUTFChars(privateCdRoot, nullptr);
+        const char *bootUtf = env->GetStringUTFChars(relativePath, nullptr);
+        if (rootUtf != nullptr && bootUtf != nullptr) {
+            rootPath.assign(rootUtf);
+            candidate.assign(bootUtf);
+            inputsValid = !rootPath.empty() && !candidate.empty()
+                && candidate.size() <= 1024u;
+        }
+        if (rootUtf != nullptr) env->ReleaseStringUTFChars(privateCdRoot, rootUtf);
+        if (bootUtf != nullptr) env->ReleaseStringUTFChars(relativePath, bootUtf);
+        if (env->ExceptionCheck() == JNI_TRUE) {
+            env->ExceptionClear();
+            inputsValid = false;
+        }
     }
-    std::string candidate(utf);
-    env->ReleaseStringUTFChars(relativePath, utf);
-    if (candidate.empty() || candidate.size() > 1024u) {
-        return JNI_FALSE;
-    }
+
+    const bool rootReady = inputsValid && gowAndroidCdRootSetPath(rootPath.c_str());
     {
         std::lock_guard<std::mutex> lock(gBootPathMutex);
-        gBootRelativePath = std::move(candidate);
+        gBootRelativePath = rootReady ? std::move(candidate) : std::string{};
+        gBootPathConfigurationReceived = true;
     }
-    return JNI_TRUE;
+    gBootPathCondition.notify_all();
+    return rootReady ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" void android_main(android_app* app) {
@@ -1039,7 +1062,9 @@ extern "C" void android_main(android_app* app) {
 
             std::string bootPath;
             {
-                std::lock_guard<std::mutex> lock(gBootPathMutex);
+                std::unique_lock<std::mutex> lock(gBootPathMutex);
+                gBootPathCondition.wait(
+                    lock, [] { return gBootPathConfigurationReceived; });
                 bootPath = gBootRelativePath;
             }
             if (!bootPath.empty()) {
