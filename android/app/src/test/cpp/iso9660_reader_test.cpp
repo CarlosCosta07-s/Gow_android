@@ -272,9 +272,12 @@ int main() {
         return fail("installer accepted a path separator in the final directory name");
     }
 
+    const std::vector<gow::disc::IsoInstallFile> finalCancelManifest{
+        {"DATA/TEST.BIN", "final/test.bin", 2050u},
+    };
     size_t finalProgressCallbacks = 0u;
     const auto finalCancelResult = gow::disc::installIsoManifest(
-        reader, cancelManifest, privateRoot, "final-cancel",
+        reader, finalCancelManifest, privateRoot, "final-cancel",
         [](const gow::disc::IsoInstallProgress &, void *userData) {
             auto *calls = static_cast<size_t *>(userData);
             ++(*calls);
