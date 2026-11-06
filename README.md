@@ -2,7 +2,7 @@
 
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
-> Estado atual: APK Debug ARM64 com launcher em estilo biblioteca e emblema vetorial original compilado com sucesso pela CI. O jogo ainda não está integrado ou jogável.
+> Estado atual: shell Android com interface FORGE, ícone vetorial Ômega branco sobre vermelho, seleção SAF/ISO9660 e teste Vulkan. O jogo ainda não está integrado ou jogável.
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml)
 
@@ -24,9 +24,11 @@ Não queremos um emulador genérico, uma ISO dentro do APK ou um caminho final b
 - **Primeira revisão-alvo:** NTSC-U, serial `SCUS-97399`; outras regiões serão avaliadas depois.
 - **Desenvolvimento:** somente branch `main`.
 
-## Identidade visual e launcher customizado
+## FORGE — interface e ícone
 
-O launcher tem uma organização de biblioteca inspirada em launchers de PC, com barra lateral, página principal do jogo e ações rápidas. A direção de arte usa pedra escura, vermelho profundo, bronze envelhecido e um emblema geométrico vetorial original com referências à simbologia grega. Não são utilizados retratos de Kratos, capturas do jogo ou artes promocionais. A interface é construída com componentes Android nativos e mantém as funções reais de seleção de disco, diagnóstico e teste Vulkan.
+**FORGE** é o nome da interface de biblioteca do projeto. Sua organização moderna inclui navegação lateral, biblioteca do jogo, ações rápidas e cartões de status. A direção visual combina tons grafite, tipografia limpa e detalhes vermelhos, com referência sutil à identidade grega de God of War I.
+
+O ícone adaptativo é um **Ômega branco sobre fundo vermelho sólido**, desenhado como vetor original do projeto. Não são utilizados retratos de Kratos, capturas do jogo ou artes promocionais.
 
 ## Launcher e seleção de disco
 
