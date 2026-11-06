@@ -249,7 +249,9 @@ public final class GowGameActivity extends GameActivity {
             String relative = root.toPath().relativize(current.toPath())
                     .toString().replace(File.separatorChar, '/');
             if (relative.startsWith("vu1/") || relative.startsWith("iop/")) {
-                if (relative.endsWith(".bin") || relative.equals("iop/modules.txt")) {
+                if (relative.endsWith(".bin")
+                        || relative.equals("iop/modules.txt")
+                        || relative.equals("vu1/vu1n_heads.txt")) {
                     output.add(current);
                 }
             }
@@ -301,7 +303,7 @@ public final class GowGameActivity extends GameActivity {
                         }
                     }
                     zip.closeEntry();
-                    if (relative.startsWith("vu1/")) vu1Files++;
+                    if (relative.startsWith("vu1/") && relative.endsWith(".bin")) vu1Files++;
                     if (relative.startsWith("iop/") && relative.endsWith(".bin")) iopFiles++;
                 }
 
