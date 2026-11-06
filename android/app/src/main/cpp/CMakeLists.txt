@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project(gow_android_native LANGUAGES C CXX)
 
+# The old surface clear/present was only a bring-up diagnostic, not a GS
+# renderer. Keep it disabled by default until the Android GS backend exists.
+option(GOW_ANDROID_ENABLE_VULKAN_SMOKE
+    "Enable the isolated Vulkan clear/present diagnostic (not the PS2 GS renderer)" OFF)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -122,6 +127,10 @@ endif()
 target_compile_definitions(android-game PRIVATE
     VK_USE_PLATFORM_ANDROID_KHR
 )
+
+if(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
+    target_compile_definitions(android-game PRIVATE GOW_ANDROID_ENABLE_VULKAN_SMOKE=1)
+endif()
 
 target_compile_options(android-game PRIVATE
     -Wall
