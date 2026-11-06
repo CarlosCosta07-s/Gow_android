@@ -36,13 +36,13 @@ Fonte: [KIexster/god-of-war-recomp](https://github.com/KIexster/god-of-war-recom
 
 Auditoria estática do CMake e dos fontes na revisão Waffle de referência 49ca62c1d20b4659c61df6286c54e86edf411012:
 
-- O alvo ps2_runtime inclui fontes ee_ref e vu_pcsx2 para teste diferencial/diagnóstico PCSX2. No IOP, o modo estrito agora exclui core/iop_cpu.cpp do conjunto de fontes, sem remover os contratos de estado/serviço necessários à execução AOT. Elas não devem compor o caminho de execução final; se houver build de diagnóstico separado, manter os avisos GPL-3.0-or-later.
-- ps2_vu1_core.cpp ainda contém VU1Interpreter. A geração/ligação dos blocos VU1 AOT no CMake de referência é condicional e excluída quando Android está ativo; o caminho final precisa gerar AOT no host, ligar os blocos ao target Android e impedir fallback para microprogramas sem cobertura. No IOP, a variante estrita já remove iop_cpu.cpp e rejeita misses AOT, mas ainda precisa de validação com IRX reais e Android NDK.
+- O CMake upstream inclui fontes ee_ref e vu_pcsx2 para teste diferencial/diagnóstico PCSX2. O perfil PS2X_VU1_NATIVE_ONLY agora as retira de ps2_runtime; no IOP, PS2X_IOP_NATIVE_ONLY também exclui core/iop_cpu.cpp. Builds de diagnóstico não estritos devem preservar os avisos PCSX2 GPL-3.0-or-later.
+- ps2_vu1_core.cpp contém tanto o dispatcher AOT quanto rotinas da engine exata. No perfil estrito, o dispatcher não chama stepInterpreted quando um bloco não existe: registra diagnóstico e interrompe a VU1. O arquivo continua compilado porque abriga o próprio backend AOT e outros contratos; isso não equivale à remoção integral de todo código exato do mesmo translation unit.
 - gs_gl.cpp é backend OpenGL e ps2_audio_device.cpp usa miniaudio/Raylib do host; substituir por GS/Vulkan Android e saída de áudio Android.
 - ps2_pad_rumble_win.cpp é específico de Windows. ps2_android_runtime.cpp contém apenas um TODO de controles touch.
 - ps2_vif1_interpreter.cpp decodifica comandos VIF1/UNPACK; não é o interpretador de instruções MIPS do EE. A decisão sobre sua permanência é por função de hardware, separada da regra contra fallback de CPU.
 
-Esse snapshot é referência para identificar fronteiras. Nenhum desses arquivos foi importado para o projeto e não há runtime de jogo compilado.
+Essa revisão é referência para identificar fronteiras. O runtime Waffle ainda não está integrado ao target Android do aplicativo; sua build estrita host é uma verificação privada de compilação.
 
 ## [VERIFICADO] Ferramenta PS2Recomp no host
 
@@ -59,11 +59,26 @@ Esse snapshot é referência para identificar fronteiras. Nenhum desses arquivos
 - O build utilizou iop_native_none.cpp, sem módulos IRX do jogo. Isso confirma a exclusão da unidade de interpretação e a compilação da proteção, não a cobertura AOT dos módulos reais nem uma execução do runtime no aparelho.
 - O teste foi feito com GNU C++ no runner Linux; ainda falta compilar com Android NDK/ARM64 e validar com IRX privados.
 
+## [VERIFICADO] Runtime Waffle estrito compilado no host
+
+- O perfil PS2X_VU1_NATIVE_ONLY força o dispatcher nativo VU1 e bloqueia o caminho para stepInterpreted quando runNative não encontra um bloco registrado. O diagnóstico contém PC, instruções lower/upper, ciclo e flags de parada; a execução é interrompida.
+- O perfil desativa gravação/replay e verificação A/B que usam a engine exata como oráculo.
+- A configuração CMake estrita remove de ps2_runtime as fontes de diagnóstico diferencial ee_ref, ee_watch e vu_pcsx2; elas são mantidas somente em builds de diagnóstico não estritos.
+- A execução GitHub Actions 42150329023 compilou ps2_runtime, ps2_iop e ps2_recomp com GNU C++ no runner Linux. compile_commands.json confirmou PS2X_VU1_NATIVE_ONLY=1 em ps2_vu1_core.cpp, nenhuma unidade iop_cpu.cpp e nenhuma fonte de diagnóstico PCSX2 no alvo estrito.
+- Nenhum ELF, IRX ou microcódigo do jogo foi fornecido. Isso comprova a compilação das políticas e do runtime host; ainda não comprova cobertura AOT real ou execução no Android.
+
 ## [PREPARADO, COM TESTE SINTÉTICO] VU1 AOT estrito
 
 - port/kiexter/tools/vu1n_gen.py agora aceita --strict: falha se nenhuma imagem válida for processada, nenhum bloco for gerado, qualquer bloco descoberto não tiver implementação nativa ou um bloco gerado contiver callLower/callUpper (chamadas para a engine exata/interpreter).
 - A CI inclui dois microcódigos sintéticos: um vazio e outro com instrução lower não suportada que gera callLower. Ambos são rejeitados pelo gate; nenhum usa microcódigo do jogo.
-- A opção ainda não foi executada com capturas reais. O runtime VU1 ainda precisa compilar e validar o novo perfil PS2X_VU1_NATIVE_ONLY e ligar os arquivos AOT ao target Android; a trava em tempo de execução está em preparação e aguarda CI.
+- A trava PS2X_VU1_NATIVE_ONLY já compilou no runtime host (run 42150329023). A opção --strict ainda não foi executada com capturas reais; o runtime interromperá a execução no primeiro bloco não coberto. Ainda falta ligar os arquivos AOT gerados ao target Android.
+
+## [PREPARADO, COM COMPILAÇÃO NDK] Camada SIMD NEON para VU1
+
+- Foi criado port/kiexter/vu1/ps2_vu1_neon_compat.h para mapear a API SSE usada pelos blocos nativos VU1 para intrínsecos ARM NEON, incluindo operações vetoriais, máscaras, shuffle/blend, conversões e um mapeamento inicial MXCSR -> FPCR/FPSR.
+- Foi adicionado vu1_neon_compat_smoke.cpp ao alvo android-game. A execução Android shell 42150765223 compilou o APK Debug arm64-v8a com esse arquivo de smoke, usando o NDK 30.0.16248370.
+- Esse teste comprova que o cabeçalho e as chamadas de intrínsecos compilam no NDK ARM64; não executa a função smoke nem prova equivalência numérica, precisão de arredondamento ou runtime VU1 em aparelho.
+- O próximo passo é usar esse cabeçalho no patch privado do Waffle, compilar o próprio ps2_vu1_native.h com a seleção NEON e realizar testes de equivalência de lanes, NaN, signed zero, conversão e FPCR/FPSR.
 
 ## [PREPARADO, NÃO TESTADO] Geração do C++ do jogo
 
@@ -76,8 +91,8 @@ Esse snapshot é referência para identificar fronteiras. Nenhum desses arquivos
 
 - Geração do C++ do ELF privado com PS2Recomp (o executável host foi compilado, mas o ELF ainda não foi processado).
 - Compilação do código gerado para Android ARM64.
-- Runtime EE e serviços PS2 selecionados/adaptados para Android.
-- Geração VU1 AOT cobrindo todos os microprogramas usados pelo jogo; o gerador possui gate sintético --strict, ainda sem capturas reais.
+- Runtime Waffle compilado e adaptado ao Android NDK/ARM64 (o runtime host já compila; o smoke NEON compila, mas o target completo ainda não).
+- Geração VU1 AOT cobrindo todos os microprogramas usados pelo jogo; o gate --strict foi testado com entradas sintéticas, ainda sem capturas reais.
 - Geração AOT dos módulos IRX necessários e teste da proteção com IRX real; a proteção foi compilada sem esses módulos, mas ainda não foi executada.
 - Runner conectado à `GowGameActivity` mantendo o FORGE como launcher.
 - Cache/VFS dos arquivos do disco no layout de setores que o runtime KIexter espera.
@@ -88,7 +103,7 @@ Esse snapshot é referência para identificar fronteiras. Nenhum desses arquivos
 
 1. Validar em aparelho o parser `SYSTEM.CNF` com a imagem NTSC-U do usuário.
 2. Executar e validar o pipeline host criado para PS2Recomp, usando o ELF NTSC-U correto e mantendo a saída privada.
-3. Fechar a seleção arquivo a arquivo dos módulos portáveis do runtime Waffle/KIexter e preparar a compilação Android.
+3. Integrar o runtime Waffle ao target Android, aplicar o shim NEON a ps2_vu1_native.h e provar compilação NDK do runtime real.
 4. Adaptar runner, lifecycle, leitura/cache do disco, áudio e entrada para Android.
 5. Reaproveitar frontend GS/formatos portáveis e implementar o backend Vulkan Android.
 6. Executar VU1 e IRX necessários por AOT, sem fallback interpretado.
