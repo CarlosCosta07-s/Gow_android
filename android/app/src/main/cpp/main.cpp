@@ -4,6 +4,9 @@
 #include "android_pad_bridge.h"
 #include "android_cdroot_bridge.h"
 #include "android_frame_scaler.h"
+#include "android_gs_vulkan_backend.h"
+#include "android_gs_geometry.h"
+#include "gs_vulkan_primitive_shaders.h"
 #include "ps2_runtime.h"
 
 #include <android/log.h>
@@ -50,6 +53,8 @@ std::mutex gBootPathMutex;
 std::condition_variable gBootPathCondition;
 std::string gBootRelativePath;
 bool gBootPathConfigurationReceived = false;
+PS2Runtime *gActiveRuntime = nullptr;
+bool gGsBackendAttached = false;
 
 void reportRuntimeStatus(android_app *app, const char *message, bool failed) {
     if (app == nullptr || message == nullptr) {
@@ -224,6 +229,42 @@ public:
         return ready_;
     }
 
+    void enqueueGsBatch(const gow::android::GsGpuBatch &batch) {
+        if (!ready_ || batch.vertices.empty() ||
+            batch.targetWidth == 0u || batch.targetHeight == 0u) return;
+
+        std::lock_guard<std::mutex> lock(gsQueueMutex_);
+        constexpr size_t kMaxQueuedGsVertices = 262144u;
+        if (queuedGsVertices_.size() > kMaxQueuedGsVertices ||
+            batch.vertices.size() >
+                kMaxQueuedGsVertices - queuedGsVertices_.size()) {
+            logMessage(ANDROID_LOG_WARN,
+                "Android GS Vulkan queue reached its per-frame vertex limit; dropping a batch");
+            return;
+        }
+
+        QueuedGsDraw draw{};
+        draw.firstVertex = static_cast<uint32_t>(queuedGsVertices_.size());
+        draw.vertexCount = static_cast<uint32_t>(batch.vertices.size());
+        draw.topology = batch.topology;
+        draw.targetWidth = batch.targetWidth;
+        draw.targetHeight = batch.targetHeight;
+        draw.scissorX0 = batch.scissorX0;
+        draw.scissorY0 = batch.scissorY0;
+        draw.scissorX1 = batch.scissorX1;
+        draw.scissorY1 = batch.scissorY1;
+
+        const float width = static_cast<float>(batch.targetWidth);
+        const float height = static_cast<float>(batch.targetHeight);
+        for (const auto &source : batch.vertices) {
+            gow::android::GsGpuVertex vertex = source;
+            vertex.x = (vertex.x / width) * 2.0f - 1.0f;
+            vertex.y = (vertex.y / height) * 2.0f - 1.0f;
+            queuedGsVertices_.push_back(vertex);
+        }
+        queuedGsDraws_.push_back(draw);
+    }
+
     void submitFrame(
         std::vector<uint8_t> rgbaPixels,
         uint32_t width,
@@ -247,10 +288,7 @@ public:
     }
 
     void drawFrame() {
-        if (!ready_ || device_ == VK_NULL_HANDLE) {
-            return;
-        }
-
+        if (!ready_ || device_ == VK_NULL_HANDLE) return;
         if (!isSuccess(
                 vkWaitForFences(device_, 1, &frameFence_, VK_TRUE, UINT64_MAX),
                 "vkWaitForFences")) {
@@ -258,15 +296,10 @@ public:
             return;
         }
 
-        uint32_t imageIndex = 0;
+        uint32_t imageIndex = 0u;
         const VkResult acquire = vkAcquireNextImageKHR(
-            device_,
-            swapchain_,
-            UINT64_MAX,
-            imageAvailable_,
-            VK_NULL_HANDLE,
-            &imageIndex);
-
+            device_, swapchain_, UINT64_MAX, imageAvailable_,
+            VK_NULL_HANDLE, &imageIndex);
         if (acquire == VK_ERROR_OUT_OF_DATE_KHR) {
             recreateSwapchain();
             return;
@@ -276,7 +309,6 @@ public:
             ready_ = false;
             return;
         }
-
         if (imageIndex >= commandBuffers_.size() ||
             imageIndex >= renderFinished_.size() ||
             imageIndex >= swapchainImages_.size() ||
@@ -287,9 +319,8 @@ public:
         }
 
         if (!isSuccess(vkResetFences(device_, 1, &frameFence_), "vkResetFences") ||
-            !isSuccess(
-                vkResetCommandBuffer(commandBuffers_[imageIndex], 0),
-                "vkResetCommandBuffer")) {
+            !isSuccess(vkResetCommandBuffer(commandBuffers_[imageIndex], 0),
+                       "vkResetCommandBuffer")) {
             ready_ = false;
             return;
         }
@@ -297,7 +328,6 @@ public:
         VkCommandBufferBeginInfo beginInfo{
             VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
         if (!isSuccess(
                 vkBeginCommandBuffer(commandBuffers_[imageIndex], &beginInfo),
                 "vkBeginCommandBuffer")) {
@@ -305,29 +335,37 @@ public:
             return;
         }
 
+        std::vector<gow::android::GsGpuVertex> frameVertices;
+        std::vector<QueuedGsDraw> frameDraws;
+        {
+            std::lock_guard<std::mutex> lock(gsQueueMutex_);
+            frameVertices.swap(queuedGsVertices_);
+            frameDraws.swap(queuedGsDraws_);
+        }
+
+        const bool drewGsGeometry = !frameDraws.empty() &&
+            recordGsGeometry(
+                commandBuffers_[imageIndex], imageIndex,
+                frameVertices, frameDraws);
         bool uploadedFrame = false;
-        if (hasPendingFrame_ && frameUploadSupported_) {
+        if (!drewGsGeometry && hasPendingFrame_ && frameUploadSupported_) {
             uploadedFrame = uploadFrameToSwapchain(
                 commandBuffers_[imageIndex], imageIndex);
         }
 
-        if (!uploadedFrame) {
-            // This clear-only pass remains a bring-up diagnostic, not a GS renderer.
+        if (!drewGsGeometry && !uploadedFrame) {
             VkClearValue clearValue{};
             clearValue.color = {{0.025f, 0.018f, 0.035f, 1.0f}};
-
             VkRenderPassBeginInfo renderPassInfo{
                 VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
             renderPassInfo.renderPass = renderPass_;
             renderPassInfo.framebuffer = framebuffers_[imageIndex];
             renderPassInfo.renderArea.offset = {0, 0};
             renderPassInfo.renderArea.extent = swapchainExtent_;
-            renderPassInfo.clearValueCount = 1;
+            renderPassInfo.clearValueCount = 1u;
             renderPassInfo.pClearValues = &clearValue;
-
             vkCmdBeginRenderPass(
-                commandBuffers_[imageIndex],
-                &renderPassInfo,
+                commandBuffers_[imageIndex], &renderPassInfo,
                 VK_SUBPASS_CONTENTS_INLINE);
             vkCmdEndRenderPass(commandBuffers_[imageIndex]);
             swapchainLayouts_[imageIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -343,30 +381,27 @@ public:
         const VkPipelineStageFlags waitStage = uploadedFrame
             ? VK_PIPELINE_STAGE_TRANSFER_BIT
             : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
         VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.waitSemaphoreCount = 1u;
         submitInfo.pWaitSemaphores = &imageAvailable_;
         submitInfo.pWaitDstStageMask = &waitStage;
-        submitInfo.commandBufferCount = 1;
+        submitInfo.commandBufferCount = 1u;
         submitInfo.pCommandBuffers = &commandBuffers_[imageIndex];
-        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.signalSemaphoreCount = 1u;
         submitInfo.pSignalSemaphores = &renderFinished_[imageIndex];
-
         if (!isSuccess(
-                vkQueueSubmit(graphicsQueue_, 1, &submitInfo, frameFence_),
+                vkQueueSubmit(graphicsQueue_, 1u, &submitInfo, frameFence_),
                 "vkQueueSubmit")) {
             ready_ = false;
             return;
         }
 
         VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
-        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.waitSemaphoreCount = 1u;
         presentInfo.pWaitSemaphores = &renderFinished_[imageIndex];
-        presentInfo.swapchainCount = 1;
+        presentInfo.swapchainCount = 1u;
         presentInfo.pSwapchains = &swapchain_;
         presentInfo.pImageIndices = &imageIndex;
-
         const VkResult present = vkQueuePresentKHR(presentQueue_, &presentInfo);
         if (present == VK_ERROR_OUT_OF_DATE_KHR ||
             present == VK_SUBOPTIMAL_KHR ||
@@ -396,6 +431,265 @@ public:
     }
 
 private:
+    struct QueuedGsDraw {
+        uint32_t firstVertex = 0u;
+        uint32_t vertexCount = 0u;
+        gow::android::GsPrimitiveTopology topology =
+            gow::android::GsPrimitiveTopology::Triangles;
+        uint32_t targetWidth = 640u;
+        uint32_t targetHeight = 448u;
+        uint16_t scissorX0 = 0u;
+        uint16_t scissorY0 = 0u;
+        uint16_t scissorX1 = 639u;
+        uint16_t scissorY1 = 447u;
+    };
+
+    bool createGsGraphicsPipelines() {
+        VkShaderModule vertexModule = VK_NULL_HANDLE;
+        VkShaderModule fragmentModule = VK_NULL_HANDLE;
+        VkShaderModuleCreateInfo vertexInfo{
+            VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+        vertexInfo.codeSize = gow::android::shaders::kGsPrimitiveVertexSpirvSize;
+        vertexInfo.pCode = gow::android::shaders::kGsPrimitiveVertexSpirv;
+        if (!isSuccess(
+                vkCreateShaderModule(device_, &vertexInfo, nullptr, &vertexModule),
+                "vkCreateShaderModule(GS vertex)")) return false;
+
+        VkShaderModuleCreateInfo fragmentInfo{
+            VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+        fragmentInfo.codeSize = gow::android::shaders::kGsPrimitiveFragmentSpirvSize;
+        fragmentInfo.pCode = gow::android::shaders::kGsPrimitiveFragmentSpirv;
+        if (!isSuccess(
+                vkCreateShaderModule(device_, &fragmentInfo, nullptr, &fragmentModule),
+                "vkCreateShaderModule(GS fragment)")) {
+            vkDestroyShaderModule(device_, vertexModule, nullptr);
+            return false;
+        }
+
+        VkPipelineLayoutCreateInfo layoutInfo{
+            VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        if (!isSuccess(
+                vkCreatePipelineLayout(
+                    device_, &layoutInfo, nullptr, &gsPipelineLayout_),
+                "vkCreatePipelineLayout(GS)")) {
+            vkDestroyShaderModule(device_, fragmentModule, nullptr);
+            vkDestroyShaderModule(device_, vertexModule, nullptr);
+            return false;
+        }
+
+        const std::array<VkPipelineShaderStageCreateInfo, 2> stages = {{
+            {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0u,
+             VK_SHADER_STAGE_VERTEX_BIT, vertexModule, "main", nullptr},
+            {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0u,
+             VK_SHADER_STAGE_FRAGMENT_BIT, fragmentModule, "main", nullptr}
+        }};
+
+        VkVertexInputBindingDescription binding{};
+        binding.binding = 0u;
+        binding.stride = static_cast<uint32_t>(sizeof(gow::android::GsGpuVertex));
+        binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        const std::array<VkVertexInputAttributeDescription, 2> attributes = {{
+            {0u, 0u, VK_FORMAT_R32G32B32_SFLOAT,
+             static_cast<uint32_t>(offsetof(gow::android::GsGpuVertex, x))},
+            {1u, 0u, VK_FORMAT_R32G32B32A32_SFLOAT,
+             static_cast<uint32_t>(offsetof(gow::android::GsGpuVertex, r))}
+        }};
+        VkPipelineVertexInputStateCreateInfo vertexInput{
+            VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+        vertexInput.vertexBindingDescriptionCount = 1u;
+        vertexInput.pVertexBindingDescriptions = &binding;
+        vertexInput.vertexAttributeDescriptionCount =
+            static_cast<uint32_t>(attributes.size());
+        vertexInput.pVertexAttributeDescriptions = attributes.data();
+
+        VkPipelineViewportStateCreateInfo viewport{
+            VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+        viewport.viewportCount = 1u;
+        viewport.scissorCount = 1u;
+        VkPipelineRasterizationStateCreateInfo rasterization{
+            VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+        rasterization.depthClampEnable = VK_FALSE;
+        rasterization.rasterizerDiscardEnable = VK_FALSE;
+        rasterization.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterization.cullMode = VK_CULL_MODE_NONE;
+        rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterization.depthBiasEnable = VK_FALSE;
+        rasterization.lineWidth = 1.0f;
+        VkPipelineMultisampleStateCreateInfo multisample{
+            VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+        multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineColorBlendAttachmentState colorAttachment{};
+        colorAttachment.blendEnable = VK_FALSE;
+        colorAttachment.colorWriteMask =
+            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        VkPipelineColorBlendStateCreateInfo colorBlend{
+            VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+        colorBlend.attachmentCount = 1u;
+        colorBlend.pAttachments = &colorAttachment;
+        const std::array<VkDynamicState, 2> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+        VkPipelineDynamicStateCreateInfo dynamic{
+            VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+        dynamic.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamic.pDynamicStates = dynamicStates.data();
+
+        const std::array<VkPrimitiveTopology, 3> topologies = {
+            VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+            VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+        for (size_t i = 0u; i < topologies.size(); ++i) {
+            VkPipelineInputAssemblyStateCreateInfo assembly{
+                VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+            assembly.topology = topologies[i];
+            assembly.primitiveRestartEnable = VK_FALSE;
+            VkGraphicsPipelineCreateInfo pipelineInfo{
+                VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+            pipelineInfo.stageCount = static_cast<uint32_t>(stages.size());
+            pipelineInfo.pStages = stages.data();
+            pipelineInfo.pVertexInputState = &vertexInput;
+            pipelineInfo.pInputAssemblyState = &assembly;
+            pipelineInfo.pViewportState = &viewport;
+            pipelineInfo.pRasterizationState = &rasterization;
+            pipelineInfo.pMultisampleState = &multisample;
+            pipelineInfo.pColorBlendState = &colorBlend;
+            pipelineInfo.pDynamicState = &dynamic;
+            pipelineInfo.layout = gsPipelineLayout_;
+            pipelineInfo.renderPass = renderPass_;
+            pipelineInfo.subpass = 0u;
+            if (!isSuccess(
+                    vkCreateGraphicsPipelines(
+                        device_, VK_NULL_HANDLE, 1u, &pipelineInfo,
+                        nullptr, &gsPipelines_[i]),
+                    "vkCreateGraphicsPipelines(GS primitive)")) {
+                vkDestroyShaderModule(device_, fragmentModule, nullptr);
+                vkDestroyShaderModule(device_, vertexModule, nullptr);
+                return false;
+            }
+        }
+        vkDestroyShaderModule(device_, fragmentModule, nullptr);
+        vkDestroyShaderModule(device_, vertexModule, nullptr);
+        return true;
+    }
+
+    bool recordGsGeometry(
+        VkCommandBuffer commandBuffer,
+        uint32_t imageIndex,
+        const std::vector<gow::android::GsGpuVertex> &vertices,
+        const std::vector<QueuedGsDraw> &draws) {
+        if (vertices.empty() || draws.empty() ||
+            imageIndex >= framebuffers_.size() ||
+            gsPipelineLayout_ == VK_NULL_HANDLE) return false;
+
+        const VkDeviceSize requiredBytes =
+            static_cast<VkDeviceSize>(vertices.size() * sizeof(vertices[0]));
+        if (!ensureUploadBuffer(requiredBytes)) return false;
+        std::memcpy(uploadMapped_, vertices.data(),
+                    static_cast<size_t>(requiredBytes));
+        if ((uploadMemoryFlags_ & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u) {
+            VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+            range.memory = uploadMemory_;
+            range.offset = 0u;
+            range.size = VK_WHOLE_SIZE;
+            if (!isSuccess(
+                    vkFlushMappedMemoryRanges(device_, 1u, &range),
+                    "vkFlushMappedMemoryRanges(GS vertices)")) return false;
+        }
+
+        VkClearValue clearValue{};
+        clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+        VkRenderPassBeginInfo renderPassInfo{
+            VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        renderPassInfo.renderPass = renderPass_;
+        renderPassInfo.framebuffer = framebuffers_[imageIndex];
+        renderPassInfo.renderArea.offset = {0, 0};
+        renderPassInfo.renderArea.extent = swapchainExtent_;
+        renderPassInfo.clearValueCount = 1u;
+        renderPassInfo.pClearValues = &clearValue;
+        vkCmdBeginRenderPass(
+            commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        VkViewport viewport{};
+        viewport.width = static_cast<float>(swapchainExtent_.width);
+        viewport.height = static_cast<float>(swapchainExtent_.height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(commandBuffer, 0u, 1u, &viewport);
+
+        const VkBuffer vertexBuffer = uploadBuffer_;
+        const VkDeviceSize vertexOffset = 0u;
+        vkCmdBindVertexBuffers(
+            commandBuffer, 0u, 1u, &vertexBuffer, &vertexOffset);
+
+        for (const QueuedGsDraw &draw : draws) {
+            size_t pipelineIndex = 2u;
+            if (draw.topology == gow::android::GsPrimitiveTopology::Points)
+                pipelineIndex = 0u;
+            else if (draw.topology == gow::android::GsPrimitiveTopology::Lines)
+                pipelineIndex = 1u;
+            if (gsPipelines_[pipelineIndex] == VK_NULL_HANDLE ||
+                draw.vertexCount == 0u) continue;
+
+            const uint32_t targetWidth = std::max(1u, draw.targetWidth);
+            const uint32_t targetHeight = std::max(1u, draw.targetHeight);
+            const uint32_t x0 = std::min(
+                targetWidth, static_cast<uint32_t>(draw.scissorX0));
+            const uint32_t y0 = std::min(
+                targetHeight, static_cast<uint32_t>(draw.scissorY0));
+            const uint32_t x1 = std::min(
+                targetWidth, static_cast<uint32_t>(draw.scissorX1) + 1u);
+            const uint32_t y1 = std::min(
+                targetHeight, static_cast<uint32_t>(draw.scissorY1) + 1u);
+            if (x0 >= x1 || y0 >= y1) continue;
+
+            const uint32_t left = static_cast<uint32_t>(
+                static_cast<uint64_t>(x0) * swapchainExtent_.width / targetWidth);
+            const uint32_t top = static_cast<uint32_t>(
+                static_cast<uint64_t>(y0) * swapchainExtent_.height / targetHeight);
+            const uint32_t right = std::min(
+                swapchainExtent_.width,
+                static_cast<uint32_t>(
+                    (static_cast<uint64_t>(x1) * swapchainExtent_.width +
+                     targetWidth - 1u) / targetWidth));
+            const uint32_t bottom = std::min(
+                swapchainExtent_.height,
+                static_cast<uint32_t>(
+                    (static_cast<uint64_t>(y1) * swapchainExtent_.height +
+                     targetHeight - 1u) / targetHeight));
+            if (left >= right || top >= bottom) continue;
+
+            VkRect2D scissor{};
+            scissor.offset = {
+                static_cast<int32_t>(left), static_cast<int32_t>(top)};
+            scissor.extent = {right - left, bottom - top};
+            vkCmdSetScissor(commandBuffer, 0u, 1u, &scissor);
+            vkCmdBindPipeline(
+                commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                gsPipelines_[pipelineIndex]);
+            vkCmdDraw(
+                commandBuffer, draw.vertexCount, 1u,
+                draw.firstVertex, 0u);
+        }
+        vkCmdEndRenderPass(commandBuffer);
+        swapchainLayouts_[imageIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        return true;
+    }
+
+    void destroyGsGraphicsPipelines() {
+        if (device_ == VK_NULL_HANDLE) return;
+        for (VkPipeline &pipeline : gsPipelines_) {
+            if (pipeline != VK_NULL_HANDLE) {
+                vkDestroyPipeline(device_, pipeline, nullptr);
+                pipeline = VK_NULL_HANDLE;
+            }
+        }
+        if (gsPipelineLayout_ != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(device_, gsPipelineLayout_, nullptr);
+            gsPipelineLayout_ = VK_NULL_HANDLE;
+        }
+    }
+
     void destroyUploadBuffer() {
         if (device_ == VK_NULL_HANDLE) return;
         if (uploadMapped_ != nullptr && uploadMemory_ != VK_NULL_HANDLE) {
@@ -425,7 +719,7 @@ private:
 
         VkBufferCreateInfo bufferInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         bufferInfo.size = requiredBytes;
-        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         if (!isSuccess(
                 vkCreateBuffer(device_, &bufferInfo, nullptr, &uploadBuffer_),
@@ -980,6 +1274,12 @@ private:
             return false;
         }
 
+        if (!createGsGraphicsPipelines()) {
+            logMessage(ANDROID_LOG_ERROR,
+                "Could not create Android GS primitive graphics pipelines");
+            return false;
+        }
+
         framebuffers_.reserve(actualImageCount);
         for (const VkImageView view : imageViews_) {
             VkFramebufferCreateInfo framebufferInfo{
@@ -1079,6 +1379,8 @@ private:
         }
         framebuffers_.clear();
 
+        destroyGsGraphicsPipelines();
+
         if (renderPass_ != VK_NULL_HANDLE) {
             vkDestroyRenderPass(device_, renderPass_, nullptr);
             renderPass_ = VK_NULL_HANDLE;
@@ -1132,6 +1434,12 @@ private:
     bool frameUploadDirty_ = false;
     bool uploadBufferReady_ = false;
     bool frameUploadSupported_ = false;
+    std::mutex gsQueueMutex_;
+    std::vector<gow::android::GsGpuVertex> queuedGsVertices_;
+    std::vector<QueuedGsDraw> queuedGsDraws_;
+    VkPipelineLayout gsPipelineLayout_ = VK_NULL_HANDLE;
+    std::array<VkPipeline, 3> gsPipelines_ = {
+        VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
     VkRenderPass renderPass_ = VK_NULL_HANDLE;
     std::vector<VkFramebuffer> framebuffers_;
     VkCommandPool commandPool_ = VK_NULL_HANDLE;
@@ -1143,6 +1451,41 @@ private:
 };
 
 VulkanSmokeRenderer gRenderer;
+
+void submitGsGeometry(void *userData, const gow::android::GsGpuBatch &batch) {
+    auto *renderer = static_cast<VulkanSmokeRenderer *>(userData);
+    if (renderer != nullptr) renderer->enqueueGsBatch(batch);
+}
+
+bool attachAndroidGsBackend() {
+    if (gActiveRuntime == nullptr || !gRenderer.isReady()) return false;
+    if (gGsBackendAttached) return true;
+    try {
+        auto backend = std::make_unique<gow::android::AndroidGSVulkanBackend>(
+            &gRenderer, &submitGsGeometry);
+        gActiveRuntime->gs().setRasterBackend(std::move(backend));
+        gGsBackendAttached = true;
+        logMessage(ANDROID_LOG_INFO,
+            "Android GS Vulkan primitive backend attached (untextured bring-up stage)");
+        return true;
+    } catch (const std::exception &exception) {
+        __android_log_print(
+            ANDROID_LOG_ERROR, kTag,
+            "Could not attach Android GS backend: %s", exception.what());
+    } catch (...) {
+        logMessage(ANDROID_LOG_ERROR,
+            "Could not attach Android GS backend: unknown exception");
+    }
+    return false;
+}
+
+void detachAndroidGsBackend() {
+    if (gGsBackendAttached && gActiveRuntime != nullptr) {
+        gActiveRuntime->gs().setRasterBackend(nullptr);
+        gGsBackendAttached = false;
+        logMessage(ANDROID_LOG_INFO, "Android GS Vulkan backend detached");
+    }
+}
 
 void processInputEvents(android_app *app) {
     android_input_buffer *input = android_app_swap_input_buffers(app);
@@ -1165,24 +1508,31 @@ void handleAppCommand(android_app* app, int32_t command) {
     switch (command) {
         case APP_CMD_INIT_WINDOW:
             if (app->window != nullptr) {
-#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
-                gRenderer.initialize(app->window);
+#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
+                if (gRenderer.initialize(app->window)) {
+#if defined(GOW_ANDROID_ENABLE_GS_VULKAN)
+                    attachAndroidGsBackend();
+#endif
+                }
 #else
                 logMessage(ANDROID_LOG_INFO,
-                    "GameActivity surface available; PS2 GS/Vulkan renderer is not integrated yet");
+                    "GameActivity surface available; Android GS Vulkan primitive path is disabled in this build");
 #endif
             }
             break;
 
         case APP_CMD_TERM_WINDOW:
-#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
+#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
+#if defined(GOW_ANDROID_ENABLE_GS_VULKAN)
+            detachAndroidGsBackend();
+#endif
             gRenderer.shutdown();
 #endif
             break;
 
         case APP_CMD_WINDOW_RESIZED:
         case APP_CMD_CONTENT_RECT_CHANGED:
-#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
+#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
             gRenderer.recreateSwapchain();
 #endif
             break;
@@ -1332,6 +1682,7 @@ extern "C" void android_main(android_app* app) {
     reportRuntimeStatus(
         app, "Preparando o núcleo PS2 (memória, EE, IOP e VU)...", false);
     PS2Runtime *runtime = gowCreatePs2Runtime();
+    gActiveRuntime = runtime;
     if (runtime != nullptr) {
         std::array<char, 512> coreMessage{};
         if (gowInitializePs2RuntimeCoreHeadless(
@@ -1395,7 +1746,7 @@ extern "C" void android_main(android_app* app) {
     while (app->destroyRequested == 0) {
         int events = 0;
         android_poll_source* source = nullptr;
-#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
+#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
         const int timeout = gRenderer.isReady() ? 0 : -1;
 #else
         const int timeout = -1;
@@ -1424,7 +1775,7 @@ extern "C" void android_main(android_app* app) {
             processInputEvents(app);
         }
 
-#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
+#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
         if (gRenderer.isReady()) {
             if (runtime != nullptr) {
                 std::vector<uint8_t> framePixels;
@@ -1441,9 +1792,11 @@ extern "C" void android_main(android_app* app) {
 #endif
     }
 
-#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE)
+#if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
+    detachAndroidGsBackend();
     gRenderer.shutdown();
 #endif
+    gActiveRuntime = nullptr;
     if (runtime != nullptr) {
         gowDestroyPs2Runtime(runtime);
         runtime = nullptr;
