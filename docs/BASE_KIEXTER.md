@@ -77,7 +77,8 @@ O runtime Waffle/KIexster também declara uso de componentes de PCSX2, incluindo
 
 - [x] Importar mapa de funções e template de recompilação.
 - [x] Trazer overrides e geradores VU1/IOP para staging, com proveniência registrada.
-- [ ] Integrar PS2Recomp ao pipeline privado de geração de C++.
+- [x] Compilar a ferramenta host PS2Recomp com o patch-base no CI sem arquivos do jogo (run 42146201136).
+- [ ] Executar a geração de C++ com o ELF NTSC-U privado e verificar o resultado.
 - [ ] Selecionar e importar o núcleo portátil do runtime, mantendo licença e atribuições.
 - [ ] Adaptar o host/lifecycle para Android e preservar o FORGE.
 - [ ] Substituir o renderer OpenGL por backend GS/Vulkan Android.
