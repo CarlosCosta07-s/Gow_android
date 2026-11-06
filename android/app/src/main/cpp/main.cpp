@@ -768,8 +768,21 @@ private:
 
 VulkanSmokeRenderer gRenderer;
 
-int32_t handleInputEvent(android_app*, AInputEvent *event) {
-    return gowAndroidPadHandleInputEvent(event);
+void processInputEvents(android_app *app) {
+    android_input_buffer *input = android_app_swap_input_buffers(app);
+    if (input == nullptr) {
+        return;
+    }
+
+    for (uint64_t i = 0; i < input->keyEventsCount; ++i) {
+        gowAndroidPadHandleKeyEvent(&input->keyEvents[i]);
+    }
+    for (uint64_t i = 0; i < input->motionEventsCount; ++i) {
+        gowAndroidPadHandleMotionEvent(&input->motionEvents[i]);
+    }
+
+    android_app_clear_key_events(input);
+    android_app_clear_motion_events(input);
 }
 
 void handleAppCommand(android_app* app, int32_t command) {
@@ -815,7 +828,12 @@ extern "C" void android_main(android_app* app) {
 
     app->userData = &gRenderer;
     app->onAppCmd = handleAppCommand;
-    app->onInputEvent = handleInputEvent;
+
+    // GameActivity delivers controls through android_input_buffer, not an
+    // android_app::onInputEvent callback. Disable the touch-only default filter
+    // so external gamepad and joystick motion events are also buffered.
+    gowAndroidPadEnableGamepadAxes();
+    android_app_set_motion_event_filter(app, nullptr);
 
     logMessage(ANDROID_LOG_INFO, "Gow_android native shell started");
 
@@ -845,6 +863,10 @@ extern "C" void android_main(android_app* app) {
             if (app->destroyRequested != 0) {
                 break;
             }
+        }
+
+        if (app->destroyRequested == 0) {
+            processInputEvents(app);
         }
 
         if (gRenderer.isReady()) {
