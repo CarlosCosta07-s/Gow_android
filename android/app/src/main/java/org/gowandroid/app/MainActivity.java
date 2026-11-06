@@ -78,6 +78,7 @@ public final class MainActivity extends AppCompatActivity {
 
     private static native boolean nativeSetCdRootDirectory(String privateCdRoot);
     private static native String nativeValidateCdRootElf(String relativePath);
+    private static native String nativeValidateDiscSource(String bootRelativePath);
 
     static {
         System.loadLibrary("android-game");
@@ -770,20 +771,26 @@ public final class MainActivity extends AppCompatActivity {
                         ? "O provider cdRoot não conseguiu abrir a pasta privada."
                         : "A instalação existente não possui o par completo .disc_layout/.disc_meta.");
             boolean elfValid = elfValidation != null && elfValidation.startsWith("OK:");
-            String detail = cdRootReady
-                    ? (elfValid
-                        ? "Executável local validado: " + elfValidation.substring(4).trim() + "."
-                        : "O ELF local não passou na validação: " + elfValidation)
-                    : elfValidation;
+            String discValidation = elfValid
+                    ? nativeValidateDiscSource(installedBootPath)
+                    : "A validação ELF precisa passar antes de abrir o DiscSource.";
+            boolean discValid = discValidation != null && discValidation.startsWith("OK:");
+            boolean installationValid = elfValid && discValid;
+            String detail = installationValid
+                    ? "Executável local validado: " + elfValidation.substring(4).trim()
+                            + ". Fonte CD/DVD validada: " + discValidation.substring(4).trim() + "."
+                    : "ELF: " + elfValidation + "\nDiscSource: " + discValidation;
+            String runtimeStatus = installationValid
+                    ? "A leitura de disco por LSN foi verificada, mas o runtime ainda não executa o boot."
+                    : "A instalação precisa ser reparada ou reinstalada antes de ser utilizada.";
             new AlertDialog.Builder(this)
-                    .setTitle(elfValid
+                    .setTitle(installationValid
                             ? "Instalação do disco verificada"
                             : "Instalação existente incompleta")
                     .setMessage(
                             "A pasta de instalação já existe no armazenamento privado. "
                                     + detail + "\n\n"
-                                    + "Mesmo com os arquivos e metadados preparados, o runtime "
-                                    + "ainda não inicia o jogo nesta versão.")
+                                    + runtimeStatus)
                     .setPositiveButton("Entendi", null)
                     .show();
             return;
@@ -800,7 +807,7 @@ public final class MainActivity extends AppCompatActivity {
         showDiscInstallProgressDialog();
         if (installDiscButton != null) {
             installDiscButton.setEnabled(false);
-            installDiscButton.setText("IMPORTANDO...");
+            installDiscButton.setText("INSTALANDO...");
             installDiscButton.setAlpha(0.6f);
         }
         discStatus.setText("Analisando e preparando os dados do disco...");
@@ -867,7 +874,15 @@ public final class MainActivity extends AppCompatActivity {
                         failure = "O arquivo de BOOT2 foi copiado, mas falhou na validação ELF local: "
                                 + (elfValidation == null ? "resposta nativa vazia." : elfValidation);
                     } else {
-                        preparedElfSummary = elfValidation.substring(4).trim();
+                        String discValidation = nativeValidateDiscSource(bootPath);
+                        if (discValidation == null || !discValidation.startsWith("OK:")) {
+                            failure = "Os arquivos foram extraídos e o ELF é válido, mas a fonte CD/DVD "
+                                    + "do runtime não conseguiu reconstruir o disco: "
+                                    + (discValidation == null ? "resposta nativa vazia." : discValidation);
+                        } else {
+                            preparedElfSummary = elfValidation.substring(4).trim()
+                                    + " · " + discValidation.substring(4).trim();
+                        }
                     }
                 }
             } catch (IOException | SecurityException | ErrnoException exception) {
@@ -944,16 +959,16 @@ public final class MainActivity extends AppCompatActivity {
         if (success) {
             discStatus.setText(
                     "Instalação completa do disco preparada. "
-                            + preparedElfSummary + ". O runtime ainda não foi iniciado.");
+                            + preparedElfSummary + ". O boot do jogo ainda não foi iniciado.");
             discStatus.setTextColor(0xFF8BC28F);
             new AlertDialog.Builder(this)
                     .setTitle("Instalação do disco concluída")
                     .setMessage(
                             "Os arquivos ISO9660 foram extraídos para a pasta privada "
-                                    + "pasta privada da instalação. Os metadados .disc_layout e "
+                                    + "diretório privado do aplicativo. Os metadados .disc_layout e "
                                     + ".disc_meta foram gerados e publicados junto com os dados. "
-                                    + preparedElfSummary + ". A instalação foi preparada, "
-                                    + "mas o jogo ainda não foi iniciado.")
+                                    + preparedElfSummary + ". A instalação foi preparada e a "
+                                    + "fonte de disco foi validada; o jogo ainda não foi iniciado.")
                     .setPositiveButton("Continuar", null)
                     .show();
         } else {
