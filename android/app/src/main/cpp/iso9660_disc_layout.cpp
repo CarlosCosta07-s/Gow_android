@@ -133,17 +133,6 @@ bool validateLayoutAgainstReader(const Iso9660Reader &reader,
     return buildIntervals(layout, intervals, error);
 }
 
-bool sectorIsCovered(uint64_t lsn, const std::vector<FileInterval> &intervals,
-                     size_t &intervalIndex) {
-    while (intervalIndex < intervals.size() &&
-           lsn >= intervals[intervalIndex].end) {
-        ++intervalIndex;
-    }
-    return intervalIndex < intervals.size() &&
-           lsn >= intervals[intervalIndex].begin &&
-           lsn < intervals[intervalIndex].end;
-}
-
 bool sectorHasData(const uint8_t *sector) {
     return std::any_of(sector, sector + kIsoSectorSize,
                        [](uint8_t value) { return value != 0u; });
