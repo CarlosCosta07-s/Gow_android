@@ -39,8 +39,8 @@ int main() {
                     require(destination[offset + 0] == 0u &&
                             destination[offset + 1] == 0u &&
                             destination[offset + 2] == 0u &&
-                            destination[offset + 3] == 0u,
-                            "Letterbox pixels must remain transparent black.");
+                            destination[offset + 3] == 255u,
+                            "Letterbox pixels must remain opaque black.");
                 } else if (x < 2u) {
                     require(destination[offset + 0] == 255u &&
                             destination[offset + 1] == 0u,
