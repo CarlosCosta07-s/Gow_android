@@ -14,6 +14,7 @@ find_library(VULKAN_LIBRARY vulkan REQUIRED)
 
 add_library(android-game SHARED
     main.cpp
+    android_pad_bridge.cpp
     vu1_neon_compat_smoke.cpp
     # Satisfies Raylib's renamed, dormant NativeActivity wrapper. GameActivity
     # remains the only Android lifecycle entry point used by FORGE.
@@ -47,6 +48,10 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
     if(NOT TARGET ps2_runtime)
         message(FATAL_ERROR "Prepared Waffle tree did not define ps2_runtime.")
     endif()
+
+    # GameActivity owns the Android lifecycle. Raylib device teardown is gated
+    # in the prepared runtime until a native Android audio adapter is available.
+    target_compile_definitions(ps2_runtime PRIVATE PS2X_ANDROID_LIFECYCLE_MANAGED=1)
 
     target_sources(android-game PRIVATE runtime_link_bridge.cpp)
 
