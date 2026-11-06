@@ -480,7 +480,7 @@ int main() {
                       << static_cast<unsigned>(t8hPixel[0]) << ','
                       << static_cast<unsigned>(t8hPixel[1]) << ','
                       << static_cast<unsigned>(t8hPixel[2]) << ','
-                      << static_cast<unsigned>(t8hPixel[3]) << '\\n';
+                      << static_cast<unsigned>(t8hPixel[3]) << '\n';
         }
         require(t8hPixel[0] == 0u && t8hPixel[1] == 255u &&
                 t8hPixel[2] == 255u && t8hPixel[3] == 255u,
