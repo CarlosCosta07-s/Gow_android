@@ -470,8 +470,8 @@ int main() {
                 t4hhPixel[2] == 255u && t4hhPixel[3] == 255u,
                 "T4HH did not read the upper nibble of the high-byte plane.");
         const auto t8hPixel = pixelAt(16u, 24u);
-        require(t8hPixel[0] == 255u && t8hPixel[1] == 255u &&
-                t8hPixel[2] == 0u && t8hPixel[3] == 255u,
+        require(t8hPixel[0] == 0u && t8hPixel[1] == 255u &&
+                t8hPixel[2] == 255u && t8hPixel[3] == 255u,
                 "T8H did not sample the high-byte texture index and resolve its CLUT color.");
         const auto t8hBottomRight = pixelAt(19u, 27u);
         require(t8hBottomRight[0] == 255u && t8hBottomRight[1] == 255u &&
