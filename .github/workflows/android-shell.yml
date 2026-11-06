@@ -106,6 +106,15 @@ jobs:
           python tools/check_android_runtime_lifecycle.py \
             --runtime-dir "$GITHUB_WORKSPACE/android/app/build/gow-runtime-source"
 
+      - name: Test VU1 MXCSR/FPCR rounding-mode mapping
+        shell: bash
+        run: |
+          c++ -std=c++20 -Wall -Wextra -Werror \
+            android/app/src/test/cpp/vu1_fpcr_mapping_test.cpp \
+            -Iport/kiexter/vu1 \
+            -o "$RUNNER_TEMP/vu1-fpcr-mapping-test"
+          "$RUNNER_TEMP/vu1-fpcr-mapping-test"
+
       - name: Test offline GS scene comparator
         shell: bash
         run: |

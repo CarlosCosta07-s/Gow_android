@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ps2_vu1_fpcr_mapping.h"
+
 #if defined(__aarch64__) && defined(__ARM_NEON) && defined(USE_SSE2NEON)
 #include <arm_neon.h>
 #include <sse2neon.h>
@@ -28,7 +30,7 @@ namespace gow_vu1_neon
         asm volatile("mrs %0, fpsr" : "=r"(fpsr));
 
         uint32_t value = 0x1F80u;
-        value |= static_cast<uint32_t>((fpcr >> 22u) & 3u) << 13u;
+        value |= armFpcrRModeToMxcsr(static_cast<uint32_t>((fpcr >> 22u) & 3u));
         if ((fpcr & (1ull << 24u)) != 0u)
             value |= 0x8040u;
         if ((fpsr & (1ull << 0u)) != 0u) value |= 1u << 0u;
@@ -45,7 +47,7 @@ namespace gow_vu1_neon
         uint64_t fpcr = 0;
         asm volatile("mrs %0, fpcr" : "=r"(fpcr));
         fpcr &= ~((3ull << 22u) | (1ull << 24u));
-        fpcr |= static_cast<uint64_t>((value >> 13u) & 3u) << 22u;
+        fpcr |= static_cast<uint64_t>(mxcsrToArmFpcrRMode((value >> 13u) & 3u)) << 22u;
         if ((value & (0x8000u | 0x0040u)) != 0u)
             fpcr |= 1ull << 24u;
         asm volatile("msr fpcr, %0" : : "r"(fpcr) : "memory");
@@ -246,7 +248,7 @@ namespace gow_vu1_neon
         asm volatile("mrs %0, fpsr" : "=r"(fpsr));
 
         uint32_t value = 0x1F80u; // SSE exception masks: all masked, as in the default host state.
-        value |= static_cast<uint32_t>((fpcr >> 22u) & 3u) << 13u;
+        value |= armFpcrRModeToMxcsr(static_cast<uint32_t>((fpcr >> 22u) & 3u));
         if ((fpcr & (1ull << 24u)) != 0u)
             value |= 0x8040u; // FTZ + DAZ share ARM's flush-to-zero control.
 
@@ -264,7 +266,7 @@ namespace gow_vu1_neon
         uint64_t fpcr = 0;
         asm volatile("mrs %0, fpcr" : "=r"(fpcr));
         fpcr &= ~((3ull << 22u) | (1ull << 24u));
-        fpcr |= static_cast<uint64_t>((value >> 13u) & 3u) << 22u;
+        fpcr |= static_cast<uint64_t>(mxcsrToArmFpcrRMode((value >> 13u) & 3u)) << 22u;
         if ((value & (0x8000u | 0x0040u)) != 0u)
             fpcr |= 1ull << 24u;
         asm volatile("msr fpcr, %0" : : "r"(fpcr) : "memory");
