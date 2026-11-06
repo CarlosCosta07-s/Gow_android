@@ -6,11 +6,11 @@ import android.view.View;
 import com.google.androidgamesdk.GameActivity;
 
 /**
- * Native entry point for the Gow_android Vulkan bring-up shell.
+ * Native entry point reserved for the God of War runtime.
  *
- * The native library contains GameActivity's native glue and the application
- * entry point. The initial milestone only validates Android window/surface
- * presentation; it does not execute God of War yet.
+ * The current native library is still an experimental Vulkan bring-up and is
+ * not a playable game runtime. The standalone launcher action was removed;
+ * this Activity will be connected to the integrated PS2 runtime when ready.
  */
 public final class GowGameActivity extends GameActivity {
     static {
