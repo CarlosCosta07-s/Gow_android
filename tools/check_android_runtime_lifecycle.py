@@ -95,8 +95,8 @@ def main() -> int:
     for required in (
         "#include <jni.h>",
         "AttachCurrentThread",
-        "GetMethodID(activityClass, \\"onNativeRuntimeStatus\\"",
-        "\\"(Ljava/lang/String;Z)V\\"",
+        'GetMethodID(activityClass, "onNativeRuntimeStatus"',
+        '"(Ljava/lang/String;Z)V"',
         "CallVoidMethod",
         "DetachCurrentThread",
     ):
