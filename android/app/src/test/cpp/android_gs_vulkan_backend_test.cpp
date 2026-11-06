@@ -261,6 +261,48 @@ int main() {
         }
         backend.Submit(indexed4Sprite);
 
+        // CSM1 swaps the 8/16 index bits in the source CLUT coordinates.
+        // Entry 8 is loaded from source coordinate (0,1); entry 16 from (8,0).
+        backend.WriteVram(GS_PSM_CT32, 400u, 1u, 0u, 1u, 0xFF0000FFu);
+        backend.WriteVram(GS_PSM_CT32, 400u, 1u, 8u, 0u, 0xFFFF0000u);
+        backend.WriteVram(GS_PSM_T8, 448u, 1u, 0u, 0u, 8u);
+        backend.WriteVram(GS_PSM_T8, 448u, 1u, 1u, 0u, 16u);
+        GSTex0Reg csm1Tex0{};
+        csm1Tex0.tbp0 = 448u;
+        csm1Tex0.tbw = 1u;
+        csm1Tex0.psm = GS_PSM_T8;
+        csm1Tex0.tcc = 1u;
+        csm1Tex0.cbp = 400u;
+        csm1Tex0.cpsm = GS_PSM_CT32;
+        csm1Tex0.csm = 0u;
+        csm1Tex0.cld = 1u;
+        backend.LoadClut(csm1Tex0, GSTexClutReg{});
+        GSPrimitiveBatch csm1Sprite{};
+        csm1Sprite.vertexCount = 2u;
+        csm1Sprite.state.context.frame = triangle.state.context.frame;
+        csm1Sprite.state.context.scissor = triangle.state.context.scissor;
+        csm1Sprite.state.context.tex0 = csm1Tex0;
+        csm1Sprite.state.prim.type = GS_PRIM_SPRITE;
+        csm1Sprite.state.prim.tme = true;
+        csm1Sprite.state.prim.fst = true;
+        csm1Sprite.state.textureWidth = 2u;
+        csm1Sprite.state.textureHeight = 1u;
+        csm1Sprite.vertices[0].x = 56.0f;
+        csm1Sprite.vertices[0].y = 12.0f;
+        csm1Sprite.vertices[0].u = 0u;
+        csm1Sprite.vertices[0].v = 0u;
+        csm1Sprite.vertices[1].x = 60.0f;
+        csm1Sprite.vertices[1].y = 16.0f;
+        csm1Sprite.vertices[1].u = 32u;
+        csm1Sprite.vertices[1].v = 0u;
+        for (auto &vertex : csm1Sprite.vertices) {
+            vertex.r = 128u;
+            vertex.g = 128u;
+            vertex.b = 128u;
+            vertex.a = 128u;
+        }
+        backend.Submit(csm1Sprite);
+
         GSPresentationRequest presentation{};
         presentation.pmode = 1u;
         presentation.dispfb1 =
