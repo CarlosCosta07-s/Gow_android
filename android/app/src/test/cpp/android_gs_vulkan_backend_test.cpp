@@ -305,6 +305,7 @@ int main() {
 
         // T4HL/T4HH select one of the two high nibbles in a 32-bit word.
         GSTex0Reg t4hlTex0 = indexed4Tex0;
+        t4hlTex0.tbp0 = 224u;
         t4hlTex0.psm = GS_PSM_T4HL;
         backend.LoadClut(t4hlTex0, indexed4Clut);
         backend.WriteVram(GS_PSM_T4HL, 224u, 1u, 0u, 0u, 1u);
@@ -332,6 +333,7 @@ int main() {
                 "T4HL VRAM read did not return the stored lower high-byte nibble.");
 
         GSTex0Reg t4hhTex0 = indexed4Tex0;
+        t4hhTex0.tbp0 = 240u;
         t4hhTex0.psm = GS_PSM_T4HH;
         backend.LoadClut(t4hhTex0, indexed4Clut);
         backend.WriteVram(GS_PSM_T4HH, 240u, 1u, 0u, 0u, 4u);
