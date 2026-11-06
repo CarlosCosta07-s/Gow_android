@@ -62,7 +62,7 @@ O módulo `android/app/src/main/cpp/cdroot_vfs.h/.cpp` fornece leitura somente d
 
 - `openRoot()` fixa o descritor da pasta privada, sem seguir symlink no componente final;
 - `listDirectory()` cria fluxos de diretório independentes e limita a listagem a 65.536 entradas;
-- `openFile()` usa `openat` e `O_NOFOLLOW`, rejeita caminhos absolutos, vazios, traversal e componentes inválidos;
+- `openFile()` usa `openat` e `O_NOFOLLOW`, rejeita caminhos absolutos, vazios, traversal e componentes inválidos; a resolução de componentes segue ISO9660 (ASCII case-insensitive e sufixo opcional `;versão` ignorado), rejeitando nomes locais ambíguos após normalização;
 - `readFile()` faz leitura aleatória por `pread`, com handles explícitos e comportamento de EOF testado;
 - a API C ABI está em `android_cdroot_bridge.h`, e a ponte JNI `MainActivity.nativeSetCdRootDirectory()` abre a pasta preparada.
 
