@@ -515,21 +515,36 @@ def main() -> int:
         "#endif\n",
         "skip Raylib SPU2 stream teardown when Android never initialized desktop audio",
     )
-    replace_exactly_once(
-        runtime_cpp,
-        "        if (IsAudioDeviceReady())\\n"
-        "        {\\n"
-        "            CloseAudioDevice();\\n"
-        "            m_audioBackend.setAudioReady(false);\\n"
-        "        }",
-        "#if !defined(PS2X_ANDROID_LIFECYCLE_MANAGED)\\n"
-        "        if (IsAudioDeviceReady())\\n"
-        "        {\\n"
-        "            CloseAudioDevice();\\n"
-        "            m_audioBackend.setAudioReady(false);\\n"
-        "        }\\n"
-        "#endif",
-        "avoid querying or closing an uninitialized Raylib audio device in Android core-only lifecycle",
+    audio_device_block = re.compile(
+        r"(?m)^(?P<indent>[ \\t]*)if \\(IsAudioDeviceReady\\(\\)\\)\\r?\\n"
+        r"(?P=indent)\\{\\r?\\n"
+        r"(?P=indent)    CloseAudioDevice\\(\\);\\r?\\n"
+        r"(?P=indent)    m_audioBackend\\.setAudioReady\\(false\\);\\r?\\n"
+        r"(?P=indent)\\}"
+    )
+    runtime_text = runtime_cpp.read_text(encoding="utf-8")
+    audio_matches = list(audio_device_block.finditer(runtime_text))
+    if len(audio_matches) != 1:
+        raise RuntimeError(
+            "Expected exactly one Raylib audio teardown block in PS2Runtime::~PS2Runtime; "
+            f"found {len(audio_matches)}."
+        )
+    audio_match = audio_matches[0]
+    line_ending = "\\r\\n" if "\\r\\n" in runtime_text else "\\n"
+    guarded_audio_block = (
+        "#if !defined(PS2X_ANDROID_LIFECYCLE_MANAGED)" + line_ending
+        + audio_match.group(0) + line_ending
+        + "#endif"
+    )
+    runtime_text = (
+        runtime_text[:audio_match.start()]
+        + guarded_audio_block
+        + runtime_text[audio_match.end():]
+    )
+    runtime_cpp.write_text(runtime_text, encoding="utf-8")
+    print(
+        "Applied Android runtime policy: guard the single Raylib audio teardown block",
+        flush=True,
     )
 
     # Android has no Raylib host window yet. Keep the PS2 core's default GS
