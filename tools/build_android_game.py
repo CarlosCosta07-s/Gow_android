@@ -380,8 +380,20 @@ def main() -> int:
         f"ELF entry 0x{generated.entry_point:08X} is covered."
     )
 
+    native_aot_complete = False
     if native_aot_command is not None:
         _run(native_aot_command, root)
+        summary_path = build_root / "native-aot-summary.json"
+        if not summary_path.is_file():
+            raise RuntimeError("The private VU1/IOP AOT generator did not write its summary.")
+        import json
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        native_aot_complete = summary.get("full_native_aot") is True
+        if not native_aot_complete:
+            print(
+                "Partial native AOT capture: the APK will include every validated block/module available "
+                "and remain in strict capture mode for the missing subsystems."
+            )
     else:
         for generated_path in (generated_vu1, generated_iop):
             if generated_path.exists():
@@ -398,7 +410,7 @@ def main() -> int:
 
     gradle_environment = os.environ.copy()
     gradle_environment["GOW_ANDROID_CAPTURE_BOOTSTRAP"] = (
-        "1" if args.capture_bootstrap else "0"
+        "0" if native_aot_complete else "1"
     )
     _run(plan.gradle_command, root, environment=gradle_environment)
     if not plan.apk_path.is_file():
@@ -412,9 +424,9 @@ def main() -> int:
     print("")
     print(f"APK: {plan.apk_path}")
     print(f"SHA-256: {digest}")
-    if args.capture_bootstrap:
-        print("This is a capture-bootstrap APK, not a gameplay build.")
-        print("Start the strict native guest once, export the VU1/IOP capture ZIP from the app, then rebuild with --aot-captures.")
+    if not native_aot_complete:
+        print("This is a strict AOT capture/iteration APK, not a completed gameplay build.")
+        print("Run the guest, export the private VU1/IOP capture ZIP from the app, then rebuild with --aot-captures.")
     else:
         print("This APK contains private EE, VU1 and IOP code generated locally from the user's own captures.")
         print("Test it only with the matching original disc image and keep the game data private.")
