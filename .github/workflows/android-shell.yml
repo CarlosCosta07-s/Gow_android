@@ -62,6 +62,13 @@ jobs:
           echo "$SDK_ROOT/cmake/3.22.1/bin" >> "$GITHUB_PATH"
           echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
 
+      - name: Install Vulkan shader compiler
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y glslang-tools
+          glslangValidator --version
+
       - name: Install Android build packages
         shell: bash
         run: |
