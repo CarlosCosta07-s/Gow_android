@@ -44,8 +44,9 @@ inline uint8_t axisToByte(float value, const DualShock2Config &config,
                           bool invert) noexcept {
     const float adjusted = applyAxisConfig(
         value, config.deadzone, config.sensitivity, invert);
-    const int converted = static_cast<int>(
-        std::lround(128.0f + adjusted * 127.0f));
+    // Match PSPadBackend's original host conversion: truncation after
+    // scaling around the neutral byte (0x80), not symmetric rounding.
+    const int converted = static_cast<int>(128.0f + adjusted * 127.0f);
     return static_cast<uint8_t>(std::clamp(converted, 1, 255));
 }
 
