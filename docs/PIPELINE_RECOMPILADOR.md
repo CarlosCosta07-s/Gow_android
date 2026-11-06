@@ -1,6 +1,6 @@
 # Pipeline do recompilador — host privado
 
-**Objetivo desta etapa:** compilar a ferramenta host PS2Recomp, verificar a compilação do núcleo IOP com fallback interpretado bloqueado e, quando o usuário fornecer seu ELF NTSC-U, gerar C++ em uma pasta privada. O recompilador host não é incorporado ao APK e não roda durante a partida.
+**Objetivo desta etapa:** receber somente a ISO original, preparar automaticamente as ferramentas host PS2Recomp/KIexster, extrair em workspace privado o ELF NTSC-U e os dados auxiliares, gerar C++ AOT e compilar o runtime Android ARM64. O recompilador host não é incorporado ao APK e não roda durante a partida.
 
 ## Separação de builds
 
@@ -22,11 +22,13 @@ Pré-requisitos no computador:
 - Compilador C++20 compatível com CMake (MSVC, GCC ou Clang).
 - Acesso à internet durante a primeira configuração, pois o CMake baixa as dependências fixadas pelo PS2Recomp.
 
-O usuário precisa extrair o ELF da própria cópia do jogo. O arquivo deve corresponder ao perfil SCUS_973.99; o script não autentica a procedência nem substitui a validação da revisão. Antes de copiar o arquivo para o workspace privado, o preflight verifica a estrutura ELF32 little-endian, `ET_EXEC`, `EM_MIPS`, tabela de program headers, limites dos segmentos `PT_LOAD` e cobertura do entry point. Essa verificação de formato não autentica o serial nem a identidade do conteúdo.
+O único arquivo de jogo fornecido é a ISO original. O orquestrador `tools/build_android_game.py` prepara os commits fixados, executa o extrator KIexster `tools/iso_extract.py --layout`, lê o BOOT2 em `SYSTEM.CNF` e seleciona automaticamente `SCUS_973.99`. O preflight valida ELF32 little-endian, `ET_EXEC`, `EM_MIPS`, tabela de program headers, limites dos segmentos `PT_LOAD` e cobertura do entry point. A seleção não autentica a procedência da mídia; ela apenas rejeita revisões incompatíveis com o mapa NTSC-U.
 
-Na raiz do repositório, execute:
+Na raiz do repositório, execute com o caminho da ISO original:
 
-**python tools/build_recompiler_host.py --elf "D:/Jogos/GOW/SCUS_973.99" --work-dir "D:/gowport" --export-game-cpp-dir "android/app/build/gow-generated-game"**
+**python tools/build_android_game.py --iso "D:/Jogos/GOW/God of War.iso" --work-dir "D:/gowport"**
+
+O ELF não é exportado pelo usuário. A extração, os módulos IRX, os pacotes e os metadados permanecem no workspace privado. Se um Android Debug autorizado estiver conectado por ADB, o mesmo comando sincroniza as capturas VU1/IOP do armazenamento privado do app; sem capturas, a primeira build é um bootstrap estrito.
 
 Para compilar e validar somente a ferramenta host, sem fornecer ou acessar qualquer arquivo do jogo:
 
@@ -34,7 +36,7 @@ Para compilar e validar somente a ferramenta host, sem fornecer ou acessar qualq
 
 <badge>CI aprovada — execução 42146201136</badge> O modo build-only compilou com sucesso o alvo ps2_recomp no GitHub Actions, incluindo dependências e aplicação do patch-base. Isso valida a compilação do executável host, mas não prova que o ELF do jogo é analisado corretamente ou que o código C++ gerado compila para ARM64.
 
-Para escolher a pasta privada de trabalho:
+Para escolher a pasta privada de trabalho do orquestrador ISO-only:
 
 **python tools/build_recompiler_host.py --elf "D:/Jogos/GOW/SCUS_973.99" --work-dir "D:/gowport"**
 
