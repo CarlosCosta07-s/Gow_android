@@ -70,4 +70,4 @@ Referência de comportamento para EE, VU, GS, DMA e IOP. Não será o runtime fi
 5. **Compatibilidade gráfica:** completar o backend GS/Vulkan Android e validar somente com comandos e frames reais do jogo, não com um clear/present isolado.
 6. **Execução final:** exigir recompilação estática do EE e VU1 compilada antecipadamente; nenhum interpretador/JIT deve permanecer no caminho final.
 
-A base CodeAbhi é uma **candidata de integração**, não código já incorporado. Até este commit, as fontes seguem **referenciadas, não importadas**.
+A base CodeAbhi está **fixada como submódulo**, mas ainda é uma candidata de integração: não está compilada pelo app FORGE nem foi demonstrada no aparelho do mantenedor. O próximo passo é adaptar a configuração CMake/Gradle e a ponte NativeActivity/SAF, preservando a interface existente.
