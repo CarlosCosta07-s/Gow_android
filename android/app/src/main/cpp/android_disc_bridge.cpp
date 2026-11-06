@@ -3,11 +3,13 @@
 
 #include <jni.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace {
