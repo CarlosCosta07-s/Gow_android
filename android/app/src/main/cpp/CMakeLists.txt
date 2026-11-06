@@ -14,6 +14,7 @@ find_library(VULKAN_LIBRARY vulkan REQUIRED)
 
 add_library(android-game SHARED
     main.cpp
+    vu1_neon_compat_smoke.cpp
 )
 
 target_compile_definitions(android-game PRIVATE
