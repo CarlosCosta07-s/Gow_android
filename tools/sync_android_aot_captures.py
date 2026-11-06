@@ -192,8 +192,8 @@ def pull_private_aot_captures(
     ):
         raise ValueError("Android package name contains unsupported characters.")
     remote_command = (
-        f"run-as {package_name} "
-        "'sh -c \\u0027cd files && toybox tar -cf - gow-aot-captures\\u0027'"
+        f'run-as {package_name} '
+        '"sh -c \\"cd files && toybox tar -cf - gow-aot-captures\\"'
     )
     command = [adb, "-s", serial, "exec-out", remote_command]
     print("$ " + " ".join(command), flush=True)
