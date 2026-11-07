@@ -135,6 +135,7 @@ bool gPrivateAotElfReady = false;
 bool gGuestExecutionStartAttempted = false;
 bool gGuestExecutionStarted = false;
 bool gGuestExecutionFinishReported = false;
+std::atomic<bool> gAndroidHostPaused{false};
 std::atomic<bool> gGsUnsupportedStateWarned{false};
 std::atomic<bool> gGsRenderTargetWarned{false};
 bool gGsSceneCaptureAttempted = false;
@@ -1592,7 +1593,8 @@ bool attachAndroidGsBackend() {
 }
 
 bool tryStartAndroidGuestExecution(android_app *app) {
-    if (gGuestExecutionStarted || gGuestExecutionStartAttempted ||
+    if (gAndroidHostPaused.load(std::memory_order_acquire) ||
+        gGuestExecutionStarted || gGuestExecutionStartAttempted ||
         gActiveRuntime == nullptr || !gPrivateAotElfReady ||
         !gGsBackendAttached || !gRenderer.isReady()) {
         return false;
@@ -1687,6 +1689,7 @@ void handleAppCommand(android_app* app, int32_t command) {
             break;
 
         case APP_CMD_TERM_WINDOW:
+            gAndroidHostPaused.store(true, std::memory_order_release);
             gowRuntimeSetAndroidPaused(gActiveRuntime, true);
 #if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
 #if defined(GOW_ANDROID_ENABLE_GS_VULKAN)
@@ -1706,10 +1709,12 @@ void handleAppCommand(android_app* app, int32_t command) {
         case APP_CMD_LOST_FOCUS:
         case APP_CMD_PAUSE:
             gowAndroidPadResetAll();
+            gAndroidHostPaused.store(true, std::memory_order_release);
             gowRuntimeSetAndroidPaused(gActiveRuntime, true);
             break;
 
         case APP_CMD_GAINED_FOCUS:
+            gAndroidHostPaused.store(false, std::memory_order_release);
             gowRuntimeSetAndroidPaused(gActiveRuntime, false);
             break;
 
