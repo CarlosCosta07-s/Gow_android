@@ -46,7 +46,11 @@ class IrxFormatError(ValueError):
 
 
 def _checked_table(data_size: int, offset: int, entry_size: int, count: int, label: str) -> None:
-    if count < 0 or count > MAX_PROGRAM_HEADERS and label == "program" or count > MAX_SECTION_HEADERS and label == "section":
+    if (
+        count < 0
+        or (label == "program" and count > MAX_PROGRAM_HEADERS)
+        or (label == "section" and count > MAX_SECTION_HEADERS)
+    ):
         raise IrxFormatError(f"{label} header count exceeds the safety limit")
     if count == 0:
         return
@@ -111,7 +115,7 @@ def inspect_irx(path: Path, relative_path: str) -> dict[str, Any]:
             if p_offset > len(data) or 24 > len(data) - p_offset:
                 raise IrxFormatError("PT_MIPS_REGINFO metadata is outside the IRX file")
             gp = struct.unpack_from("<I", data, p_offset + 20)[0]
-            if module_gp is None:
+            if module_gp in (None, 0):
                 module_gp = gp
 
     sections: list[tuple[int, ...]] = []
