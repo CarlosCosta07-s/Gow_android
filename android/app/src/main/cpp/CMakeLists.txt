@@ -248,7 +248,7 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/src/lib/Kernel"
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xIOP/include"
         "${GOW_WAFFLE_SOURCE_DIR}/ps2xIOP/src"
-        "${CMAKE_BINARY_DIR}/_deps/sse2neon-src"
+        "${sse2neon_SOURCE_DIR}"
     )
     target_compile_definitions(android-game PRIVATE USE_SSE2NEON)
     target_link_libraries(android-game PRIVATE ps2_runtime)
