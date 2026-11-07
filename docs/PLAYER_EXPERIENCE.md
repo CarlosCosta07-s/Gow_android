@@ -72,3 +72,5 @@ O documento PHONE_ONLY_BUILD.md descreve uma ferramenta opcional de desenvolvime
 - [ ] Exibir progresso, cancelamento, retomada, espaço necessário e erros compreensíveis.
 - [ ] Não usar intérprete/JIT do EE no caminho de jogo aprovado.
 - [ ] Alcançar o menu principal e comprovar gameplay em aparelho físico.
+
+**Política de teste:** nenhum APK será oferecido como jogável enquanto [TEST_RELEASE_GATE.md](TEST_RELEASE_GATE.md) não estiver aprovado. Builds shell, bootstrap AOT e AOT parcial são exclusivamente internos e não são candidatos para download/teste. A cobertura AOT completa é necessária, mas não substitui boot, primeiro frame, menu e controles comprovados com a ISO real.
