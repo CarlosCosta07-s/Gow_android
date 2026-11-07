@@ -1925,11 +1925,17 @@ extern "C" void android_main(android_app* app) {
             true);
     }
 
+    // One Vulkan upload/present per new PS2 VBlank. The GS worker may run
+    // independently, but the Android host must not copy the same framebuffer
+    // or submit empty swapchain frames while waiting for the next game frame.
+    uint64_t lastVulkanPresentedVsyncTick = UINT64_MAX;
     while (app->destroyRequested == 0) {
         int events = 0;
         android_poll_source* source = nullptr;
 #if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
-        const int timeout = gRenderer.isReady() ? 0 : -1;
+        // 16 ms keeps the host near the PS2 NTSC frame cadence without a
+        // zero-timeout busy loop; input/lifecycle events still wake it early.
+        const int timeout = gRenderer.isReady() ? 16 : -1;
 #else
         const int timeout = -1;
 #endif
@@ -1947,9 +1953,8 @@ extern "C" void android_main(android_app* app) {
             if (app->destroyRequested != 0) {
                 break;
             }
-            // Block only for the first event when no surface exists. Once an
-            // event is processed, drain the queue without blocking so input
-            // buffers and lifecycle changes are serviced every outer frame.
+            // After the first event, drain queued input/lifecycle events
+            // without waiting; the next outer pass returns to timed polling.
             pollTimeout = 0;
         }
 
@@ -1958,10 +1963,14 @@ extern "C" void android_main(android_app* app) {
         }
 
 #if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
-        if (gRenderer.isReady()) {
-            if (runtime != nullptr) {
-                (void)tryStartAndroidGuestExecution(app);
-                reportAndroidGuestCompletion(app);
+        if (gRenderer.isReady() && runtime != nullptr) {
+            (void)tryStartAndroidGuestExecution(app);
+            reportAndroidGuestCompletion(app);
+
+            const uint64_t currentVsyncTick =
+                runtime->memory().gs().vsyncTick.load(std::memory_order_acquire);
+            if (currentVsyncTick != lastVulkanPresentedVsyncTick) {
+                lastVulkanPresentedVsyncTick = currentVsyncTick;
                 std::vector<uint8_t> framePixels;
                 uint32_t frameWidth = 0u;
                 uint32_t frameHeight = 0u;
@@ -2025,9 +2034,9 @@ extern "C" void android_main(android_app* app) {
                     }
                     gRenderer.submitFrame(
                         std::move(framePixels), frameWidth, frameHeight);
+                    gRenderer.drawFrame();
                 }
             }
-            gRenderer.drawFrame();
         }
 #endif
     }
