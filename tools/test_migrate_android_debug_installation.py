@@ -99,7 +99,7 @@ class PrivateAndroidInstallBackupTests(unittest.TestCase):
 
     def test_boot2_parser_supports_a_nested_executable_path(self) -> None:
         self.assertEqual(
-            _parse_boot2(b"BOOT2 = cdrom0:\\\\BOOT\\\\SCUS_973.99;1\\n"),
+            _parse_boot2(br"BOOT2 = cdrom0:\BOOT\SCUS_973.99;1"),
             "BOOT/SCUS_973.99",
         )
 
