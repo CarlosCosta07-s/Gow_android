@@ -275,7 +275,7 @@ public:
         ready_ = true;
         logMessage(
             ANDROID_LOG_INFO,
-            "Vulkan surface + swapchain initialized; clear/present test is active");
+            "Vulkan surface + swapchain initialized; Android GS frame presentation is ready");
         return true;
     }
 
@@ -2079,7 +2079,7 @@ void handleAppCommand(android_app* app, int32_t command) {
                 }
 #else
                 logMessage(ANDROID_LOG_INFO,
-                    "GameActivity surface available; Android GS Vulkan primitive path is disabled in this build");
+                    "GameActivity surface available; experimental Android GS backend is disabled in this build");
 #endif
             }
             break;
