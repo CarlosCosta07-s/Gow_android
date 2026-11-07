@@ -613,8 +613,16 @@ void rasterizeSprite(
     const int bottom = std::min(
         std::min(static_cast<int>(context.scissor.y1), 2047),
         static_cast<int>(std::ceil(maxY)));
-    const float dx = std::max(1.0e-7f, second.x - first.x);
-    const float dy = std::max(1.0e-7f, second.y - first.y);
+    const float dx = second.x - first.x;
+    const float dy = second.y - first.y;
+    // A zero-area sprite covers no pixels. Preserve the sign of each axis:
+    // GS coordinates can arrive in either corner order, and a negative span
+    // must reverse the UV progression instead of being clamped to a tiny
+    // positive value.
+    if (!std::isfinite(dx) || !std::isfinite(dy) ||
+        std::fabs(dx) <= 1.0e-7f || std::fabs(dy) <= 1.0e-7f) {
+        return;
+    }
     // Keep the stepped coordinates in double precision. The final UV is
     // still rounded to float before interpolation, but the scanline additions
     // no longer accumulate visible drift across wide sprites.
