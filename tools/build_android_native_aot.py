@@ -50,6 +50,53 @@ def fnv1a64(data: bytes) -> int:
     return value
 
 
+def parse_game_identity_manifest(path: Path) -> dict[str, object] | None:
+    """Parse the Android-generated identity of the exact BOOT2 ELF that produced captures."""
+    if not path.exists():
+        return None
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 4096:
+        raise ValueError("AOT game identity manifest is missing, unsafe or too large.")
+    values: dict[str, str] = {}
+    for line_number, line in enumerate(path.read_text(encoding="ascii").splitlines(), start=1):
+        if not line or "=" not in line:
+            raise ValueError(f"Invalid AOT game identity line {line_number}.")
+        key, value = line.split("=", 1)
+        if key not in {"format", "installation_id", "boot_path", "elf_size", "elf_sha256"}:
+            raise ValueError(f"Unknown AOT game identity key on line {line_number}: {key}")
+        if key in values or not value:
+            raise ValueError(f"Duplicate or empty AOT game identity field: {key}")
+        values[key] = value
+
+    required = {"format", "installation_id", "boot_path", "elf_size", "elf_sha256"}
+    if set(values) != required:
+        raise ValueError("AOT game identity manifest does not contain all required fields.")
+    if values["format"] != "gow-android-game-identity-v1":
+        raise ValueError("Unsupported AOT game identity manifest format.")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", values["installation_id"]):
+        raise ValueError("AOT game identity installation identifier is invalid.")
+    boot_path = PurePosixPath(values["boot_path"])
+    if (
+        boot_path.is_absolute()
+        or not boot_path.parts
+        or any(part in ("", ".", "..") for part in boot_path.parts)
+        or "\\\\" in values["boot_path"]
+        or boot_path.name.upper() != "SCUS_973.99"
+    ):
+        raise ValueError("AOT game identity BOOT2 path is not the supported NTSC-U executable.")
+    if not values["elf_size"].isdigit() or int(values["elf_size"]) <= 0:
+        raise ValueError("AOT game identity ELF size is invalid.")
+    if not re.fullmatch(r"[0-9a-f]{64}", values["elf_sha256"]):
+        raise ValueError("AOT game identity ELF SHA-256 is invalid.")
+
+    return {
+        "format": values["format"],
+        "installation_id": values["installation_id"],
+        "boot_path": boot_path.as_posix(),
+        "elf_size": int(values["elf_size"]),
+        "elf_sha256": values["elf_sha256"],
+    }
+
+
 def safe_extract_archive(archive_path: Path, destination: Path) -> tuple[Path, Path]:
     reject_symlink_components(archive_path)
     if not archive_path.is_file():
@@ -97,6 +144,7 @@ def safe_extract_archive(archive_path: Path, destination: Path) -> tuple[Path, P
                 "iop/modules.txt",
                 "vu1/vu1n_heads.txt",
                 "capture_manifest.txt",
+                "game_identity.txt",
             )
             if not allowed:
                 raise ValueError(f"Unexpected file in AOT capture ZIP: {name}")
@@ -263,6 +311,7 @@ def generate_native_aot(
     extracted = work / "aot-capture-input"
     vu1_dir, iop_dir = safe_extract_archive(captures, extracted)
     vu1_files = validate_vu1_capture_directory(vu1_dir)
+    game_identity = parse_game_identity_manifest(extracted / "game_identity.txt")
 
     normalized_iop = work / "aot-iop-normalized"
     if normalized_iop.exists():
@@ -376,9 +425,11 @@ def generate_native_aot(
         "iop_modules": len(iop_records),
         "iop_native_translation_units": len(iop_sources),
         "full_native_aot": bool(
-            vu1_sources and iop_records
+            game_identity is not None
+            and vu1_sources and iop_records
             and vu1_unsupported == 0 and vu1_interpreter_callouts == 0
         ),
+        "game_identity": game_identity,
         "vu1_unsupported_blocks": vu1_unsupported,
         "vu1_interpreter_callouts": vu1_interpreter_callouts,
         "vu1_extra_heads": len(head_values),
