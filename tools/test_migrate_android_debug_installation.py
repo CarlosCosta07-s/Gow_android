@@ -6,10 +6,12 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from migrate_android_debug_installation import (
     DEFAULT_NTSC_INSTALLATION_DIRECTORY,
     _parse_boot2,
+    migrate_debug_installation,
     validate_private_installation_backup,
 )
 
@@ -115,6 +117,40 @@ class PrivateAndroidInstallBackupTests(unittest.TestCase):
             archive.addfile(info, io.BytesIO(payload))
         with self.assertRaisesRegex(ValueError, "Unsafe private-install backup path"):
             validate_private_installation_backup(self.archive)
+
+    def test_invalid_backup_aborts_before_uninstalling_the_current_app(self) -> None:
+        self._write_backup(tamper_digest=True)
+        apk = self.root / "new-debug.apk"
+        apk.write_bytes(b"synthetic apk")
+        old_apk = self.root / "old-debug.apk"
+        old_apk.write_bytes(b"previous installed apk")
+        work = self.root / "private-work"
+        repo = self.root / "public-repo"
+        repo.mkdir()
+
+        with patch(
+            "migrate_android_debug_installation.resolve_adb_device",
+            return_value=("adb", "device-1"),
+        ), patch(
+            "migrate_android_debug_installation._probe_run_as_and_stdin"
+        ), patch(
+            "migrate_android_debug_installation._pull_installed_apks",
+            return_value=[old_apk],
+        ), patch(
+            "migrate_android_debug_installation._pull_private_installation_backup",
+            return_value=self.archive,
+        ), patch(
+            "migrate_android_debug_installation._run"
+        ) as adb_run:
+            with self.assertRaisesRegex(ValueError, "SHA-256 verification failed"):
+                migrate_debug_installation(
+                    apk_path=apk,
+                    work_dir=work,
+                    repo_root=repo,
+                    device_serial="device-1",
+                )
+
+        adb_run.assert_not_called()
 
     def test_backup_rejects_symlink_entries(self) -> None:
         with tarfile.open(self.archive, "w") as archive:
