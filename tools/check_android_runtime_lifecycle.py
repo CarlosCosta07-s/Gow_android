@@ -498,6 +498,18 @@ def main() -> int:
     ):
         require(required in gs_renderer, f"Android GS Vulkan draw path is missing: {required}")
 
+    gs_backend_source = (project_root / "android/app/src/main/cpp/android_gs_vulkan_backend.cpp").read_text(encoding="utf-8")
+    for required in (
+        "std::vector<uint32_t> decodedTextureScratch;",
+        "DecodeTextureRgba(",
+        "impl_->decodedTextureScratch",
+    ):
+        require(required in gs_backend_source, f"Android GS texture-buffer reuse is missing: {required}")
+    require(
+        "std::vector<uint32_t> decodedTexture;" not in gs_backend_source,
+        "Textured GS batches must not allocate a decoded-texture vector locally for every primitive.",
+    )
+
     # Black Android's frame-resource discipline and Dragon Rage's ADPF pattern
     # are adapted without importing either project's incompatible game renderer.
     performance_hint_header = project_root / "android/app/src/main/cpp/android_performance_hint.h"
