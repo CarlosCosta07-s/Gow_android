@@ -10,6 +10,7 @@
 #include "gs_vulkan_primitive_shaders.h"
 #include "ps2_runtime.h"
 #include "android_runtime_log.h"
+#include "android_performance_hint.h"
 
 #include <android/log.h>
 #include <android/native_window.h>
@@ -18,6 +19,7 @@
 #include <algorithm>
 #include <atomic>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -448,18 +450,21 @@ public:
             return;
         }
 
-        std::vector<gow::android::GsGpuVertex> frameVertices;
-        std::vector<QueuedGsDraw> frameDraws;
+        // Reuse two producer/consumer vector buffers. Clearing retains capacity;
+        // the swap gives the producer the previous frame's allocation while
+        // this render thread consumes the newly queued batch.
+        frameVerticesScratch_.clear();
+        frameDrawsScratch_.clear();
         {
             std::lock_guard<std::mutex> lock(gsQueueMutex_);
-            frameVertices.swap(queuedGsVertices_);
-            frameDraws.swap(queuedGsDraws_);
+            frameVerticesScratch_.swap(queuedGsVertices_);
+            frameDrawsScratch_.swap(queuedGsDraws_);
         }
 
-        const bool drewGsGeometry = !frameDraws.empty() &&
+        const bool drewGsGeometry = !frameDrawsScratch_.empty() &&
             recordGsGeometry(
                 commandBuffers_[imageIndex], imageIndex,
-                frameVertices, frameDraws);
+                frameVerticesScratch_, frameDrawsScratch_);
         bool uploadedFrame = false;
         if (!drewGsGeometry && hasPendingFrame_ && frameUploadSupported_) {
             uploadedFrame = uploadFrameToSwapchain(
@@ -1953,6 +1958,8 @@ private:
     std::mutex gsQueueMutex_;
     std::vector<gow::android::GsGpuVertex> queuedGsVertices_;
     std::vector<QueuedGsDraw> queuedGsDraws_;
+    std::vector<gow::android::GsGpuVertex> frameVerticesScratch_;
+    std::vector<QueuedGsDraw> frameDrawsScratch_;
     VkPipelineLayout gsPipelineLayout_ = VK_NULL_HANDLE;
     std::array<VkPipeline, 3> gsPipelines_ = {
         VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
@@ -2389,6 +2396,8 @@ extern "C" void android_main(android_app* app) {
     // Reuse a pair of full-frame vectors instead of allocating/freeing one on
     // every VBlank. submitFrame() swaps ownership with the renderer.
     std::vector<uint8_t> framePixels;
+    auto lastPresentedFrameAt = std::chrono::steady_clock::now();
+    uint64_t accumulatedLooperWaitNs = 0u;
     while (app->destroyRequested == 0) {
         int events = 0;
         android_poll_source* source = nullptr;
@@ -2407,11 +2416,22 @@ extern "C" void android_main(android_app* app) {
 
         int pollTimeout = timeout;
         int pollResult = 0;
-        while ((pollResult = ALooper_pollOnce(
-                    pollTimeout,
-                    nullptr,
-                    &events,
-                    reinterpret_cast<void**>(&source))) >= 0) {
+        while (true) {
+            const auto pollStarted = std::chrono::steady_clock::now();
+            pollResult = ALooper_pollOnce(
+                pollTimeout,
+                nullptr,
+                &events,
+                reinterpret_cast<void**>(&source));
+            const auto pollFinished = std::chrono::steady_clock::now();
+            const auto pollDuration = std::chrono::duration_cast<
+                std::chrono::nanoseconds>(pollFinished - pollStarted).count();
+            if (pollDuration > 0) {
+                accumulatedLooperWaitNs += static_cast<uint64_t>(pollDuration);
+            }
+            if (pollResult < 0) {
+                break;
+            }
             if (source != nullptr) {
                 source->process(app, source);
             }
@@ -2435,6 +2455,11 @@ extern "C" void android_main(android_app* app) {
             const uint64_t currentVsyncTick =
                 runtime->memory().gs().vsyncTick.load(std::memory_order_acquire);
             if (currentVsyncTick != lastVulkanPresentedVsyncTick) {
+                const uint64_t vsyncTickDelta =
+                    lastVulkanPresentedVsyncTick == UINT64_MAX ||
+                    currentVsyncTick < lastVulkanPresentedVsyncTick
+                        ? 1u
+                        : currentVsyncTick - lastVulkanPresentedVsyncTick;
                 lastVulkanPresentedVsyncTick = currentVsyncTick;
                 // Match the PC port's UploadFrame() contract: first ask the GS
                 // backend to flush/present the current CRTC state, then copy the
@@ -2504,6 +2529,26 @@ extern "C" void android_main(android_app* app) {
                     gRenderer.submitFrame(
                         framePixels, frameWidth, frameHeight);
                     gRenderer.drawFrame();
+
+                    const auto presentedAt = std::chrono::steady_clock::now();
+                    const auto elapsedNs = std::chrono::duration_cast<
+                        std::chrono::nanoseconds>(
+                            presentedAt - lastPresentedFrameAt).count();
+                    const uint64_t elapsed = elapsedNs > 0
+                        ? static_cast<uint64_t>(elapsedNs)
+                        : 0u;
+                    const uint64_t workNs = elapsed > accumulatedLooperWaitNs
+                        ? elapsed - accumulatedLooperWaitNs
+                        : 0u;
+                    if (gGuestExecutionStarted &&
+                        !gAndroidHostPaused.load(std::memory_order_acquire)) {
+                        gow::android::reportPerformanceHintFrame(
+                            workNs,
+                            gow::android::performanceHintTargetDurationNs(
+                                vsyncTickDelta));
+                    }
+                    lastPresentedFrameAt = presentedAt;
+                    accumulatedLooperWaitNs = 0u;
                 }
             }
         }
