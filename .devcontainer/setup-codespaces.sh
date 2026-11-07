@@ -34,7 +34,7 @@ if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
 fi
 
 SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses >/dev/null
+yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses >/dev/null || true
 "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --install \
   "platforms;android-37.0" \
   "build-tools;37.0.0" \
