@@ -2338,12 +2338,12 @@ extern "C" void android_main(android_app* app) {
                     __android_log_print(
                         elfReady ? ANDROID_LOG_INFO : ANDROID_LOG_WARN,
                         kTag, "PS2Runtime ELF/AOT gate: %s",
-                        loadMessage[0] == '\\0'
+                        loadMessage[0] == '\0'
                             ? (elfReady ? "ELF gate passed." : "ELF gate failed without a diagnostic.")
                             : loadMessage.data());
                     reportRuntimeStatus(
                         app,
-                        loadMessage[0] == '\\0'
+                        loadMessage[0] == '\0'
                             ? (elfReady
                                 ? "ELF e função AOT de entrada validados. Aguardando a surface Vulkan e o backend GS Android experimental para a tentativa de primeiro boot; a saída de áudio permanece silenciosa."
                                 : "A validação ELF/AOT não passou. Consulte o Logcat GowAndroid.")
@@ -2361,7 +2361,7 @@ extern "C" void android_main(android_app* app) {
                     "PS2Runtime core initialization failed: %s", coreMessage.data());
                 std::string status =
                     "Falha ao inicializar o núcleo PS2: ";
-                status += coreMessage[0] == '\\0'
+                status += coreMessage[0] == '\0'
                     ? "motivo não informado."
                     : coreMessage.data();
                 status += " Consulte o Logcat com a etiqueta GowAndroid.";
