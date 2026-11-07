@@ -224,6 +224,21 @@ def main() -> int:
     runtime_bridge_path = project_root / "android/app/src/main/cpp/runtime_link_bridge.cpp"
     require(runtime_bridge_path.is_file(), "Android runtime link bridge is missing.")
     runtime_bridge = runtime_bridge_path.read_text(encoding="utf-8")
+    aot_ready_start = runtime_bridge.find('extern "C" bool gowRuntimeHasPrivateAotTable()')
+    aot_ready_end = runtime_bridge.find(
+        'extern "C" __attribute__((visibility("default")))\\nbool gowInitializePs2RuntimeCoreHeadless(',
+        aot_ready_start,
+    )
+    require(
+        aot_ready_start >= 0 and aot_ready_end > aot_ready_start,
+        "Early private AOT readiness bridge is missing.",
+    )
+    aot_ready_body = runtime_bridge[aot_ready_start:aot_ready_end]
+    require(
+        "g_ps2RecompiledFunctionTableSlotCount != 0u" in aot_ready_body
+        and "g_ps2RecompiledFunctionTable != nullptr" in aot_ready_body,
+        "Early AOT readiness bridge does not validate the generated function table.",
+    )
     load_start = runtime_bridge.find('extern "C" bool gowRuntimeLoadElfAndCheckAot(')
     load_end = runtime_bridge.find('extern "C" bool gowRuntimeValidateIopCdvd(', load_start)
     require(
@@ -267,11 +282,34 @@ def main() -> int:
         "gBootRelativePath = rootReady ? std::move(candidate) : std::string{}",
     ):
         require(required in native_main, f"GameActivity BOOT2 handoff is missing: {required}")
+    android_main_body = native_main[
+        native_main.find('extern "C" void android_main'):
+    ]
     require(
-        "gowRuntimeLoadElfAndCheckAot(" in native_main[
-            native_main.find('extern "C" void android_main'):
-        ],
-        "android_main must invoke the guarded ELF/AOT gate after core initialization.",
+        "gowRuntimeLoadElfAndCheckAot(" in android_main_body,
+        "android_main must retain the guarded ELF/AOT loader for private AOT builds.",
+    )
+    aot_gate_position = android_main_body.find(
+        "gPrivateAotTableAvailable = gowRuntimeHasPrivateAotTable();"
+    )
+    runtime_create_position = android_main_body.find("runtime = gowCreatePs2Runtime();")
+    require(
+        aot_gate_position >= 0 and runtime_create_position > aot_gate_position
+        and "if (!gPrivateAotTableAvailable)" in android_main_body
+        and "native core and Vulkan startup were skipped" in android_main_body,
+        "The shell-only APK must skip unvalidated PS2 core startup when its AOT table is empty.",
+    )
+    window_handler_start = native_main.find("void handleAppCommand(")
+    window_handler_end = native_main.find("} // namespace", window_handler_start)
+    window_handler = native_main[window_handler_start:window_handler_end]
+    init_window_start = window_handler.find("case APP_CMD_INIT_WINDOW:")
+    term_window_start = window_handler.find("case APP_CMD_TERM_WINDOW:", init_window_start)
+    init_window_body = window_handler[init_window_start:term_window_start]
+    require(
+        "if (!gPrivateAotTableAvailable)" in init_window_body
+        and init_window_body.find("if (!gPrivateAotTableAvailable)")
+            < init_window_body.find("gRenderer.initialize(app->window)"),
+        "The shell-only APK must not initialize Vulkan without private AOT code.",
     )
     require(
         "runtime->run(" not in native_main,
@@ -360,8 +398,9 @@ def main() -> int:
     # An already-installed private disc must remain discoverable even when a
     # Debug package migration has cleared the original Storage Access Framework URI.
     for required in (
-        "if (!restoreSelectedDisc())",
-        "restorePrivateInstallationIfAvailable()",
+        "if (!restorePrivateInstallationIfAvailable())",
+        "restoreSelectedDisc()",
+        "private boolean restorePrivateInstallationIfAvailable()",
         '"gow_scus_973_99_ntsc_u"',
         '"SYSTEM.CNF"',
         "parseSystemCnfBootPath(",
@@ -384,8 +423,18 @@ def main() -> int:
     require(
         "new File(getFilesDir(), \"installations\")" in private_restore
         and "getFilesDir()" in private_restore
-        and "selectedDiscBootPath = bootPath" in private_restore,
-        "Private installed-disc recovery does not restore the BOOT2 path from app files.",
+        and "selectedDiscBootPath = bootPath" in private_restore
+        and "return true;" in private_restore
+        and "return false;" in private_restore,
+        "Private installed-disc recovery does not restore its BOOT2 path and success state.",
+    )
+    validate_start = main_activity.find("private void validateAndDisplay(Uri uri)")
+    validate_end = main_activity.find("private String identifyGodOfWarDisc(", validate_start)
+    validate_body = main_activity[validate_start:validate_end]
+    require(
+        "installationDirectoryName(finalSerial)" in validate_body
+        and 'alreadyInstalled ? "VERIFICAR DISCO" : "INSTALAR JOGO"' in validate_body,
+        "Restoring a selected ISO must detect an existing private installation instead of offering install again.",
     )
 
     on_create_start = activity.find("protected void onCreate(Bundle savedInstanceState)")
