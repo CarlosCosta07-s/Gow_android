@@ -1,12 +1,16 @@
-# Phone-only build — Codespaces + Termux
+# Ferramenta opcional de desenvolvimento — Codespaces + Termux
 
-This route is for a maintainer who has **only an Android phone**. A computer is not required: GitHub Codespaces supplies the Linux build host in the cloud, the phone browser controls the build, and Termux provides the local ADB bridge back to the same Android device.
+> **NÃO é o fluxo dos jogadores.** O produto final deve exigir somente o APK e a ISO original. Esta página descreve uma ferramenta temporária para mantenedores desenvolverem e validarem o port quando não possuem um computador local. Futuros jogadores não devem criar Codespaces, instalar Termux, ativar ADB, enviar capturas ou compilar APKs.
+
+This route is for a maintainer who has **only an Android phone**. GitHub Codespaces supplies a temporary Linux build host in the cloud, the phone browser controls the build, and Termux provides the local ADB bridge back to the same Android device. It is optional engineering infrastructure, not a release requirement.
+
+For the non-negotiable player experience, see [PLAYER_EXPERIENCE.md](PLAYER_EXPERIENCE.md).
 
 The only game input selected manually is the user's original God of War NTSC-U ISO. The ISO, the extracted ELF/IRX, captured VU1/IOP data and generated C++ stay outside the public Git checkout.
 
 > **Validation status:** the Codespaces environment, authenticated builder endpoint and Termux bridge are now in the repository and covered by host-side tests. The complete workflow still needs its first end-to-end run on the user's phone. In particular, ADB self-connection over Wireless debugging depends on the Android/ColorOS build and is not guaranteed on every device.
 
-## 1. Open the cloud builder from the phone
+## 1. Open the cloud builder from the phone (maintainer-only)
 
 1. Open the public repository in the phone browser: [Gow_android](https://github.com/CarlosCosta07-s/Gow_android).
 2. In **Code → Codespaces**, create a Codespace from the `main` branch. Use the configured dev container when GitHub asks.
