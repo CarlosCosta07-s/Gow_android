@@ -72,6 +72,7 @@ add_library(android-game SHARED
     main.cpp
     android_runtime_log.cpp
     android_performance_hint.cpp
+    android_aot_identity.cpp
     android_pad_bridge.cpp
     iso9660_reader.cpp
     iso9660_installer.cpp
