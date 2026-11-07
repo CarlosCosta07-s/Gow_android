@@ -391,7 +391,7 @@ def main() -> int:
     ):
         require(required in main_activity, f"FORGE missing-AOT user guard is missing: {required}")
     require(
-        main_activity.count('"JOGAR",\\n                    (dialog, which) -> onPlayPressed())') == 2
+        main_activity.count('(dialog, which) -> onPlayPressed())') == 2
         and '(dialog, which) -> openRuntimeDiagnostics())' not in main_activity,
         "A JOGAR dialog is bypassing the private AOT availability guard.",
     )
