@@ -1,6 +1,6 @@
 # Auditoria do GS e plano de backend Vulkan Android
 
-**Revisão:** 2026-11-06  
+**Revisão:** 2026-11-07  
 **Runtime auditado:** Waffle/KIexster, commit `49ca62c1d20b4659c61df6286c54e86edf411012`  
 **Estado:** backend Android de referência implementado parcialmente: rasterização GS em CPU/VRAM, composição CRTC e apresentação Vulkan. Não é ainda um rasterizador GS Vulkan completo nem foi validado com cena real do jogo.
 
@@ -138,11 +138,13 @@ Esta seção registra a implementação posterior aos marcos históricos acima. 
 
 `AndroidGSVulkanBackend::Submit()` agora decodifica a textura de `GSTextureStore` quando TME está ativo e envia o lote para `rasterizeGsBatchToVram()`. O rasterizador grava em VRAM por FBP/FBW/PSM e já cobre texturas CT32 e indexadas T8/T4/T4HL/T4HH/T8H, CLUT CSM1/CSM2, modos de clamp testados, nearest/bilinear e os combinadores TFX. A cobertura de UV/STQ é inicial; não representa todo o pipeline de mipmap, perspective correction, filtering ou formatos do PS2.
 
-A etapa de fragmento inclui teste e escrita Z para Z32/Z24/Z16/Z16S, modos ZTST, alpha test/AFAIL, DATE, equação ALPHA AB/CD/FIX, PABE, FBA e COLCLAMP. Os testes presentes exercitam Z32/GEQUAL, AFAIL KEEP, DATE e uma equação AB/CD com color clamp. Fog/FGE e antialiasing continuam rejeitados; dithering, os demais casos de Z/alpha e os modos de blend ainda precisam de fixtures de referência.
+A etapa de fragmento inclui teste e escrita Z para Z32/Z24/Z16/Z16S, modos ZTST, alpha test/AFAIL, DATE, equação ALPHA AB/CD/FIX, PABE, FBA e COLCLAMP. **Fog FGE está implementado no rasterizador CPU:** o fator F é carregado por vértice, interpolado no espaço de tela para linhas/triângulos, usa o segundo vértice em sprites, mistura FOGCOL depois de TFX e preserva alpha. **DTHE/DIMX também está implementado para CT16/CT16S:** a matriz 4×4 contém 16 valores assinados de 3 bits, aplica o ajuste RGB antes da conversão RGB5551 e respeita COLCLAMP; não altera CT32 nem alpha. Fixtures sintéticas exercitam limites/interpolação de FGE, ponto texturizado, F em sprite, entradas DIMX positivas/negativas, avanço de linha/coluna e clamp/wrap. AA1 continua rejeitado; outros modos de Z/alpha/blending e a semântica completa dos registradores ainda precisam de cobertura de referência.
 
 `presentGsVramCircuit()` lê DISPFB/DISPLAY e compõe os dois circuitos ativos; aplica MMOD/ALP, alpha do circuito 1 e SLBG/BGCOLOR. Fixtures sintéticas verificam composição, alpha fixo e fundo. Interlace, overscan e todos os casos dos registradores de display ainda não foram validados.
 
 **Evidência CI completa:** run `42268386758` passou pelos testes offline de comparação e captura PPM, suíte nativa de entrada/disco/GS, VFS privado, verificador do botão de captura sob demanda e compilação/publicação do APK Debug ARM64. Artefato `gow-android-arm64-shell`, ID `13528990480`. A CI usa fixtures sintéticas e não usa arquivos do jogo; build verde não equivale a boot nem a cena real.
+
+**Evidência mais recente (07/11/2026):** as execuções Android shell #492 (`42381453466`), #493 (`42381674949`) e #494 (`42381678720`) terminaram com sucesso. A #494 concluiu os testes host de bateria, pipeline privado de capturas VU1/IOP, lifecycle do runtime, mapeamento FPCR, ferramentas de captura/comparação, entrada/disco, VFS privado e `assembleDebug` ARM64, além da verificação e publicação do APK Debug. Essas execuções continuam usando fixtures sintéticas e não validam GPU física, instalação/migração em aparelho, boot do ELF recompilado nem cenas reais.
 
 ### Captura e comparação de cena
 
