@@ -28,6 +28,17 @@ Na raiz do repositório, execute com o caminho da ISO original:
 
 **python tools/build_android_game.py --iso "D:/Jogos/GOW/God of War.iso" --work-dir "D:/gowport"**
 
+Para que o próprio orquestrador instale o APK recém-compilado e abra o FORGE em um Android autorizado por ADB, acrescente `--install-and-launch`:
+
+**python tools/build_android_game.py --iso "D:/Jogos/GOW/God of War.iso" --work-dir "D:/gowport" --install-and-launch**
+
+Se a ISO original já estiver instalada em armazenamento privado no Android e o app Debug estiver acessível por ADB, é possível usar a própria instalação como origem dos arquivos de build e sincronizar as capturas AOT sem fornecer/extrair arquivos intermediários manualmente:
+
+**python tools/build_android_game.py --installed-android --work-dir "D:/gowport" --install-and-launch**
+
+Se o APK atual tiver outra chave de assinatura Debug, a atualização simples com `adb install -r` será recusada pelo Android. Nesse caso, use `--migrate-installed-debug-signature --install-and-launch`: o script faz backup da instalação privada, valida SYSTEM.CNF/BOOT2 e todos os hashes do manifesto, troca o APK e restaura a instalação antes de abrir o FORGE. Essa migração exige que já exista uma instalação NTSC-U válida no dispositivo e mantém o backup no workspace privado.
+
+
 O ELF não é exportado pelo usuário. A extração, os módulos IRX, os pacotes e os metadados permanecem no workspace privado. Se um Android Debug autorizado estiver conectado por ADB, o mesmo comando sincroniza as capturas VU1/IOP do armazenamento privado do app; sem capturas, a primeira build é um bootstrap estrito.
 
 Para compilar e validar somente a ferramenta host, sem fornecer ou acessar qualquer arquivo do jogo:
@@ -105,6 +116,8 @@ O alvo ps2xRecomp também declara um include privado para ps2xRuntime/include. P
 - Não implementa o backend GS/Vulkan, presenter Android, áudio Android, overlay visual de toque ou tela de opções dentro do jogo.
 - Não comprova boot ou gameplay.
 - Não prova boot ou gameplay.
+
+`--install-and-launch` abre somente o FORGE launcher; não inicia o guest automaticamente nem contorna os gates AOT. Depois da abertura, o operador entra pelo botão INSTALAR JOGO. A opção elimina a etapa manual de localizar e instalar o APK, mas não substitui a validação no aparelho nem declara que o menu foi alcançado.
 
 O primeiro resultado esperado é um conjunto não vazio de fontes C++ gerados em generated/, incluindo register_functions.cpp, ps2_recompiled_functions.h e ps2_recompiled_stubs.h. Com --export-game-cpp-dir, o script copia somente fontes e cabeçalhos para android/app/build/gow-generated-game (diretório ignorado pelo Git). O CMake Android detecta esse conjunto, inclui recursivamente os .cpp gerados no alvo android-game e desativa a tabela vazia de shell; sem código gerado completo, mantém a tabela vazia de zero slots. O build com código gerado ainda depende do ELF privado do usuário e precisa ser validado separadamente, sem publicar o ELF nem o C++ gerado.
 
