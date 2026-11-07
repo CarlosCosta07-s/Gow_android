@@ -110,8 +110,9 @@ android {
             }
             externalNativeBuild {
                 cmake {
-                    // Build the first GS primitive path in Debug only. Release remains disabled
-                    // until textures, depth, alpha tests and blend state are implemented.
+                    // Keep the experimental CPU GS rasterizer + Vulkan CRTC presenter in Debug.
+                    // It supports textured batches, depth/alpha tests and GS blending, but still
+                    // rejects fog/AA1 and has not passed reference-image or device validation.
                     arguments "-DGOW_ANDROID_ENABLE_GS_VULKAN=ON"
                 }
             }
