@@ -208,6 +208,40 @@ int main() {
         minimumFogPoint.vertices[0].fog = 255u;
         backend.Submit(minimumFogPoint);
 
+        // Match both six-value RGB pattern groups used by the reference GS
+        // fog probe, including the F=1 and F=255 boundary behaviour.
+        const std::array<uint8_t, 6> fogFactors = {0u, 1u, 77u, 128u, 201u, 255u};
+        const std::array<std::array<uint8_t, 3>, 6> firstFogExpected = {{
+            {{50u, 100u, 200u}}, {{50u, 99u, 199u}}, {{107u, 79u, 159u}},
+            {{145u, 66u, 132u}}, {{199u, 46u, 93u}}, {{239u, 32u, 64u}}
+        }};
+        const std::array<std::array<uint8_t, 3>, 6> secondFogExpected = {{
+            {{255u, 0u, 128u}}, {{254u, 0u, 128u}}, {{178u, 76u, 128u}},
+            {{127u, 127u, 128u}}, {{54u, 200u, 128u}}, {{0u, 254u, 128u}}
+        }};
+        for (size_t i = 0u; i < fogFactors.size(); ++i) {
+            GSPrimitiveBatch firstPattern = fogPoint;
+            firstPattern.vertices[0].x = 10.0f + static_cast<float>(i);
+            firstPattern.vertices[0].y = 44.0f;
+            firstPattern.vertices[0].r = 240u;
+            firstPattern.vertices[0].g = 32u;
+            firstPattern.vertices[0].b = 64u;
+            firstPattern.vertices[0].fog = fogFactors[i];
+            backend.Submit(firstPattern);
+
+            GSPrimitiveBatch secondPattern = fogPoint;
+            secondPattern.vertices[0].x = 20.0f + static_cast<float>(i);
+            secondPattern.vertices[0].y = 44.0f;
+            secondPattern.vertices[0].r = 0u;
+            secondPattern.vertices[0].g = 255u;
+            secondPattern.vertices[0].b = 128u;
+            secondPattern.vertices[0].fog = fogFactors[i];
+            secondPattern.state.fogR = 255u;
+            secondPattern.state.fogG = 0u;
+            secondPattern.state.fogB = 128u;
+            backend.Submit(secondPattern);
+        }
+
         GSPrimitiveBatch fogDisabledPoint = fogPoint;
         fogDisabledPoint.state.prim.fge = false;
         fogDisabledPoint.vertices[0].x = 7.0f;
@@ -630,6 +664,19 @@ int main() {
         require(halfFogPixel[0] == 75u && halfFogPixel[1] == 125u &&
                 halfFogPixel[2] == 200u,
                 "GS F=128 fog did not blend the source color with FOGCOL.");
+
+        for (size_t i = 0u; i < fogFactors.size(); ++i) {
+            const auto firstPatternPixel = pixelAt(10u + static_cast<uint32_t>(i), 44u);
+            require(firstPatternPixel[0] == firstFogExpected[i][0] &&
+                    firstPatternPixel[1] == firstFogExpected[i][1] &&
+                    firstPatternPixel[2] == firstFogExpected[i][2],
+                    "GS fog RGB pattern group one differs from the reference values.");
+            const auto secondPatternPixel = pixelAt(20u + static_cast<uint32_t>(i), 44u);
+            require(secondPatternPixel[0] == secondFogExpected[i][0] &&
+                    secondPatternPixel[1] == secondFogExpected[i][1] &&
+                    secondPatternPixel[2] == secondFogExpected[i][2],
+                    "GS fog RGB pattern group two differs from the reference values.");
+        }
         const auto minimumFogPixel = pixelAt(6u, 48u);
         require(minimumFogPixel[0] == 99u && minimumFogPixel[1] == 149u &&
                 minimumFogPixel[2] == 200u,
