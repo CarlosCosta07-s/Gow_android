@@ -133,6 +133,13 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
         message(FATAL_ERROR "Prepared Waffle tree did not define ps2_runtime.")
     endif()
 
+    # The IOP service library is a separate target too. Keep its native IRX
+    # dispatch and CD/DVD services optimized in Debug builds rather than
+    # leaving that part of the guest boot path at the NDK's unoptimized -O0.
+    if(TARGET ps2_iop)
+        target_compile_options(ps2_iop PRIVATE -O2 -fno-strict-aliasing)
+    endif()
+
     # The runtime is a separate CMake target: android-game's USE_SSE2NEON
     # definition and include path do not propagate backwards through linking.
     # Compile the PS2 core itself against sse2neon on Android ARM64.
