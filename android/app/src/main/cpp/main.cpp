@@ -2325,8 +2325,11 @@ extern "C" void android_main(android_app* app) {
 #if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
         // 16 ms keeps the host near the PS2 NTSC frame cadence without a
         // zero-timeout busy loop; input/lifecycle events still wake it early.
+        // Poll near the PS2 cadence only after the EE guest worker exists.
+        // Before that, surface/input/lifecycle events are sufficient to wake
+        // the host; periodic wakeups cannot advance the title screen.
         const int timeout =
-            gRenderer.isReady() &&
+            gRenderer.isReady() && gGuestExecutionStarted &&
             !gAndroidHostPaused.load(std::memory_order_acquire) ? 16 : -1;
 #else
         const int timeout = -1;
