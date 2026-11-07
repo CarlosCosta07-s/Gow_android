@@ -358,7 +358,6 @@ def main() -> int:
         "#endif\n",
         "select sse2neon for the native ARM64 VIF1 UNPACK fast path",
     )
-    )
 
     # Strict IOP mode: dispatch known AOT IRX functions, but refuse the guest CPU fallback.
     iop_cpp = recompiler_source / "ps2xIOP/src/emulator/iop_emulator.cpp"
