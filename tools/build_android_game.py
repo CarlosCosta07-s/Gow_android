@@ -482,6 +482,32 @@ def require_full_native_aot_summary(
     if not isinstance(vu1_sources, list) or not isinstance(iop_sources, list):
         raise RuntimeError("The private native AOT source inventory is incomplete.")
 
+    generated_vu1_dir = summary_path.parent / "gow-generated-vu1"
+    generated_iop_dir = summary_path.parent / "gow-generated-iop"
+    for directory in (generated_vu1_dir, generated_iop_dir):
+        if directory.is_symlink() or not directory.is_dir():
+            raise RuntimeError("A private generated AOT source directory is missing or unsafe.")
+
+    def verify_generated_sources(names: list[object], directory: Path, label: str) -> None:
+        if not names:
+            raise RuntimeError(f"The private {label} AOT source inventory is empty.")
+        seen_names: set[str] = set()
+        for name in names:
+            if (
+                not isinstance(name, str)
+                or Path(name).name != name
+                or not name.endswith(".cpp")
+                or name in seen_names
+            ):
+                raise RuntimeError(f"The private {label} AOT source inventory contains an unsafe or duplicate filename.")
+            seen_names.add(name)
+            source = directory / name
+            if source.is_symlink() or not source.is_file() or source.stat().st_size <= 0:
+                raise RuntimeError(f"The private {label} AOT source is missing, empty or unsafe: {name}")
+
+    verify_generated_sources(vu1_sources, generated_vu1_dir, "VU1")
+    verify_generated_sources(iop_sources, generated_iop_dir, "IOP")
+
     numeric_fields = (
         "vu1_micro_memories",
         "vu1_native_translation_units",
