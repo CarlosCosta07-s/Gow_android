@@ -344,6 +344,19 @@ def main() -> int:
     ):
         require(required in main_activity, f"FORGE diagnostic launch is missing: {required}")
 
+    # Once installation checks pass, the primary action must become a real
+    # first-boot attempt instead of looping through the same verification flow.
+    for required in (
+        "private boolean installationReadyForBoot;",
+        "if (installationReadyForBoot) {",
+        "installationReadyForBoot = installationValid && !cancelled;",
+        "installationReadyForBoot = success;",
+        'installDiscButton.setText(installationReadyForBoot ? "JOGAR" : "VERIFICAR DISCO");',
+        '"JOGAR",',
+        "tabela AOT privada gerada a partir da ISO",
+    ):
+        require(required in main_activity, f"FORGE post-validation play flow is missing: {required}")
+
     # An already-installed private disc must remain discoverable even when a
     # Debug package migration has cleared the original Storage Access Framework URI.
     for required in (
