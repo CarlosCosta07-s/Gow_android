@@ -134,7 +134,9 @@ def create_build_plan(
         "assembleDebug",
     )
     if use_windows and gradle.lower().endswith((".bat", ".cmd")):
-        gradle_command = ("cmd", "/c", gradle, *gradle_arguments)
+        # CALL lets cmd.exe handle quoted paths (for example under Program Files)
+        # without losing the batch file's argument boundaries.
+        gradle_command = ("cmd", "/c", "call", gradle, *gradle_arguments)
     else:
         gradle_command = (gradle, *gradle_arguments)
     return BuildPlan(
