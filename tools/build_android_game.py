@@ -23,8 +23,11 @@ from pathlib import Path
 
 from build_recompiler_host import validate_ps2_elf
 from sync_android_aot_captures import (
+    DEFAULT_PACKAGE,
     NoDeviceCaptures,
     pull_private_aot_captures,
+    pull_private_installed_file,
+    resolve_adb_device,
 )
 
 
@@ -406,6 +409,14 @@ def main() -> int:
         "--elf",
         help=argparse.SUPPRESS,
     )
+    source_group.add_argument(
+        "--installed-android",
+        action="store_true",
+        help=(
+            "read SYSTEM.CNF and BOOT2 directly from an existing private NTSC-U "
+            "installation on one connected Android Debug app via ADB"
+        ),
+    )
     parser.add_argument(
         "--work-dir",
         default=str(default_work),
@@ -414,7 +425,7 @@ def main() -> int:
     parser.add_argument(
         "--device-serial",
         default=None,
-        help=argparse.SUPPRESS,
+        help="ADB serial when more than one authorized Android device is connected",
     )
     # Private ADB synchronization supplies this archive automatically. The
     # hidden option remains only for internal tests and offline maintainer use.
@@ -452,8 +463,10 @@ def main() -> int:
             parser.error(f"Original God of War ISO not found: {iso_path}")
         if _is_within(iso_path, root):
             parser.error("Keep the original ISO outside the public Git repository.")
-    else:
+    elif args.elf:
         elf_path = Path(args.elf).expanduser().resolve()
+    else:
+        elf_path = None
 
     captures_zip: Path | None = None
     if args.aot_captures:
@@ -496,6 +509,14 @@ def main() -> int:
         print("$ " + shlex.join(prepare_command))
         print("Plan validated. No ISO contents were read and no private game data was generated.")
         return 0
+    if args.plan_only and args.installed_android:
+        print("Source: existing private NTSC-U installation on an authorized Android Debug app.")
+        print(f"Private workspace: {work}")
+        print("Inputs read from the device: SYSTEM.CNF and its BOOT2 executable.")
+        print("The ISO, ELF and capture files are not exported manually.")
+        print("$ " + shlex.join(prepare_command))
+        print("Plan validated. No Android files were read and no private game data was generated.")
+        return 0
 
     prepared_runtime = False
     if iso_path is not None:
@@ -514,6 +535,54 @@ def main() -> int:
                     device_serial=args.device_serial,
                 )
                 print("Private VU1/IOP captures were synchronized automatically; no manual export is required.")
+            except NoDeviceCaptures as error:
+                print(
+                    "No private Android AOT captures are available yet; "
+                    "continuing with the first strict capture bootstrap. "
+                    f"Details: {error}"
+                )
+    elif args.installed_android:
+        print("Source: existing private Android NTSC-U installation.")
+        print(f"Private workspace: {work}")
+        adb_executable, selected_device = resolve_adb_device(
+            device_serial=args.device_serial,
+        )
+        system_cnf_path = pull_private_installed_file(
+            work,
+            root,
+            "SYSTEM.CNF",
+            adb_executable=adb_executable,
+            device_serial=selected_device,
+            package_name=DEFAULT_PACKAGE,
+            max_bytes=64 * 1024,
+        )
+        boot_relative_path = parse_system_cnf_boot_path(
+            system_cnf_path.read_text(encoding="ascii", errors="replace")
+        )
+        if Path(boot_relative_path).name.upper() != "SCUS_973.99":
+            raise RuntimeError(
+                "The installed Android disc is not the supported NTSC-U SCUS_973.99 profile: "
+                + boot_relative_path
+            )
+        elf_path = pull_private_installed_file(
+            work,
+            root,
+            boot_relative_path,
+            adb_executable=adb_executable,
+            device_serial=selected_device,
+            package_name=DEFAULT_PACKAGE,
+        )
+        print(f"Privately synchronized BOOT2 from Android: {boot_relative_path}")
+        if captures_zip is None:
+            try:
+                captures_zip = pull_private_aot_captures(
+                    work,
+                    root,
+                    adb_executable=adb_executable,
+                    device_serial=selected_device,
+                    package_name=DEFAULT_PACKAGE,
+                )
+                print("Private VU1/IOP captures were synchronized automatically.")
             except NoDeviceCaptures as error:
                 print(
                     "No private Android AOT captures are available yet; "
