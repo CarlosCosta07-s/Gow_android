@@ -615,23 +615,31 @@ void rasterizeSprite(
         static_cast<int>(std::ceil(maxY)));
     const float dx = std::max(1.0e-7f, second.x - first.x);
     const float dy = std::max(1.0e-7f, second.y - first.y);
+    const float inverseDx = 1.0f / dx;
+    const float inverseDy = 1.0f / dy;
+    float vRow = std::clamp(
+        (static_cast<float>(top) + 0.5f - first.y) * inverseDy,
+        0.0f, 1.0f);
     for (int y = top; y <= bottom; ++y) {
+        float u = std::clamp(
+            (static_cast<float>(left) + 0.5f - first.x) * inverseDx,
+            0.0f, 1.0f);
+        const float v = vRow;
         for (int x = left; x <= right; ++x) {
-            const float u = std::clamp(
-                (static_cast<float>(x) + 0.5f - first.x) / dx, 0.0f, 1.0f);
-            const float v = std::clamp(
-                (static_cast<float>(y) + 0.5f - first.y) / dy, 0.0f, 1.0f);
-            RasterVertex pixel = interpolate(first, second, (u + v) * 0.5f);
+            const float average = (u + v) * 0.5f;
+            RasterVertex pixel = interpolate(first, second, average);
             if (state.prim.fst) {
                 pixel.u = first.u + (second.u - first.u) * u;
                 pixel.v = first.v + (second.v - first.v) * v;
             } else {
                 pixel.s = first.s + (second.s - first.s) * u;
                 pixel.t = first.t + (second.t - first.t) * v;
-                pixel.q = first.q + (second.q - first.q) * ((u + v) * 0.5f);
+                pixel.q = first.q + (second.q - first.q) * average;
             }
             writePixelUnchecked(store, state, x, y, pixel, texturePixels);
+            u = std::min(1.0f, u + inverseDx);
         }
+        vRow = std::min(1.0f, vRow + inverseDy);
     }
 }
 
