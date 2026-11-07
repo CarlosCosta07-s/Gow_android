@@ -988,7 +988,7 @@ public final class MainActivity extends AppCompatActivity {
             discStatus.setText("Instalação verificada. Toque em JOGAR para tentar o primeiro boot nativo.");
             resultDialog.setPositiveButton(
                     "JOGAR",
-                    (dialog, which) -> openRuntimeDiagnostics());
+                    (dialog, which) -> onPlayPressed());
         } else {
             discStatus.setText("A instalação precisa ser reparada antes de qualquer execução.");
             if (selectedDiscUri != null) {
@@ -1330,7 +1330,7 @@ public final class MainActivity extends AppCompatActivity {
                                     + "tentativa é silenciosa, pois o áudio Android ainda não está integrado.")
                     .setPositiveButton(
                             "JOGAR",
-                            (dialog, which) -> openRuntimeDiagnostics())
+                            (dialog, which) -> onPlayPressed())
                     .show();
         } else {
             String message = error == null || error.isEmpty()
