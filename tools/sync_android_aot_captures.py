@@ -176,6 +176,8 @@ def _safe_relative_capture(name: str) -> str | None:
         return None
     if len(parts) == 2 and parts[0] == "gow-aot-captures" and parts[1] in ("vu1", "iop"):
         return None
+    if len(parts) == 2 and parts[0] == "gow-aot-captures" and parts[1] == "game_identity.txt":
+        return "game_identity.txt"
     if len(parts) != 3 or parts[0] != "gow-aot-captures":
         raise ValueError(f"Unexpected file in private AOT capture tree: {name}")
     folder, filename = parts[1], parts[2]
@@ -183,8 +185,6 @@ def _safe_relative_capture(name: str) -> str | None:
         return f"vu1/{filename}"
     if folder == "iop" and (filename.endswith(".bin") or filename == "modules.txt"):
         return f"iop/{filename}"
-    if len(parts) == 2 and folder == "gow-aot-captures" and filename == "game_identity.txt":
-        return "game_identity.txt"
     raise ValueError(f"Unexpected file in private AOT capture tree: {name}")
 
 
