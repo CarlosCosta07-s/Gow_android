@@ -225,10 +225,7 @@ def main() -> int:
     require(runtime_bridge_path.is_file(), "Android runtime link bridge is missing.")
     runtime_bridge = runtime_bridge_path.read_text(encoding="utf-8")
     aot_ready_start = runtime_bridge.find('extern "C" bool gowRuntimeHasPrivateAotTable()')
-    aot_ready_end = runtime_bridge.find(
-        'extern "C" __attribute__((visibility("default")))\\nbool gowInitializePs2RuntimeCoreHeadless(',
-        aot_ready_start,
-    )
+    aot_ready_end = runtime_bridge.find("\n}\n", aot_ready_start)
     require(
         aot_ready_start >= 0 and aot_ready_end > aot_ready_start,
         "Early private AOT readiness bridge is missing.",
