@@ -617,15 +617,14 @@ void rasterizeSprite(
     const float dy = std::max(1.0e-7f, second.y - first.y);
     const float inverseDx = 1.0f / dx;
     const float inverseDy = 1.0f / dy;
-    float vRow = std::clamp(
-        (static_cast<float>(top) + 0.5f - first.y) * inverseDy,
-        0.0f, 1.0f);
+    float vRawRow =
+        (static_cast<float>(top) + 0.5f - first.y) * inverseDy;
     for (int y = top; y <= bottom; ++y) {
-        float u = std::clamp(
-            (static_cast<float>(left) + 0.5f - first.x) * inverseDx,
-            0.0f, 1.0f);
-        const float v = vRow;
+        float uRaw =
+            (static_cast<float>(left) + 0.5f - first.x) * inverseDx;
+        const float v = std::clamp(vRawRow, 0.0f, 1.0f);
         for (int x = left; x <= right; ++x) {
+            const float u = std::clamp(uRaw, 0.0f, 1.0f);
             const float average = (u + v) * 0.5f;
             RasterVertex pixel = interpolate(first, second, average);
             if (state.prim.fst) {
@@ -637,9 +636,9 @@ void rasterizeSprite(
                 pixel.q = first.q + (second.q - first.q) * average;
             }
             writePixelUnchecked(store, state, x, y, pixel, texturePixels);
-            u = std::min(1.0f, u + inverseDx);
+            uRaw += inverseDx;
         }
-        vRow = std::min(1.0f, vRow + inverseDy);
+        vRawRow += inverseDy;
     }
 }
 
