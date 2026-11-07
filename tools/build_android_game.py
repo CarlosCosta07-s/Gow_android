@@ -426,7 +426,18 @@ def install_and_launch_android_app(
     )
 
 
-def require_full_native_aot_summary(summary_path: Path) -> dict[str, object]:
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def require_full_native_aot_summary(
+    summary_path: Path,
+    expected_elf_path: Path,
+) -> dict[str, object]:
     """Fail closed unless private VU1 and IOP native AOT output is complete."""
     if not summary_path.is_file() or summary_path.is_symlink():
         raise RuntimeError(
@@ -439,6 +450,30 @@ def require_full_native_aot_summary(summary_path: Path) -> dict[str, object]:
 
     if not isinstance(summary, dict) or summary.get("format") != "gow-native-aot-build-v1":
         raise RuntimeError("The private native AOT summary has an unsupported format.")
+    elf = expected_elf_path.expanduser().resolve()
+    if expected_elf_path.is_symlink() or not elf.is_file():
+        raise RuntimeError("The expected private NTSC-U BOOT2 ELF is missing or unsafe.")
+    game_identity = summary.get("game_identity")
+    if not isinstance(game_identity, dict):
+        raise RuntimeError(
+            "The private AOT report is not bound to a BOOT2 ELF identity captured by Android."
+        )
+    if (
+        game_identity.get("format") != "gow-android-game-identity-v1"
+        or game_identity.get("installation_id") != "gow_scus_973_99_ntsc_u"
+        or not isinstance(game_identity.get("boot_path"), str)
+        or Path(game_identity["boot_path"]).name.upper() != "SCUS_973.99"
+        or game_identity.get("elf_size") != elf.stat().st_size
+        or not isinstance(game_identity.get("elf_sha256"), str)
+        or not re.fullmatch(r"[0-9a-f]{64}", game_identity["elf_sha256"])
+    ):
+        raise RuntimeError("The private AOT report has an invalid or mismatched game identity.")
+    if _sha256_file(elf) != game_identity["elf_sha256"]:
+        raise RuntimeError(
+            "The private AOT captures belong to a different BOOT2 ELF/ISO revision. "
+            "Refusing to compile a test APK."
+        )
+
     sources = summary.get("sources")
     if not isinstance(sources, dict):
         raise RuntimeError("The private native AOT summary has no source inventory.")
@@ -780,7 +815,7 @@ def main() -> int:
         if not summary_path.is_file():
             raise RuntimeError("The private VU1/IOP AOT generator did not write its summary.")
         summary = (
-            require_full_native_aot_summary(summary_path)
+            require_full_native_aot_summary(summary_path, plan.elf)
             if args.require_full_native_aot
             else json.loads(summary_path.read_text(encoding="utf-8"))
         )
