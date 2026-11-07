@@ -171,7 +171,35 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
             "Link an empty function table until private game code is generated" FORCE)
         target_sources(android-game PRIVATE ${GOW_ANDROID_GENERATED_GAME_SOURCES})
         target_include_directories(android-game PRIVATE "${GOW_ANDROID_GENERATED_GAME_DIR}")
-        message(STATUS "FORGE Android target includes private PS2Recomp game C++.")
+
+        # Register the game-specific runtime fixes with the Android shared library.
+        # The override source must be linked into android-game (not only ps2_runtime):
+        # its static AutoRegister descriptor is what PS2Runtime::loadElf matches.
+        set(GOW_ANDROID_GAME_OVERRIDES_DIR
+            "${CMAKE_CURRENT_LIST_DIR}/../../../../../port/kiexter")
+        set(GOW_ANDROID_GAME_OVERRIDES_SOURCE
+            "${GOW_ANDROID_GAME_OVERRIDES_DIR}/gow_overrides.cpp")
+        set(GOW_ANDROID_GS_DISPLAY_HEADER
+            "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/include/runtime/gs/gs_display.h")
+        set(GOW_ANDROID_NEON_COMPAT_HEADER
+            "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/include/runtime/ps2_vu1_neon_compat.h")
+        if(NOT EXISTS "${GOW_ANDROID_GAME_OVERRIDES_SOURCE}")
+            message(FATAL_ERROR
+                "God of War Android override source is missing: ${GOW_ANDROID_GAME_OVERRIDES_SOURCE}")
+        endif()
+        if(NOT EXISTS "${GOW_ANDROID_GS_DISPLAY_HEADER}")
+            message(FATAL_ERROR
+                "Prepared runtime is missing the GS display hooks required by gow_overrides.cpp: "
+                "${GOW_ANDROID_GS_DISPLAY_HEADER}. Re-run --prepare-android-runtime with the pinned KIexster patch set.")
+        endif()
+        if(NOT EXISTS "${GOW_ANDROID_NEON_COMPAT_HEADER}")
+            message(FATAL_ERROR
+                "Prepared runtime is missing the ARM64 VU1 compatibility header: "
+                "${GOW_ANDROID_NEON_COMPAT_HEADER}. Re-run --prepare-android-runtime.")
+        endif()
+        target_sources(android-game PRIVATE "${GOW_ANDROID_GAME_OVERRIDES_SOURCE}")
+        target_include_directories(android-game PRIVATE "${GOW_ANDROID_GAME_OVERRIDES_DIR}")
+        message(STATUS "FORGE Android target includes private PS2Recomp game C++ and God of War game overrides.")
     else()
         option(GOW_ANDROID_EMPTY_RECOMPILED_TABLE
             "Link an empty function table until private game code is generated" ON)
