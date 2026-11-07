@@ -2201,6 +2201,12 @@ Java_org_gowandroid_app_GowGameActivity_nativeClearActivityReference(
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
+Java_org_gowandroid_app_MainActivity_nativeHasPrivateAotTable(
+    JNIEnv *, jclass) noexcept {
+    return gowRuntimeHasPrivateAotTable() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
 Java_org_gowandroid_app_GowGameActivity_nativeRequestGsSceneCapture(
     JNIEnv *, jclass) noexcept {
     if (gGsSceneCaptureSequence.load(std::memory_order_relaxed) >=
