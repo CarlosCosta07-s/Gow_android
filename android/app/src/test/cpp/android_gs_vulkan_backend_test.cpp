@@ -293,8 +293,8 @@ int main() {
         fogLine.vertices[1].fog = 128u;
         backend.Submit(fogLine);
 
-        // Triangle F is affine in screen space, independent of the flat
-        // shading rule used for the vertex color.
+        // Triangle F is an affine screen-space attribute, interpolated
+        // independently at each covered pixel.
         GSPrimitiveBatch fogTriangle{};
         fogTriangle.vertexCount = 3u;
         fogTriangle.state.context.frame = triangle.state.context.frame;
