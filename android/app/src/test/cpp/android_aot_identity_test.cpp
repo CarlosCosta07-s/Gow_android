@@ -43,6 +43,33 @@ int main() {
         return 1;
     }
 
+    {
+        std::ofstream staleVu1(captureRoot / "vu1/stale.bin", std::ios::binary);
+        staleVu1 << "old vu1 capture";
+        std::ofstream staleIop(captureRoot / "iop/stale.bin", std::ios::binary);
+        staleIop << "old iop capture";
+    }
+    if (!gow::android::writePrivateAotGameIdentity(
+            discRoot.string(), "SCUS_973.99", captureRoot.string(), &error) ||
+        !fs::exists(captureRoot / "vu1/stale.bin") ||
+        !fs::exists(captureRoot / "iop/stale.bin")) {
+        std::cerr << "same ELF identity should preserve existing captures\\n";
+        fs::remove_all(temporary, cleanupError);
+        return 1;
+    }
+    {
+        std::ofstream elf(discRoot / "SCUS_973.99", std::ios::binary | std::ios::trunc);
+        elf << "a different synthetic private ELF revision";
+    }
+    if (!gow::android::writePrivateAotGameIdentity(
+            discRoot.string(), "SCUS_973.99", captureRoot.string(), &error) ||
+        fs::exists(captureRoot / "vu1/stale.bin") ||
+        fs::exists(captureRoot / "iop/stale.bin")) {
+        std::cerr << "changed ELF identity must clear stale VU1/IOP captures\\n";
+        fs::remove_all(temporary, cleanupError);
+        return 1;
+    }
+
     if (gow::android::writePrivateAotGameIdentity(
             discRoot.string(), "../SCUS_973.99", captureRoot.string(), &error)) {
         std::cerr << "path traversal was accepted\n";
