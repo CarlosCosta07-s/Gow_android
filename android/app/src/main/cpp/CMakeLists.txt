@@ -2,12 +2,13 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project(gow_android_native LANGUAGES C CXX)
 
-# The old surface clear/present was only a bring-up diagnostic, not a GS
-# renderer. Keep it disabled by default until the Android GS backend exists.
+# Keep the standalone clear/present smoke test separate from the experimental
+# Android GS backend, which rasterizes into PS2 VRAM on the CPU and presents the
+# resulting CRTC frame through Vulkan.
 option(GOW_ANDROID_ENABLE_VULKAN_SMOKE
     "Enable the isolated Vulkan clear/present diagnostic (not the PS2 GS renderer)" OFF)
 option(GOW_ANDROID_ENABLE_GS_VULKAN
-    "Enable the experimental, untextured Android GS primitive pipeline" OFF)
+    "Enable the experimental CPU-rasterized Android GS backend with Vulkan presentation" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
