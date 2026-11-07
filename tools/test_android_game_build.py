@@ -20,6 +20,14 @@ class FullNativeAotReleaseGateTests(unittest.TestCase):
         self.elf_path = Path(self.temporary.name) / "SCUS_973.99"
         self.elf_path.write_bytes(b"synthetic private NTSC-U BOOT2 ELF")
         elf_digest = __import__("hashlib").sha256(self.elf_path.read_bytes()).hexdigest()
+        self.generated_vu1_dir = Path(self.temporary.name) / "gow-generated-vu1"
+        self.generated_iop_dir = Path(self.temporary.name) / "gow-generated-iop"
+        self.generated_vu1_dir.mkdir()
+        self.generated_iop_dir.mkdir()
+        for name in (f"vu1n_part{i}.cpp" for i in range(6)):
+            (self.generated_vu1_dir / name).write_text("// synthetic VU1 AOT\\n", encoding="utf-8")
+        for name in [f"iopn_{i}.cpp" for i in range(8)] + ["iopn_registry.cpp"]:
+            (self.generated_iop_dir / name).write_text("// synthetic IOP AOT\\n", encoding="utf-8")
         self.summary = {
             "game_identity": {
                 "format": "gow-android-game-identity-v1",
@@ -75,6 +83,12 @@ class FullNativeAotReleaseGateTests(unittest.TestCase):
         self.summary["vu1_interpreter_callouts"] = 1
         self._write_summary()
         with self.assertRaisesRegex(RuntimeError, "coverage is incomplete"):
+            require_full_native_aot_summary(self.summary_path, self.elf_path)
+
+    def test_rejects_missing_generated_vu1_or_iop_source(self) -> None:
+        self._write_summary()
+        (self.generated_vu1_dir / "vu1n_part3.cpp").unlink()
+        with self.assertRaisesRegex(RuntimeError, "VU1 AOT source is missing"):
             require_full_native_aot_summary(self.summary_path, self.elf_path)
 
     def test_rejects_aot_captures_for_a_different_elf_revision(self) -> None:
