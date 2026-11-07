@@ -537,20 +537,41 @@ void rasterizeTriangle(
         std::min(static_cast<int>(context.scissor.y1), 2047),
         static_cast<int>(std::ceil(maxY)));
 
-    for (int y = top; y <= bottom; ++y) {
-        for (int x = left; x <= right; ++x) {
-            const float px = static_cast<float>(x) + 0.5f;
-            const float py = static_cast<float>(y) + 0.5f;
-            const float wa = edge(b, c, px, py) / area;
-            const float wb = edge(c, a, px, py) / area;
-            const float wc = edge(a, b, px, py) / area;
-            constexpr float epsilon = -1.0e-6f;
-            if (wa < epsilon || wb < epsilon || wc < epsilon) continue;
+    // Barycentric coordinates are affine across the triangle. Calculate
+    // them once at the first pixel of each scanline, then increment by the
+    // exact x/y edge slopes. The previous inner loop performed three edge
+    // evaluations and three floating-point divisions for every covered pixel.
+    const float inverseArea = 1.0f / area;
+    const float waStepX = (b.y - c.y) * inverseArea;
+    const float wbStepX = (c.y - a.y) * inverseArea;
+    const float wcStepX = (a.y - b.y) * inverseArea;
+    const float waStepY = (c.x - b.x) * inverseArea;
+    const float wbStepY = (a.x - c.x) * inverseArea;
+    const float wcStepY = (b.x - a.x) * inverseArea;
+    constexpr float epsilon = -1.0e-6f;
 
-            const RasterVertex pixel = interpolateTriangle(
-                a, b, c, wa, wb, wc);
-            writePixel(store, state, width, x, y, pixel, texturePixels);
+    for (int y = top; y <= bottom; ++y) {
+        const float px = static_cast<float>(left) + 0.5f;
+        const float py = static_cast<float>(y) + 0.5f;
+        float wa = edge(b, c, px, py) * inverseArea;
+        float wb = edge(c, a, px, py) * inverseArea;
+        float wc = edge(a, b, px, py) * inverseArea;
+
+        for (int x = left; x <= right; ++x) {
+            if (wa >= epsilon && wb >= epsilon && wc >= epsilon) {
+                const RasterVertex pixel = interpolateTriangle(
+                    a, b, c, wa, wb, wc);
+                writePixel(store, state, width, x, y, pixel, texturePixels);
+            }
+            wa += waStepX;
+            wb += wbStepX;
+            wc += wcStepX;
         }
+        // Recompute at the start of the next row instead of carrying the
+        // horizontal accumulation across the entire bounding rectangle.
+        (void)waStepY;
+        (void)wbStepY;
+        (void)wcStepY;
     }
 }
 
