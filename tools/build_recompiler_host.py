@@ -350,13 +350,22 @@ def main() -> int:
     vif1_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_vif1_interpreter.cpp"
     replace_exactly_once(
         vif1_cpp,
-        "#include <immintrin.h>\n",
-        "#if defined(__aarch64__) && defined(__ARM_NEON)\n"
-        '#include "sse2neon.h"\n'
-        "#elif defined(_MSC_VER) || defined(__SSE4_1__)\\n"
+        "#if defined(_MSC_VER) || defined(__SSE4_1__)\n"
         "#include <immintrin.h>\n"
         "#endif\n",
-        "select sse2neon for the native ARM64 VIF1 UNPACK fast path",
+        "#if defined(__aarch64__) && defined(__ARM_NEON)\n"
+        '#include "sse2neon.h"\n'
+        "#elif defined(_MSC_VER) || defined(__SSE4_1__)\n"
+        "#include <immintrin.h>\n"
+        "#endif\n",
+        "select the ARM64 sse2neon header while preserving the x86 include guard",
+    )
+    replace_exactly_once(
+        vif1_cpp,
+        "#if defined(_MSC_VER) || defined(__SSE4_1__)\n"
+        "#if defined(_MSC_VER) || defined(__SSE4_1__) || (defined(__aarch64__) && defined(__ARM_NEON))\n"
+        "enable the VIF1 SIMD UNPACK fast path through NEON on Android ARM64",
+    )
     )
 
     # Strict IOP mode: dispatch known AOT IRX functions, but refuse the guest CPU fallback.
