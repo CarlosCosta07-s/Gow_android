@@ -177,6 +177,88 @@ int main() {
         reversedBothSprite.vertices[1].y = 36.0f;
         backend.Submit(reversedBothSprite);
 
+        // GS fog is applied after the texture function, interpolates as a
+        // screen-space vertex attribute, and leaves alpha unchanged.
+        GSPrimitiveBatch fogPoint{};
+        fogPoint.vertexCount = 1u;
+        fogPoint.state.context.frame = triangle.state.context.frame;
+        fogPoint.state.context.scissor = triangle.state.context.scissor;
+        fogPoint.state.prim.type = GS_PRIM_POINT;
+        fogPoint.state.prim.fge = true;
+        fogPoint.state.fogR = 50u;
+        fogPoint.state.fogG = 100u;
+        fogPoint.state.fogB = 200u;
+        fogPoint.vertices[0].r = 100u;
+        fogPoint.vertices[0].g = 150u;
+        fogPoint.vertices[0].b = 200u;
+        fogPoint.vertices[0].a = 173u;
+
+        fogPoint.vertices[0].x = 4.0f;
+        fogPoint.vertices[0].y = 48.0f;
+        fogPoint.vertices[0].fog = 0u;
+        backend.Submit(fogPoint);
+
+        GSPrimitiveBatch halfFogPoint = fogPoint;
+        halfFogPoint.vertices[0].x = 5.0f;
+        halfFogPoint.vertices[0].fog = 128u;
+        backend.Submit(halfFogPoint);
+
+        GSPrimitiveBatch minimumFogPoint = fogPoint;
+        minimumFogPoint.vertices[0].x = 6.0f;
+        minimumFogPoint.vertices[0].fog = 255u;
+        backend.Submit(minimumFogPoint);
+
+        GSPrimitiveBatch fogDisabledPoint = fogPoint;
+        fogDisabledPoint.state.prim.fge = false;
+        fogDisabledPoint.vertices[0].x = 7.0f;
+        fogDisabledPoint.vertices[0].fog = 0u;
+        backend.Submit(fogDisabledPoint);
+
+        // The texture function produces red at (0,0); F=0 must replace that
+        // textured result with FOGCOL, proving fog runs after TFX.
+        GSPrimitiveBatch foggedTexturedPoint = fogPoint;
+        foggedTexturedPoint.vertices[0].x = 8.0f;
+        foggedTexturedPoint.vertices[0].fog = 0u;
+        foggedTexturedPoint.vertices[0].r = 128u;
+        foggedTexturedPoint.vertices[0].g = 128u;
+        foggedTexturedPoint.vertices[0].b = 128u;
+        foggedTexturedPoint.vertices[0].a = 128u;
+        foggedTexturedPoint.state.context.tex0.tbp0 = 64u;
+        foggedTexturedPoint.state.context.tex0.tbw = 1u;
+        foggedTexturedPoint.state.context.tex0.psm = GS_PSM_CT32;
+        foggedTexturedPoint.state.context.tex0.tcc = 1u;
+        foggedTexturedPoint.state.context.tex0.tfx = 0u;
+        foggedTexturedPoint.state.prim.tme = true;
+        foggedTexturedPoint.state.prim.fst = true;
+        foggedTexturedPoint.state.textureWidth = 2u;
+        foggedTexturedPoint.state.textureHeight = 2u;
+        backend.Submit(foggedTexturedPoint);
+
+        // The midpoint of this line has F=64 after linear interpolation
+        // between the endpoint values 0 and 128.
+        GSPrimitiveBatch fogLine{};
+        fogLine.vertexCount = 2u;
+        fogLine.state.context.frame = triangle.state.context.frame;
+        fogLine.state.context.scissor = triangle.state.context.scissor;
+        fogLine.state.prim.type = GS_PRIM_LINE;
+        fogLine.state.prim.fge = true;
+        fogLine.state.fogR = 50u;
+        fogLine.state.fogG = 100u;
+        fogLine.state.fogB = 200u;
+        for (auto &vertex : fogLine.vertices) {
+            vertex.r = 100u;
+            vertex.g = 150u;
+            vertex.b = 200u;
+            vertex.a = 173u;
+        }
+        fogLine.vertices[0].x = 16.0f;
+        fogLine.vertices[0].y = 48.0f;
+        fogLine.vertices[0].fog = 0u;
+        fogLine.vertices[1].x = 20.0f;
+        fogLine.vertices[1].y = 48.0f;
+        fogLine.vertices[1].fog = 128u;
+        backend.Submit(fogLine);
+
         // Indexed T8 textures must resolve their palette through TEX0/CLUT
         // state instead of treating the palette index as a direct color.
         const std::array<uint32_t, 4> palette = {
@@ -485,6 +567,37 @@ int main() {
                 reversedBothBottomRight[2] == 0u &&
                 reversedBothBottomRight[3] == 255u,
                 "GS sprite with reversed X and Y endpoints did not preserve UV orientation.");
+
+        const auto fullFogPixel = pixelAt(4u, 48u);
+        require(fullFogPixel[0] == 50u && fullFogPixel[1] == 100u &&
+                fullFogPixel[2] == 200u && fullFogPixel[3] == 255u,
+                "GS F=0 fog did not reproduce FOGCOL exactly.");
+        const auto halfFogPixel = pixelAt(5u, 48u);
+        require(halfFogPixel[0] == 75u && halfFogPixel[1] == 125u &&
+                halfFogPixel[2] == 200u,
+                "GS F=128 fog did not blend the source color with FOGCOL.");
+        const auto minimumFogPixel = pixelAt(6u, 48u);
+        require(minimumFogPixel[0] == 99u && minimumFogPixel[1] == 149u &&
+                minimumFogPixel[2] == 200u,
+                "GS F=255 fog did not preserve the 1/256 FOGCOL contribution.");
+        const auto fogDisabledPixel = pixelAt(7u, 48u);
+        require(fogDisabledPixel[0] == 100u && fogDisabledPixel[1] == 150u &&
+                fogDisabledPixel[2] == 200u,
+                "PRIM.FGE=0 changed a pixel despite fog being disabled.");
+        const uint32_t fogAlphaStored = backend.ReadVram(
+            GS_PSM_CT32, 0u, 1u, 4u, 48u);
+        require((fogAlphaStored >> 24u) == 173u,
+                "GS fog modified the source alpha channel.");
+        const auto foggedTexturePixel = pixelAt(8u, 48u);
+        require(foggedTexturePixel[0] == 50u &&
+                foggedTexturePixel[1] == 100u &&
+                foggedTexturePixel[2] == 200u,
+                "GS fog was not applied after the texture color function.");
+        const auto interpolatedFogPixel = pixelAt(18u, 48u);
+        require(interpolatedFogPixel[0] == 62u &&
+                interpolatedFogPixel[1] == 112u &&
+                interpolatedFogPixel[2] == 200u,
+                "GS fog factor was not linearly interpolated along the line.");
         const auto indexedTopLeft = pixelAt(44u, 12u);
         require(indexedTopLeft[0] == 255u && indexedTopLeft[1] == 0u &&
                 indexedTopLeft[2] == 0u && indexedTopLeft[3] == 255u,
