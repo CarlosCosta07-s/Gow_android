@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from build_recompiler_host import validate_ps2_elf
+from inventory_iop_irx import inventory_iop_irx
 from sync_android_aot_captures import (
     DEFAULT_PACKAGE,
     NoDeviceCaptures,
@@ -398,6 +399,28 @@ def extract_iso_elf(
     for required in (".disc_layout", ".disc_meta"):
         if not (destination / required).is_file():
             raise RuntimeError(f"The ISO extraction did not produce {required}.")
+
+    # Raw IRX files are not automatically valid AOT inputs. Inventory them
+    # using the pinned IOP loader's ELF/relocation rules and keep the report
+    # beside the private ISO workspace, never in the public repository.
+    irx_inventory = inventory_iop_irx(destination)
+    inventory_path = work / "iop-irx-inventory.json"
+    inventory_path.write_text(
+        json.dumps(irx_inventory, indent=2, sort_keys=True) + "\\n",
+        encoding="utf-8",
+    )
+    print(
+        "Private ISO IOP IRX inventory: "
+        f"{irx_inventory['irx_files']} files, "
+        f"{irx_inventory['valid_mips_irx']} valid MIPS images, "
+        f"{irx_inventory['fixed_image_candidates']} fixed-address candidates, "
+        f"{irx_inventory['relocation_dependent']} relocation-dependent images."
+    )
+    if irx_inventory["fixed_image_candidates"]:
+        print(
+            "Fixed-address IRX candidates are inventory-only: their module key, "
+            "load conflicts and exact runtime bytes still require validation."
+        )
     return locate_ntsc_u_elf(destination)
 
 
