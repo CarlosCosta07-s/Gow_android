@@ -337,10 +337,13 @@ def main() -> int:
         "import java.io.FileInputStream;",
     ):
         require(required in main_activity, f"Private installed-disc recovery is missing: {required}")
-    private_restore = main_activity[
-        main_activity.find("private void restorePrivateInstallationIfAvailable()"):
-        main_activity.find("private void onDiscSelected(")
-    ]
+    private_restore_start = main_activity.find(
+        "private void restorePrivateInstallationIfAvailable()"
+    )
+    private_restore_end = main_activity.find(
+        "private void validateAndDisplay(", private_restore_start
+    )
+    private_restore = main_activity[private_restore_start:private_restore_end]
     require(
         "new File(getFilesDir(), \"installations\")" in private_restore
         and "getFilesDir()" in private_restore
