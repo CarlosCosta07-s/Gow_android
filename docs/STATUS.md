@@ -8,6 +8,8 @@
 
 **Diagnóstico privado:** o runtime grava `files/gow-runtime.log` com limite de 2 MiB e proteção contra symlink. O arquivo não possui botão de exportação no FORGE e permanece no armazenamento privado. O teste C++ de limite e proteção contra symlink passou na CI Android #411/#412.
 
+**Ação JOGAR (07/11/2026):** depois da instalação nova ou da verificação integral da instalação existente, o botão principal do FORGE passa a **JOGAR** e abre a `GowGameActivity`. A tentativa de boot só inicia o worker EE quando a tabela AOT privada está ligada, o ELF tem a função de entrada registrada e o backend GS Android CPU/VRAM/CRTC e a surface/presenter Vulkan estão prontos. O APK público de CI usa a tabela vazia e deve apresentar o diagnóstico, sem executar o jogo. A primeira tentativa permanece silenciosa até a integração AAudio/Oboe; isso não equivale a boot ou gameplay validados.
+
 ## [DECISÃO ARQUITETURAL] Instalação BT3
 
 - A ISO será fonte de importação; o runtime deverá ler do `cdRoot` local depois que a instalação estiver validada.
