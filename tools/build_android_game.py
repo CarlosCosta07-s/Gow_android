@@ -406,7 +406,7 @@ def extract_iso_elf(
     irx_inventory = inventory_iop_irx(destination)
     inventory_path = work / "iop-irx-inventory.json"
     inventory_path.write_text(
-        json.dumps(irx_inventory, indent=2, sort_keys=True) + "\\n",
+        json.dumps(irx_inventory, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     print(
