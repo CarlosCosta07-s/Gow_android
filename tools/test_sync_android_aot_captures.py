@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import os
 import tempfile
 import tarfile
@@ -12,6 +13,7 @@ from sync_android_aot_captures import (
     NoDeviceCaptures,
     capture_tar_to_zip,
     find_adb_executable,
+    pull_private_installed_file,
 )
 
 
@@ -44,7 +46,6 @@ class AndroidAotAdbCaptureSyncTests(unittest.TestCase):
                     info.size = 0
                     archive.addfile(info)
                 else:
-                    import io
                     archive.addfile(info, io.BytesIO(data))
 
     def test_private_capture_tree_is_converted_into_expected_zip(self) -> None:
@@ -119,6 +120,95 @@ class AndroidAotAdbCaptureSyncTests(unittest.TestCase):
         ])
         with self.assertRaisesRegex(ValueError, "Duplicate private AOT capture"):
             capture_tar_to_zip(self.tar_path, self.zip_path)
+
+    def test_private_installed_boot_file_is_pulled_without_manual_export(self) -> None:
+        payload = b"BOOT2 = cdrom0:\\\\SCUS_973.99;1\\n"
+
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdout = io.BytesIO(payload)
+                self.stderr = io.BytesIO(b"")
+                self.killed = False
+
+            def wait(self) -> int:
+                return 0
+
+            def poll(self) -> int:
+                return 0
+
+            def kill(self) -> None:
+                self.killed = True
+
+        process = FakeProcess()
+        with patch("sync_android_aot_captures._select_device", return_value="device-1"):
+            with patch("sync_android_aot_captures.subprocess.Popen", return_value=process) as popen:
+                result = pull_private_installed_file(
+                    self.root / "private-work",
+                    self.root / "repo",
+                    "SYSTEM.CNF",
+                    adb_executable="/sdk/platform-tools/adb",
+                    device_serial="device-1",
+                    max_bytes=1024,
+                )
+
+        self.assertEqual(result.read_bytes(), payload)
+        command = popen.call_args.args[0]
+        self.assertEqual(command[:4], [
+            "/sdk/platform-tools/adb", "-s", "device-1", "exec-out"
+        ])
+        self.assertIn(
+            "run-as org.gowandroid.app.debug cat "
+            "files/installations/gow_scus_973_99_ntsc_u/disc/SYSTEM.CNF",
+            command[-1],
+        )
+        self.assertFalse(process.killed)
+
+    def test_private_installed_file_rejects_traversal(self) -> None:
+        with patch("sync_android_aot_captures.subprocess.Popen") as popen:
+            with self.assertRaisesRegex(ValueError, "unsafe component"):
+                pull_private_installed_file(
+                    self.root / "private-work",
+                    self.root / "repo",
+                    "../SCUS_973.99",
+                    adb_executable="/sdk/platform-tools/adb",
+                    device_serial="device-1",
+                )
+        popen.assert_not_called()
+
+    def test_private_installed_file_enforces_transfer_limit(self) -> None:
+        payload = b"x" * 32
+
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdout = io.BytesIO(payload)
+                self.stderr = io.BytesIO(b"")
+                self.killed = False
+
+            def wait(self) -> int:
+                return -9 if self.killed else 0
+
+            def poll(self) -> int:
+                return -9 if self.killed else None
+
+            def kill(self) -> None:
+                self.killed = True
+
+        process = FakeProcess()
+        with patch("sync_android_aot_captures._select_device", return_value="device-1"):
+            with patch("sync_android_aot_captures.subprocess.Popen", return_value=process):
+                with self.assertRaisesRegex(ValueError, "transfer limit"):
+                    pull_private_installed_file(
+                        self.root / "private-work",
+                        self.root / "repo",
+                        "SCUS_973.99",
+                        adb_executable="/sdk/platform-tools/adb",
+                        device_serial="device-1",
+                        max_bytes=16,
+                    )
+        self.assertTrue(process.killed)
+        self.assertFalse(
+            (self.root / "private-work/android-private-installation/SCUS_973.99").exists()
+        )
 
     def test_adb_is_found_under_android_sdk_without_path_setup(self) -> None:
         sdk_platform_tools = self.root / "sdk" / "platform-tools"
