@@ -10,6 +10,7 @@ from build_android_native_aot import (
     VU1_MICRO_MEMORY_BYTES,
     fnv1a64,
     normalize_and_validate_iop_dump,
+    parse_game_identity_manifest,
     safe_extract_archive,
     validate_vu1_capture_directory,
 )
@@ -88,6 +89,38 @@ class AndroidNativeAotCaptureTests(unittest.TestCase):
                 self.capture / "iop", self.root / "normalized"
             )
 
+    def test_android_game_identity_manifest_is_validated(self) -> None:
+        path = self.capture / "game_identity.txt"
+        path.write_text(
+            "format=gow-android-game-identity-v1\n"
+            "installation_id=gow_scus_973_99_ntsc_u\n"
+            "boot_path=SCUS_973.99\n"
+            "elf_size=1234\n"
+            "elf_sha256=" + "a" * 64 + "\n",
+            encoding="ascii",
+        )
+        identity = parse_game_identity_manifest(path)
+        self.assertIsNotNone(identity)
+        assert identity is not None
+        self.assertEqual(identity["boot_path"], "SCUS_973.99")
+        self.assertEqual(identity["elf_size"], 1234)
+
+    def test_android_game_identity_rejects_unsafe_boot_path(self) -> None:
+        path = self.capture / "game_identity.txt"
+        path.write_text(
+            "format=gow-android-game-identity-v1\n"
+            "installation_id=gow_scus_973_99_ntsc_u\n"
+            "boot_path=../SCUS_973.99\n"
+            "elf_size=1234\n"
+            "elf_sha256=" + "a" * 64 + "\n",
+            encoding="ascii",
+        )
+        with self.assertRaisesRegex(ValueError, "BOOT2 path"):
+            parse_game_identity_manifest(path)
+
+    def test_missing_android_game_identity_keeps_bootstrap_partial(self) -> None:
+        self.assertIsNone(parse_game_identity_manifest(self.capture / "game_identity.txt"))
+
     def test_zip_capture_archive_extracts_expected_private_layout(self) -> None:
         module = b"\x00\x00\x00\x00"
         (self.capture / "vu1/vu1_001.bin").write_bytes(bytes(VU1_MICRO_MEMORY_BYTES))
@@ -96,6 +129,14 @@ class AndroidNativeAotCaptureTests(unittest.TestCase):
         digest = fnv1a64(module)
         (self.capture / "iop/modules.txt").write_text(
             f"mod_a 1f000 4 {digest:016x}\n", encoding="ascii"
+        )
+        (self.capture / "game_identity.txt").write_text(
+            "format=gow-android-game-identity-v1\n"
+            "installation_id=gow_scus_973_99_ntsc_u\n"
+            "boot_path=SCUS_973.99\n"
+            "elf_size=1234\n"
+            "elf_sha256=" + "b" * 64 + "\n",
+            encoding="ascii",
         )
         archive_path = self.root / "captures.zip"
         with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -116,6 +157,7 @@ class AndroidNativeAotCaptureTests(unittest.TestCase):
             "0010\n0020\n",
         )
         self.assertTrue((iop_dir / "modules.txt").is_file())
+        self.assertTrue((self.root / "extracted/game_identity.txt").is_file())
         self.assertEqual((iop_dir / "mod_a.bin").read_bytes(), module)
 
     def test_zip_path_traversal_is_rejected(self) -> None:
