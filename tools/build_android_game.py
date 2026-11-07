@@ -464,8 +464,8 @@ def main() -> int:
         "--migrate-installed-debug-signature",
         action="store_true",
         help=(
-            "after a successful --installed-android build, back up and verify the private disc, "
-            "then replace an ephemeral-signature Debug APK and restore the installation"
+            "before replacing a different-signature Debug APK, back up and verify the private disc, "
+            "then restore the installation under the new signing key"
         ),
     )
     parser.add_argument(
