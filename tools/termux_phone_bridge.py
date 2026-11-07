@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import http.client
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -50,14 +51,26 @@ def run(command: list[str], *, allow_failure: bool = False) -> subprocess.Comple
     return result
 
 
-def connect_to_self(adb: str, pairing_port: int, pairing_code: str, connection_port: int) -> str:
+def connect_to_phone(
+    adb: str,
+    host_ip: str,
+    pairing_port: int,
+    pairing_code: str,
+    connection_port: int,
+) -> str:
+    try:
+        device_ip = ipaddress.ip_address(host_ip)
+    except ValueError as error:
+        raise ValueError("Use the IP address shown by Android Wireless debugging.") from error
+    if device_ip.version != 4 or device_ip.is_loopback or device_ip.is_unspecified:
+        raise ValueError("Wireless debugging must use the phone's displayed IPv4 address, not localhost.")
     if not 1 <= pairing_port <= 65535 or not 1 <= connection_port <= 65535:
         raise ValueError("ADB ports must be in the range 1–65535.")
     if not pairing_code.isdigit() or len(pairing_code) < 6:
         raise ValueError("Wireless debugging pairing code must contain at least six digits.")
 
     pair = run(
-        [adb, "pair", f"127.0.0.1:{pairing_port}", pairing_code],
+        [adb, "pair", f"{device_ip}:{pairing_port}", pairing_code],
         allow_failure=True,
     )
     if pair.returncode != 0 and "already paired" not in (pair.stdout or "").lower():
@@ -66,7 +79,7 @@ def connect_to_self(adb: str, pairing_port: int, pairing_code: str, connection_p
             "use the pairing port/code (not the connection port), and try again."
         )
     connect = run(
-        [adb, "connect", f"127.0.0.1:{connection_port}"],
+        [adb, "connect", f"{device_ip}:{connection_port}"],
         allow_failure=True,
     )
     if connect.returncode != 0 or not any(
@@ -167,6 +180,11 @@ def main() -> int:
     commands = parser.add_subparsers(dest="command", required=True)
 
     pair = commands.add_parser("connect", help="pair Termux ADB with this phone's Wireless debugging")
+    pair.add_argument(
+        "--host-ip",
+        required=True,
+        help="IPv4 address shown by Android Wireless debugging (do not use 127.0.0.1)",
+    )
     pair.add_argument("--pairing-port", required=True, type=int)
     pair.add_argument("--code", required=True)
     pair.add_argument("--connection-port", required=True, type=int)
@@ -195,7 +213,7 @@ def main() -> int:
 
     adb = adb_executable()
     if args.command == "connect":
-        connect_to_self(adb, args.pairing_port, args.code, args.connection_port)
+        connect_to_phone(adb, args.host_ip, args.pairing_port, args.code, args.connection_port)
         return 0
 
     if args.command == "upload-captures":
