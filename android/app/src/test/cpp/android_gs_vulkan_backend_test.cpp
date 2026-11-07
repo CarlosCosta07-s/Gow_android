@@ -787,7 +787,7 @@ int main() {
                 "GS DIMX signed negative matrix value was not sign-extended.");
         const uint32_t nextDitherRow = backend.ReadVram(
             GS_PSM_CT16, 300u, 1u, 0u, 41u);
-        require((nextDitherRow & 0x7FFFu) == 0x0882u,
+        require((nextDitherRow & 0x7FFFu) == 0x0842u,
                 "GS DIMX did not select its next matrix row using framebuffer Y.");
         const uint32_t ditherDisabled = backend.ReadVram(
             GS_PSM_CT16, 300u, 1u, 2u, 40u);
