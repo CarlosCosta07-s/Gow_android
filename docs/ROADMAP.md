@@ -22,6 +22,18 @@ O ambiente Codespaces e a ponte Termux/ADB são ferramentas temporárias para ma
 - [ ] Provar uma arquitetura de AOT compatível com a experiência final: código previamente preparado e legalmente distribuível ou geração/compilação ARM64 no próprio Android.
 - [ ] Remover qualquer dependência de Codespaces, Termux, ADB, internet ou ferramenta externa do fluxo de release/jogador.
 
+## Integridade das capturas AOT e bloqueio de APK candidato — 07/11/2026
+
+- [x] O runtime Android grava `game_identity.txt` no armazenamento privado após validar o BOOT2 ELF, contendo caminho, instalação, tamanho e SHA-256.
+- [x] A sincronização privada ADB inclui o manifesto de identidade no ZIP de capturas sem pedir exportação manual.
+- [x] O gerador VU1/IOP conserva a identidade no resumo e não marca cobertura como completa sem esse manifesto.
+- [x] O orquestrador `--require-full-native-aot` compara SHA-256/tamanho da ISO/ELF atual com as capturas e verifica todos os fontes C++ gerados.
+- [x] O runtime limpa capturas VU1/IOP anteriores quando a identidade do BOOT2 muda.
+- [x] CI #555 passou pelos testes de identidade/AOT, compilou o shell ARM64 e publicou somente artifact `diagnostic-only-not-playable`.
+- [ ] CI host #161 terminar a compilação do PS2Recomp host sem dados do jogo.
+- [ ] Executar a geração AOT com uma ISO NTSC-U real e recolher capturas do boot.
+- [ ] Atingir primeiro frame real, menu principal e controles; somente então considerar um APK candidato para teste.
+
 ## Fase 0 — Fundação e auditoria
 
 - [x] Criar repositório público.
