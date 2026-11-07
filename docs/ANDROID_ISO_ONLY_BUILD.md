@@ -97,6 +97,12 @@ A recompilação estática atual usa ferramentas nativas de desenvolvimento e é
 
 A geração inicial pode consumir bastante memória e espaço. O número de jobs padrão é conservador. O computador não faz parte do produto e não executa o jogo.
 
+## Identidade do executável e integridade das capturas
+
+Depois que o runtime valida o ELF BOOT2 `SCUS_973.99`, o próprio Android calcula SHA-256 do executável instalado e grava `files/gow-aot-captures/game_identity.txt`. O registro inclui a instalação NTSC-U, o caminho BOOT2, o tamanho e o hash SHA-256 do ELF. O sincronizador privado leva esse arquivo junto ao ZIP de capturas; não é um arquivo que o jogador escolhe ou exporta.
+
+Ao gerar VU1/IOP, `build_android_native_aot.py` valida e inclui essa identidade no `native-aot-summary.json`. O modo `--require-full-native-aot` compara tamanho e SHA-256 com o ELF extraído da ISO daquele build. Se forem diferentes, interrompe antes do Gradle. O runtime também limpa capturas VU1/IOP antigas quando o hash do BOOT2 muda, evitando misturar blocos de revisões diferentes. O gate verifica ainda que todos os fontes C++ listados existem e não estão vazios.
+
 ## Build candidato (somente após as capturas AOT)
 
 A primeira execução de `tools/build_android_game.py --iso ...` pode gerar apenas um APK bootstrap para capturar VU1/IOP; esse APK é **diagnóstico interno, não jogável e não deve ser entregue para teste**. Depois que as capturas privadas forem sincronizadas e a geração AOT for completa, o mantenedor pode usar:
