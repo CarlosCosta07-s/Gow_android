@@ -316,6 +316,49 @@ def main() -> int:
         cwd=recompiler_source,
     )
 
+    # Apply the portable part of KIexter's tested GoW runtime optimization stack.
+    # These patches target the same pinned PS2Recomp/KIexter revisions; PC-only
+    # window, OpenGL, HID, overlays and PGO patches are intentionally excluded.
+    android_runtime_patches = (
+        "patches/ps2recomp-vu1n-leak.patch",
+        "patches/ps2recomp-vif1-unpack-rapido.patch",
+        "patches/ps2recomp-dma-buffers.patch",
+        "patches/ps2recomp-cd-stop.patch",
+        "patches/ps2recomp-iop-delay-fuera.patch",
+        "patches/ps2recomp-mpeg-fin-programa.patch",
+        "patches/ps2recomp-vu1-clip-sinsaltos.patch",
+        "patches/ps2recomp-vu1-madd-saturado.patch",
+    )
+    for relative_patch in android_runtime_patches:
+        upstream_patch = kiexter_source / relative_patch
+        if not upstream_patch.is_file():
+            raise RuntimeError(
+                f"Required pinned KIexster Android runtime patch is missing: {upstream_patch}"
+            )
+        run(
+            ["git", "apply", "--check", "--ignore-whitespace", str(upstream_patch)],
+            cwd=recompiler_source,
+        )
+        run(
+            ["git", "apply", "--ignore-whitespace", str(upstream_patch)],
+            cwd=recompiler_source,
+        )
+        print(f"Applied Android-compatible KIexster patch: {relative_patch}", flush=True)
+
+    # The VIF1 UNPACK fast path uses SSE2 intrinsics. Select sse2neon on ARM64
+    # so the same ahead-of-time VIF path compiles to native NEON instructions.
+    vif1_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_vif1_interpreter.cpp"
+    replace_exactly_once(
+        vif1_cpp,
+        "#include <immintrin.h>\\n",
+        "#if defined(__aarch64__) && defined(__ARM_NEON)\\n"
+        '#include "sse2neon.h"\\n'
+        "#else\\n"
+        "#include <immintrin.h>\\n"
+        "#endif\\n",
+        "select sse2neon for the native ARM64 VIF1 UNPACK fast path",
+    )
+
     # Strict IOP mode: dispatch known AOT IRX functions, but refuse the guest CPU fallback.
     iop_cpp = recompiler_source / "ps2xIOP/src/emulator/iop_emulator.cpp"
     replace_exactly_once(
@@ -1276,9 +1319,9 @@ def main() -> int:
     replace_exactly_once(
         vu_core,
         """    if (m_unit == Unit::VU1 && !m_native)
-        m_native = new NativeState();""",
+        m_native = std::make_shared<NativeState>();""",
         """    if (m_unit == Unit::VU1 && !m_native)
-        m_native = new NativeState();
+        m_native = std::make_shared<NativeState>();
 #if defined(PS2X_VU1_NATIVE_ONLY)
     if (m_unit == Unit::VU1 && m_native)
         m_native->enabled = true;
