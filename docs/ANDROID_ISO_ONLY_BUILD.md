@@ -77,7 +77,7 @@ Antes de remover o app antigo, o fluxo:
 
 O backup verificado permanece em `<work-dir>/android-signature-migrations/`; ele não é enviado ao GitHub nem à CI. A operação transfere aproximadamente o tamanho da instalação (nesta cópia, cerca de 7,94 GB) para o computador e exige espaço livre equivalente no host. A cópia antiga é removida do aparelho somente após a validação do backup. **Mantenha o arquivo de backup até abrir o FORGE e confirmar novamente a integridade do disco.**
 
-Depois da migração, preserve a chave Debug local do Gradle em `%USERPROFILE%\\.android\\debug.keystore` (Windows) ou `$HOME/.android/debug.keystore` (Linux). Ela permite que builds futuras feitas no mesmo computador atualizem o app sem repetir a migração. O FORGE agora recupera `SYSTEM.CNF` e BOOT2 da instalação privada quando a preferência do seletor de ISO não existe, portanto não exige selecionar novamente o arquivo original.
+Depois da migração, preserve a chave Debug local do Gradle em `%USERPROFILE%\\.android\\debug.keystore` (Windows) ou `$HOME/.android/debug.keystore` (Linux). Ela permite que builds futuras feitas no mesmo computador atualizem o app sem repetir a migração. O FORGE agora recupera `SYSTEM.CNF` e BOOT2 da instalação privada quando a preferência do seletor de ISO não existe, portanto não exige selecionar novamente o arquivo original. Para as próximas compilações no mesmo host, use apenas `--installed-android` (sem `--migrate-installed-debug-signature`); a migração é necessária uma única vez, quando a assinatura instalada não corresponde à chave Debug local.
 
 Este procedimento já possui testes sintéticos de backup, SHA-256, caminhos e BOOT2 na CI. A migração ADB completa ainda precisa ser executada num aparelho real antes de ser considerada comprovada.
 
@@ -85,7 +85,7 @@ Este procedimento já possui testes sintéticos de backup, SHA-256, caminhos e B
 
 A primeira build com o ELF real é um bootstrap AOT estrito: ela contém o código EE gerado, mas ainda não presume cobertura VU1/IOP. Instale essa build Debug no Android e execute **FORGE → Verificar runtime**. Os dados carregados são guardados em `files/gow-aot-captures/`, no armazenamento privado do app. O runtime continua sem fallback interpretado e para quando chega a código que ainda não possui implementação nativa.
 
-Quando o aparelho estiver conectado por USB, com Depuração USB autorizada e ADB disponível no computador, execute novamente o mesmo comando `--iso`. O orquestrador procura automaticamente o dispositivo e tenta ler o diretório privado com `run-as`; converte o fluxo diretamente em um ZIP temporário no workspace privado, valida as entradas e gera o C++ AOT de VU1/IOP. O usuário não abre seletor, não cria ZIP e não escolhe arquivos derivados.
+Quando o aparelho estiver conectado por USB, com Depuração USB autorizada e ADB disponível no computador, execute novamente o mesmo comando `--installed-android`. O orquestrador procura automaticamente o dispositivo e tenta ler o diretório privado com `run-as`; converte o fluxo diretamente em um ZIP temporário no workspace privado, valida as entradas e gera o C++ AOT de VU1/IOP. O usuário não abre seletor, não cria ZIP e não escolhe arquivos derivados.
 
 Se não houver aparelho autorizado ou ainda não existirem capturas, o comando não falha: gera a build bootstrap e informa por que a sincronização foi ignorada. Depois de cada nova tentativa no Android, o mesmo comando pode ser repetido para coletar novas capturas privadas.
 
@@ -93,7 +93,7 @@ O pacote Android de Debug precisa continuar instalado e ser depurável para que 
 
 ## Requisitos de build host
 
-A recompilação estática atual usa ferramentas nativas de desenvolvimento e é executada num host Windows x64 ou Linux x86-64: Python 3.11, Git, CMake, Ninja, compilador C++20, Java 17, Android SDK/NDK e `glslangValidator`. O host é apenas ferramenta para gerar/compilar o código nativo; o executável entregue e a execução do jogo continuam sendo Android ARM64.
+A recompilação estática atual usa ferramentas nativas de desenvolvimento e é executada num host Windows x64 ou Linux x86-64: Python 3.11, Git, CMake, Ninja, compilador C++20, Java 17, **Gradle 9.6 disponível no PATH**, Android SDK/NDK e `glslangValidator`. O repositório não contém `gradlew`; o orquestrador executa Gradle 9.6 diretamente com `--project-dir android`, como no CI. O host é apenas ferramenta para gerar/compilar o código nativo; o executável entregue e a execução do jogo continuam sendo Android ARM64.
 
 A geração inicial pode consumir bastante memória e espaço. O número de jobs padrão é conservador. O computador não faz parte do produto e não executa o jogo.
 
