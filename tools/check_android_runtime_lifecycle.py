@@ -83,6 +83,30 @@ def main() -> int:
         "Android GS null backend was not selected conditionally.",
     )
 
+    # XYZF writes the vertex F attribute and also updates the persistent GS
+    # FOG latch, which subsequent XYZ (without F) inherit. Keep all three
+    # decoder paths covered: PACKED XYZF2, PACKED XYZF3, and A+D/REGLIST.
+    require(
+        "        vtx.fog = f;\n"
+        "        m_curFog = f;\n"
+        "        vertexKick(!adk);\n" in gs,
+        "PACKED XYZF2 does not update the persistent GS FOG latch.",
+    )
+    require(
+        "        const uint8_t fog = static_cast<uint8_t>((hi >> 36) & 0xFF);\n"
+        "        vtx.fog = fog;\n"
+        "        m_curFog = fog;\n"
+        "        vertexKick(false);\n" in gs,
+        "PACKED XYZF3 does not update the persistent GS FOG latch.",
+    )
+    require(
+        "        const uint8_t fog = static_cast<uint8_t>((value >> 56) & 0xFF);\n"
+        "        vtx.fog = fog;\n"
+        "        m_curFog = fog;\n"
+        "        vtx.r = m_curR;\n" in gs,
+        "A+D/REGLIST XYZF2/XYZF3 do not update the persistent GS FOG latch.",
+    )
+
     initialize_guard = runtime[end:runtime.find("void PS2Runtime::shutdownHostGraphics()", end)]
     require(
         "PS2X_ANDROID_LIFECYCLE_MANAGED" in initialize_guard
