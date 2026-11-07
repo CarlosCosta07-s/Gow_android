@@ -201,18 +201,17 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
             "${CMAKE_CURRENT_LIST_DIR}/../../../../../port/kiexter")
         set(GOW_ANDROID_GAME_OVERRIDES_SOURCE
             "${GOW_ANDROID_GAME_OVERRIDES_DIR}/gow_overrides.cpp")
-        set(GOW_ANDROID_GS_DISPLAY_HEADER
-            "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/include/runtime/gs/gs_display.h")
+        set(GOW_ANDROID_LOCAL_GS_DISPLAY_HEADER
+            "${GOW_ANDROID_GAME_OVERRIDES_DIR}/gow_android_gs_display.h")
         set(GOW_ANDROID_NEON_COMPAT_HEADER
             "${GOW_WAFFLE_SOURCE_DIR}/ps2xRuntime/include/runtime/ps2_vu1_neon_compat.h")
         if(NOT EXISTS "${GOW_ANDROID_GAME_OVERRIDES_SOURCE}")
             message(FATAL_ERROR
                 "God of War Android override source is missing: ${GOW_ANDROID_GAME_OVERRIDES_SOURCE}")
         endif()
-        if(NOT EXISTS "${GOW_ANDROID_GS_DISPLAY_HEADER}")
+        if(NOT EXISTS "${GOW_ANDROID_LOCAL_GS_DISPLAY_HEADER}")
             message(FATAL_ERROR
-                "Prepared runtime is missing the GS display hooks required by gow_overrides.cpp: "
-                "${GOW_ANDROID_GS_DISPLAY_HEADER}. Re-run --prepare-android-runtime with the pinned KIexster patch set.")
+                "Android GS display helper is missing: ${GOW_ANDROID_LOCAL_GS_DISPLAY_HEADER}")
         endif()
         if(NOT EXISTS "${GOW_ANDROID_NEON_COMPAT_HEADER}")
             message(FATAL_ERROR
