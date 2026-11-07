@@ -5,10 +5,12 @@ import android.graphics.drawable.GradientDrawable;
 import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -37,10 +39,23 @@ public final class GowGameActivity extends GameActivity {
     private static native void nativeSetActivityReference(GowGameActivity activity);
     private static native void nativeClearActivityReference(GowGameActivity activity);
     private static native boolean nativeRequestGsSceneCapture();
+    private static native void nativeSetTouchButtons(int pressedMask);
 
     private TextView nativeStatusView;
     private String pendingNativeStatus;
     private boolean pendingNativeStatusError;
+    private int touchButtonsMask;
+
+    private static final int PAD_LEFT = 0x0080;
+    private static final int PAD_DOWN = 0x0040;
+    private static final int PAD_RIGHT = 0x0020;
+    private static final int PAD_UP = 0x0010;
+    private static final int PAD_START = 0x0008;
+    private static final int PAD_SELECT = 0x0001;
+    private static final int PAD_SQUARE = 0x8000;
+    private static final int PAD_CROSS = 0x4000;
+    private static final int PAD_CIRCLE = 0x2000;
+    private static final int PAD_TRIANGLE = 0x1000;
 
     static {
         System.loadLibrary("android-game");
@@ -160,11 +175,151 @@ public final class GowGameActivity extends GameActivity {
             FrameLayout.LayoutParams captureLayout = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
-                    Gravity.BOTTOM | Gravity.END);
-            captureLayout.setMargins(0, 0, dp(16), dp(20));
+                    Gravity.TOP | Gravity.END);
+            captureLayout.setMargins(0, dp(88), dp(16), 0);
             content.addView(captureButton, captureLayout);
-
         }
+
+        createTouchControls(content);
+    }
+
+    private void createTouchControls(ViewGroup content) {
+        LinearLayout dpad = new LinearLayout(this);
+        dpad.setOrientation(LinearLayout.VERTICAL);
+        dpad.setGravity(Gravity.CENTER);
+        dpad.setAlpha(0.78f);
+        dpad.addView(createTouchRow(
+                createTouchSpacer(), createTouchButton("↑", PAD_UP), createTouchSpacer()));
+        dpad.addView(createTouchRow(
+                createTouchButton("←", PAD_LEFT), createTouchSpacer(),
+                createTouchButton("→", PAD_RIGHT)));
+        dpad.addView(createTouchRow(
+                createTouchSpacer(), createTouchButton("↓", PAD_DOWN), createTouchSpacer()));
+        FrameLayout.LayoutParams dpadLayout = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.START);
+        dpadLayout.setMargins(dp(10), 0, 0, dp(18));
+        content.addView(dpad, dpadLayout);
+
+        LinearLayout face = new LinearLayout(this);
+        face.setOrientation(LinearLayout.VERTICAL);
+        face.setGravity(Gravity.CENTER);
+        face.setAlpha(0.78f);
+        face.addView(createTouchRow(
+                createTouchButton("△", PAD_TRIANGLE),
+                createTouchButton("○", PAD_CIRCLE)));
+        face.addView(createTouchRow(
+                createTouchButton("□", PAD_SQUARE),
+                createTouchButton("×", PAD_CROSS)));
+        FrameLayout.LayoutParams faceLayout = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.END);
+        faceLayout.setMargins(0, 0, dp(10), dp(18));
+        content.addView(face, faceLayout);
+
+        LinearLayout menu = new LinearLayout(this);
+        menu.setOrientation(LinearLayout.HORIZONTAL);
+        menu.setGravity(Gravity.CENTER);
+        menu.setAlpha(0.72f);
+        menu.addView(createMenuTouchButton("SELECT", PAD_SELECT));
+        menu.addView(createMenuTouchButton("START", PAD_START));
+        FrameLayout.LayoutParams menuLayout = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        menuLayout.setMargins(0, 0, 0, dp(18));
+        content.addView(menu, menuLayout);
+    }
+
+    private LinearLayout createTouchRow(View first, View second, View third) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+        row.addView(first, touchCellLayout());
+        row.addView(second, touchCellLayout());
+        row.addView(third, touchCellLayout());
+        return row;
+    }
+
+    private LinearLayout createTouchRow(View first, View second) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+        row.addView(first, touchCellLayout());
+        row.addView(second, touchCellLayout());
+        return row;
+    }
+
+    private LinearLayout.LayoutParams touchCellLayout() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(52), dp(52));
+        params.setMargins(dp(3), dp(3), dp(3), dp(3));
+        return params;
+    }
+
+    private View createTouchSpacer() {
+        return new View(this);
+    }
+
+    private TextView createTouchButton(String label, int mask) {
+        TextView button = new TextView(this);
+        button.setText(label);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(21.0f);
+        button.setGravity(Gravity.CENTER);
+        button.setBackground(createTouchButtonBackground());
+        button.setContentDescription("Botão " + label);
+        button.setOnTouchListener((view, event) -> {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN ||
+                    action == MotionEvent.ACTION_POINTER_DOWN) {
+                touchButtonsMask |= mask;
+                nativeSetTouchButtons(touchButtonsMask);
+                return true;
+            }
+            if (action == MotionEvent.ACTION_UP ||
+                    action == MotionEvent.ACTION_POINTER_UP ||
+                    action == MotionEvent.ACTION_CANCEL) {
+                touchButtonsMask &= ~mask;
+                nativeSetTouchButtons(touchButtonsMask);
+                return true;
+            }
+            return true;
+        });
+        return button;
+    }
+
+    private TextView createMenuTouchButton(String label, int mask) {
+        TextView button = createTouchButton(label, mask);
+        button.setTextSize(10.0f);
+        button.setBackground(createMenuTouchButtonBackground());
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(dp(76), dp(34));
+        params.setMargins(dp(5), 0, dp(5), 0);
+        button.setLayoutParams(params);
+        return button;
+    }
+
+    private GradientDrawable createTouchButtonBackground() {
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.OVAL);
+        background.setColor(0xAA171D26);
+        background.setStroke(dp(1), 0xBFC6D0DC);
+        return background;
+    }
+
+    private GradientDrawable createMenuTouchButtonBackground() {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0xAA171D26);
+        background.setCornerRadius(dp(10));
+        background.setStroke(dp(1), 0xBFC6D0DC);
+        return background;
+    }
+
+    private void clearVirtualPad() {
+        touchButtonsMask = 0;
+        nativeSetTouchButtons(0);
     }
 
     private GradientDrawable createStatusBackground(boolean isError) {
