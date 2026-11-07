@@ -2279,9 +2279,11 @@ extern "C" void android_main(android_app* app) {
     gGuestExecutionStarted = false;
     gGuestExecutionFinishReported = false;
 
-    // Initialize the EE/IOP/VU core without Raylib. The experimental Android GS
-    // primitive adapter is attached only after the GameActivity Vulkan surface is ready.
-    // Guest execution remains blocked until full GS, audio, AOT and boot support exist.
+    // Initialize the EE/IOP/VU core without Raylib. The first-boot worker is a
+    // diagnostic attempt, gated by the user's private ELF/AOT entry point and by
+    // the experimental CPU GS->VRAM->CRTC backend plus a ready Vulkan surface.
+    // This does not imply full GS parity or validated gameplay. Audio output stays
+    // silent until an Android AAudio/Oboe backend is integrated.
     reportRuntimeStatus(
         app, "Preparando o núcleo PS2 (memória, EE, IOP e VU)...", false);
     PS2Runtime *runtime = gowCreatePs2Runtime();
@@ -2317,7 +2319,7 @@ extern "C" void android_main(android_app* app) {
                     app,
                     loadMessage[0] == '\0'
                         ? (elfReady
-                            ? "ELF e função AOT de entrada validados. O jogo ainda não iniciou: GS/Vulkan e áudio Android continuam pendentes."
+                            ? "ELF e função AOT de entrada validados. Aguardando a surface Vulkan e o backend GS Android experimental para a tentativa de primeiro boot; a saída de áudio permanece silenciosa."
                             : "A validação ELF/AOT não passou. Consulte o Logcat GowAndroid.")
                         : loadMessage.data(),
                     !elfReady);
