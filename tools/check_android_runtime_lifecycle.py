@@ -391,6 +391,11 @@ def main() -> int:
     ):
         require(required in main_activity, f"FORGE missing-AOT user guard is missing: {required}")
     require(
+        main_activity.count('"JOGAR",\\n                    (dialog, which) -> onPlayPressed())') == 2
+        and '(dialog, which) -> openRuntimeDiagnostics())' not in main_activity,
+        "A JOGAR dialog is bypassing the private AOT availability guard.",
+    )
+    require(
         "Java_org_gowandroid_app_MainActivity_nativeHasPrivateAotTable" in native_main
         and "gowRuntimeHasPrivateAotTable() ? JNI_TRUE : JNI_FALSE" in native_main,
         "FORGE native AOT availability query is missing.",
