@@ -611,6 +611,8 @@ def main() -> int:
         "track core initialization independently from host graphics",
     )
 
+    runtime_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_runtime.cpp"
+
     # Pause the EE executor cooperatively while Android has no foreground surface.
     # Host deadlines are shifted on resume so VBlank and guest timers do not catch up
     # in a burst after the application returns from the background.
@@ -806,7 +808,6 @@ def main() -> int:
         "forward Android focus pause to the EE scheduler safely",
     )
 
-    runtime_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_runtime.cpp"
     replace_exactly_once(
         runtime_cpp,
         "#include <xmmintrin.h>\n",
