@@ -402,19 +402,35 @@ public:
         frameUploadDirty_ = true;
     }
 
-    void drawFrame() {
+    void drawFrame(uint64_t &waitDurationNs) {
+        waitDurationNs = 0u;
         if (!ready_ || device_ == VK_NULL_HANDLE) return;
-        if (!isSuccess(
-                vkWaitForFences(device_, 1, &frameFence_, VK_TRUE, UINT64_MAX),
-                "vkWaitForFences")) {
+
+        const auto fenceWaitStarted = std::chrono::steady_clock::now();
+        const VkResult fenceWait = vkWaitForFences(
+            device_, 1, &frameFence_, VK_TRUE, UINT64_MAX);
+        const auto fenceWaitFinished = std::chrono::steady_clock::now();
+        const auto fenceWaitNs = std::chrono::duration_cast<
+            std::chrono::nanoseconds>(fenceWaitFinished - fenceWaitStarted).count();
+        if (fenceWaitNs > 0) {
+            waitDurationNs += static_cast<uint64_t>(fenceWaitNs);
+        }
+        if (!isSuccess(fenceWait, "vkWaitForFences")) {
             ready_ = false;
             return;
         }
 
         uint32_t imageIndex = 0u;
+        const auto acquireStarted = std::chrono::steady_clock::now();
         const VkResult acquire = vkAcquireNextImageKHR(
             device_, swapchain_, UINT64_MAX, imageAvailable_,
             VK_NULL_HANDLE, &imageIndex);
+        const auto acquireFinished = std::chrono::steady_clock::now();
+        const auto acquireWaitNs = std::chrono::duration_cast<
+            std::chrono::nanoseconds>(acquireFinished - acquireStarted).count();
+        if (acquireWaitNs > 0) {
+            waitDurationNs += static_cast<uint64_t>(acquireWaitNs);
+        }
         if (acquire == VK_ERROR_OUT_OF_DATE_KHR) {
             recreateSwapchain();
             return;
@@ -2528,7 +2544,8 @@ extern "C" void android_main(android_app* app) {
                     }
                     gRenderer.submitFrame(
                         framePixels, frameWidth, frameHeight);
-                    gRenderer.drawFrame();
+                    uint64_t vulkanWaitDurationNs = 0u;
+                    gRenderer.drawFrame(vulkanWaitDurationNs);
 
                     const auto presentedAt = std::chrono::steady_clock::now();
                     const auto elapsedNs = std::chrono::duration_cast<
@@ -2537,9 +2554,14 @@ extern "C" void android_main(android_app* app) {
                     const uint64_t elapsed = elapsedNs > 0
                         ? static_cast<uint64_t>(elapsedNs)
                         : 0u;
-                    const uint64_t workNs = elapsed > accumulatedLooperWaitNs
-                        ? elapsed - accumulatedLooperWaitNs
-                        : 0u;
+                    const uint64_t nonLooperWorkNs =
+                        elapsed > accumulatedLooperWaitNs
+                            ? elapsed - accumulatedLooperWaitNs
+                            : 0u;
+                    const uint64_t workNs =
+                        nonLooperWorkNs > vulkanWaitDurationNs
+                            ? nonLooperWorkNs - vulkanWaitDurationNs
+                            : 0u;
                     if (gGuestExecutionStarted &&
                         !gAndroidHostPaused.load(std::memory_order_acquire)) {
                         gow::android::reportPerformanceHintFrame(
