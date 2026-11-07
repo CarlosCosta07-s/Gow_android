@@ -352,31 +352,31 @@ def main() -> int:
     gs_frontend = recompiler_source / "ps2xRuntime/src/lib/gs/gs_frontend.cpp"
     replace_exactly_once(
         gs_frontend,
-        "        vtx.fog = f;\\n"
-        "        vertexKick(!adk);\\n",
-        "        vtx.fog = f;\\n"
-        "        m_curFog = f;\\n"
-        "        vertexKick(!adk);\\n",
+        "        vtx.fog = f;\n"
+        "        vertexKick(!adk);\n",
+        "        vtx.fog = f;\n"
+        "        m_curFog = f;\n"
+        "        vertexKick(!adk);\n",
         "latch persistent GS F after PACKED XYZF2",
     )
     replace_exactly_once(
         gs_frontend,
-        "        vtx.fog = static_cast<uint8_t>((hi >> 36) & 0xFF);\\n"
-        "        vertexKick(false);\\n",
-        "        const uint8_t fog = static_cast<uint8_t>((hi >> 36) & 0xFF);\\n"
-        "        vtx.fog = fog;\\n"
-        "        m_curFog = fog;\\n"
-        "        vertexKick(false);\\n",
+        "        vtx.fog = static_cast<uint8_t>((hi >> 36) & 0xFF);\n"
+        "        vertexKick(false);\n",
+        "        const uint8_t fog = static_cast<uint8_t>((hi >> 36) & 0xFF);\n"
+        "        vtx.fog = fog;\n"
+        "        m_curFog = fog;\n"
+        "        vertexKick(false);\n",
         "latch persistent GS F after PACKED XYZF3",
     )
     replace_exactly_once(
         gs_frontend,
-        "        vtx.fog = static_cast<uint8_t>((value >> 56) & 0xFF);\\n"
-        "        vtx.r = m_curR;\\n",
-        "        const uint8_t fog = static_cast<uint8_t>((value >> 56) & 0xFF);\\n"
-        "        vtx.fog = fog;\\n"
-        "        m_curFog = fog;\\n"
-        "        vtx.r = m_curR;\\n",
+        "        vtx.fog = static_cast<uint8_t>((value >> 56) & 0xFF);\n"
+        "        vtx.r = m_curR;\n",
+        "        const uint8_t fog = static_cast<uint8_t>((value >> 56) & 0xFF);\n"
+        "        vtx.fog = fog;\n"
+        "        m_curFog = fog;\n"
+        "        vtx.r = m_curR;\n",
         "latch persistent GS F after A+D/REGLIST XYZF2/XYZF3",
     )
 
@@ -1536,7 +1536,7 @@ def main() -> int:
                 std::FILE *missFile = std::fopen(missLog, "a");
                 if (missFile != nullptr)
                 {
-                    std::fprintf(missFile, "%04x\\n", pc);
+                    std::fprintf(missFile, "%04x\n", pc);
                     std::fclose(missFile);
                 }
             }
