@@ -1,6 +1,6 @@
 # Otimização para celulares modestos
 
-**Estado:** ETAPA POSTERIOR AO PRIMEIRO GAMEPLAY FUNCIONAL. Este documento é uma referência futura; a prioridade atual não é fazer tuning de desempenho.
+**Estado:** otimizações de base já estão sendo integradas antes do primeiro menu; tuning fino e perfis adaptativos continuam posteriores ao primeiro gameplay funcional. Este documento separa as mudanças indispensáveis à arquitetura de runtime/renderização das otimizações que exigem medições térmicas reais.
 
 ## Objetivo
 
@@ -27,6 +27,19 @@ O README do Black lista Android 10+, ARM64, GPU com Vulkan 1.1 e 4 GB de memóri
 Somente depois que Gow_android tiver um caminho funcional demonstrado: boot real, primeira imagem, menu, novo jogo e primeiro combate. Antes disso, faremos apenas o trabalho de desempenho indispensável à correção da arquitetura — recompilação estática/AOT e backend GS/Vulkan — sem iniciar tuning fino, perfis de qualidade, limites de cache ou metas de FPS.
 
 A prioridade atual é fazer o jogo funcionar. Este documento não deve desviar esforço das fases de recompilação, runtime, GS, boot e gameplay.
+
+## Otimizações de base já integradas
+
+As seguintes mudanças foram colocadas no caminho principal antes do primeiro gameplay, pois reduzem trabalho redundante e fazem parte do contrato do presenter/runtime:
+
+- A GameActivity espera por eventos e apresenta um frame Vulkan somente quando o VSync do PS2 avança.
+- Buffers de frame são reutilizados; o runtime não cria um vetor grande novo para cada apresentação.
+- Ao perder foco/superfície, o scheduler EE pausa cooperativamente e desloca os prazos de VBlank/timers na retomada.
+- Os targets nativos EE/runtime, IOP e jogo AOT usam otimização O2 no APK Debug, sem fast-math.
+- O caminho VIF1 SIMD é preparado com sse2neon/NEON em ARM64.
+- O rasterizador GS parcial evita divisões por pixel no cálculo baricêntrico de triângulos, usa coordenadas incrementais em sprites e não repete clipping por pixel nos spans já limitados.
+
+**Validação atual:** são alterações de código e revisões matemáticas/estáticas, não resultados de desempenho medidos no telefone. Não há ainda medições de consumo, FPS, temperatura ou estabilidade térmica. A rasterização GS continua parcialmente em CPU e não substitui um renderer GS/Vulkan completo.
 
 ## 1. Instalação e acesso a dados
 
