@@ -82,6 +82,7 @@ public final class MainActivity extends AppCompatActivity {
             String privateRoot, String installationDirectoryName);
 
     private static native boolean nativeSetCdRootDirectory(String privateCdRoot);
+    private static native boolean nativeHasPrivateAotTable();
     private static native String nativeVerifyDiscIntegrity(
             String privateCdRoot, InstallProgressCallback progressCallback);
     private static native String nativeValidateCdRootElf(String relativePath);
@@ -725,6 +726,22 @@ public final class MainActivity extends AppCompatActivity {
 
     private void onPlayPressed() {
         if (installationReadyForBoot) {
+            if (!nativeHasPrivateAotTable()) {
+                new AlertDialog.Builder(this)
+                        .setTitle("Código nativo do jogo ainda não preparado")
+                        .setMessage(
+                                "A instalação de God of War está preservada e foi verificada. "
+                                        + "Este APK público contém apenas o FORGE e não inclui "
+                                        + "a tabela AOT com o código recompilado do jogo; por isso "
+                                        + "não pode iniciar God of War ainda. A próxima etapa é "
+                                        + "gerar o AOT em um computador usando a instalação privada "
+                                        + "do aparelho via ADB (modo --installed-android). "
+                                        + "A ferramenta lê BOOT2 automaticamente: não é necessário "
+                                        + "exportar ELF, IRX ou outros arquivos manualmente.")
+                        .setPositiveButton("Entendi", null)
+                        .show();
+                return;
+            }
             openRuntimeDiagnostics();
             return;
         }
