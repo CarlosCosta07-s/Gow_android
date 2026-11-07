@@ -582,8 +582,9 @@ def main() -> int:
         "    // Android-only guest worker; presentation stays on the GameActivity thread.\n"
         "    bool startGuestExecutionAndroid();\n"
         "    void stopGuestExecutionAndroid() noexcept;\n"
-        "    [[nodiscard]] bool isGuestExecutionFinishedAndroid() const noexcept;\n",
-        "expose a Raylib-free Android guest execution lifecycle",
+        "    [[nodiscard]] bool isGuestExecutionFinishedAndroid() const noexcept;\n"
+        "    void setAndroidHostPaused(bool paused) noexcept;\n",
+        "expose a Raylib-free Android guest execution lifecycle and focus pause",
     )
     replace_exactly_once(
         runtime_header,
@@ -608,6 +609,201 @@ def main() -> int:
         "    bool m_hostWindowOwned = false;\n"
         "    bool m_coreInitialized = false;\n",
         "track core initialization independently from host graphics",
+    )
+
+    # Pause the EE executor cooperatively while Android has no foreground surface.
+    # Host deadlines are shifted on resume so VBlank and guest timers do not catch up
+    # in a burst after the application returns from the background.
+    scheduler_header = recompiler_source / "ps2xRuntime/include/runtime/ee_scheduler.h"
+    replace_exactly_once(
+        scheduler_header,
+        "    void requestStop();\n",
+        "    void requestStop();\n"
+        "    void setHostPaused(bool paused) noexcept;\n",
+        "expose a thread-safe Android host-pause control on the EE scheduler",
+    )
+    replace_exactly_once(
+        scheduler_header,
+        "    std::atomic<bool> m_stopRequested{false};\n",
+        "    std::atomic<bool> m_stopRequested{false};\n"
+        "    std::atomic<bool> m_hostPaused{false};\n"
+        "    std::chrono::steady_clock::time_point m_hostPauseStarted{};\n",
+        "track cooperative Android background pause and its host-clock origin",
+    )
+
+    scheduler_cpp = recompiler_source / "ps2xRuntime/src/lib/Kernel/EeScheduler.cpp"
+    replace_exactly_once(
+        scheduler_cpp,
+        "    m_stopRequested.store(false, std::memory_order_release);\n"
+        "    m_checkpointPending.store(false, std::memory_order_release);\n",
+        "    m_stopRequested.store(false, std::memory_order_release);\n"
+        "    m_hostPaused.store(false, std::memory_order_release);\n"
+        "    m_hostPauseStarted = {};\n"
+        "    m_checkpointPending.store(false, std::memory_order_release);\n",
+        "reset the cooperative host-pause state for a new guest session",
+    )
+    replace_exactly_once(
+        scheduler_cpp,
+        "    while (!m_stopRequested.load(std::memory_order_acquire))\n"
+        "    {\n"
+        "        processPendingEvents();\n",
+        "    while (!m_stopRequested.load(std::memory_order_acquire))\n"
+        "    {\n"
+        "        if (m_hostPaused.load(std::memory_order_acquire))\n"
+        "        {\n"
+        "            std::unique_lock pauseLock(m_eventMutex);\n"
+        "            m_eventCv.wait(pauseLock, [this]()\n"
+        "                           { return !m_hostPaused.load(std::memory_order_acquire) ||\n"
+        "                                    m_stopRequested.load(std::memory_order_acquire); });\n"
+        "            if (m_stopRequested.load(std::memory_order_acquire))\n"
+        "                break;\n"
+        "        }\n"
+        "        processPendingEvents();\n",
+        "park the EE worker until Android foreground focus is restored",
+    )
+    replace_exactly_once(
+        scheduler_cpp,
+        "    accountCycles(cycles);\n\n"
+        "    if (m_checkpointPending.load(std::memory_order_acquire) ||\n",
+        "    accountCycles(cycles);\n\n"
+        "    if (m_hostPaused.load(std::memory_order_acquire))\n"
+        "    {\n"
+        "        m_checkpointPending.store(true, std::memory_order_release);\n"
+        "        return true;\n"
+        "    }\n\n"
+        "    if (m_checkpointPending.load(std::memory_order_acquire) ||\n",
+        "stop generated EE code at its next cooperative checkpoint after focus loss",
+    )
+    replace_exactly_once(
+        scheduler_cpp,
+        "void EeScheduler::requestStop()\n"
+        "{\n",
+        "void EeScheduler::setHostPaused(bool paused) noexcept\n"
+        "{\n"
+        "    const auto now = std::chrono::steady_clock::now();\n"
+        "    {\n"
+        "        std::lock_guard lock(m_eventMutex);\n"
+        "        const bool wasPaused = m_hostPaused.load(std::memory_order_acquire);\n"
+        "        if (wasPaused == paused)\n"
+        "            return;\n"
+        "        if (paused)\n"
+        "        {\n"
+        "            m_hostPauseStarted = now;\n"
+        "            m_hostPaused.store(true, std::memory_order_release);\n"
+        "        }\n"
+        "        else\n"
+        "        {\n"
+        "            const auto pausedFor = now - m_hostPauseStarted;\n"
+        "            for (ScheduledEvent &scheduled : m_deadlines)\n"
+        "                scheduled.hostDeadline += pausedFor;\n"
+        "            m_hostPauseStarted = {};\n"
+        "            m_hostPaused.store(false, std::memory_order_release);\n"
+        "            updateNextDeadline();\n"
+        "        }\n"
+        "        m_checkpointPending.store(true, std::memory_order_release);\n"
+        "    }\n"
+        "    m_eventCv.notify_all();\n"
+        "}\n\n"
+        "void EeScheduler::requestStop()\n"
+        "{\n",
+        "freeze EE host deadlines during Android backgrounding and resume them without catch-up",
+    )
+    replace_exactly_once(
+        scheduler_cpp,
+        "void EeScheduler::processDueDeadlines()\n"
+        "{\n"
+        "    for (;;)\n",
+        "void EeScheduler::processDueDeadlines()\n"
+        "{\n"
+        "    if (m_hostPaused.load(std::memory_order_acquire))\n"
+        "        return;\n"
+        "    for (;;)\n",
+        "avoid dispatching elapsed guest deadlines while Android is paused",
+    )
+    replace_exactly_once(
+        scheduler_cpp,
+        "            const auto now = std::chrono::steady_clock::now();\n"
+        "            for (const ScheduledEvent &item : m_deadlines)\n",
+        "            if (m_hostPaused.load(std::memory_order_acquire))\n"
+        "            {\n"
+        "                updateNextDeadline();\n"
+        "                return;\n"
+        "            }\n"
+        "            const auto now = std::chrono::steady_clock::now();\n"
+        "            for (const ScheduledEvent &item : m_deadlines)\n",
+        "recheck the Android pause state while holding the scheduler deadline lock",
+    )
+    replace_exactly_once(
+        scheduler_cpp,
+        "                m_eventCv.wait_until(lock, pacingDeadline, [this]()\n"
+        "                                     { return !m_events.empty() ||\n"
+        "                                              m_stopRequested.load(std::memory_order_acquire); });\n"
+        "                if (!m_events.empty() || m_stopRequested.load(std::memory_order_acquire))\n",
+        "                m_eventCv.wait_until(lock, pacingDeadline, [this]()\n"
+        "                                     { return !m_events.empty() ||\n"
+        "                                              m_hostPaused.load(std::memory_order_acquire) ||\n"
+        "                                              m_stopRequested.load(std::memory_order_acquire); });\n"
+        "                if (m_hostPaused.load(std::memory_order_acquire) || !m_events.empty() ||\n"
+        "                    m_stopRequested.load(std::memory_order_acquire))\n",
+        "wake the GS deadline pacer as soon as Android leaves foreground",
+    )
+    replace_exactly_once(
+        scheduler_cpp,
+        "void EeScheduler::waitForEvent()\n"
+        "{\n"
+        "    std::unique_lock lock(m_eventMutex);\n"
+        "    if (!m_events.empty() || m_stopRequested.load(std::memory_order_acquire))\n",
+        "void EeScheduler::waitForEvent()\n"
+        "{\n"
+        "    std::unique_lock lock(m_eventMutex);\n"
+        "    if (m_hostPaused.load(std::memory_order_acquire))\n"
+        "    {\n"
+        "        m_eventCv.wait(lock, [this]()\n"
+        "                       { return !m_hostPaused.load(std::memory_order_acquire) ||\n"
+        "                                m_stopRequested.load(std::memory_order_acquire); });\n"
+        "        return;\n"
+        "    }\n"
+        "    if (!m_events.empty() || m_stopRequested.load(std::memory_order_acquire))\n",
+        "park scheduler waits when Android is backgrounded",
+    )
+    replace_exactly_once(
+        scheduler_cpp,
+        "        m_eventCv.wait(lock, [this]()\n"
+        "                       { return !m_events.empty() || m_stopRequested.load(std::memory_order_acquire); });\n",
+        "        m_eventCv.wait(lock, [this]()\n"
+        "                       { return !m_events.empty() || m_hostPaused.load(std::memory_order_acquire) ||\n"
+        "                                m_stopRequested.load(std::memory_order_acquire); });\n",
+        "interrupt indefinite event waits on Android pause",
+    )
+    replace_exactly_once(
+        scheduler_cpp,
+        "    const bool signaled = m_eventCv.wait_until(lock, hostDeadline, [this]()\n"
+        "                                               { return !m_events.empty() ||\n"
+        "                                                         m_stopRequested.load(std::memory_order_acquire); });\n",
+        "    const bool signaled = m_eventCv.wait_until(lock, hostDeadline, [this]()\n"
+        "                                               { return !m_events.empty() ||\n"
+        "                                                         m_hostPaused.load(std::memory_order_acquire) ||\n"
+        "                                                         m_stopRequested.load(std::memory_order_acquire); });\n",
+        "interrupt timer deadline waits on Android pause",
+    )
+
+    # Expose the scheduler pause through PS2Runtime without exposing its internals to Android UI code.
+    replace_exactly_once(
+        runtime_cpp,
+        "EeScheduler &PS2Runtime::eeScheduler()\n"
+        "{\n"
+        "    return *m_eeScheduler;\n"
+        "}\n\n",
+        "EeScheduler &PS2Runtime::eeScheduler()\n"
+        "{\n"
+        "    return *m_eeScheduler;\n"
+        "}\n\n"
+        "void PS2Runtime::setAndroidHostPaused(bool paused) noexcept\n"
+        "{\n"
+        "    if (m_eeScheduler)\n"
+        "        m_eeScheduler->setHostPaused(paused);\n"
+        "}\n\n",
+        "forward Android focus pause to the EE scheduler safely",
     )
 
     runtime_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_runtime.cpp"
