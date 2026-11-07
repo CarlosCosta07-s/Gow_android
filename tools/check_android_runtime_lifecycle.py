@@ -444,7 +444,7 @@ def main() -> int:
         'capture microcode before strict AOT lookup',
         'GOW_VU1N_MISS_LOG',
         'std::fopen(missLog, "a")',
-        'std::fprintf(missFile, "%04x\\n", pc)',
+        'std::fprintf(missFile, "%04x\\\\n", pc)',
         'PS2X_IOP_NATIVE_SOURCE_DIR',
         'route private generated IRX AOT files into the IOP target',
     ):
