@@ -259,6 +259,60 @@ int main() {
         fogLine.vertices[1].fog = 128u;
         backend.Submit(fogLine);
 
+        // Triangle F is affine in screen space, independent of the flat
+        // shading rule used for the vertex color.
+        GSPrimitiveBatch fogTriangle{};
+        fogTriangle.vertexCount = 3u;
+        fogTriangle.state.context.frame = triangle.state.context.frame;
+        fogTriangle.state.context.scissor = triangle.state.context.scissor;
+        fogTriangle.state.prim.type = GS_PRIM_TRIANGLE;
+        fogTriangle.state.prim.iip = true;
+        fogTriangle.state.prim.fge = true;
+        fogTriangle.state.fogR = 50u;
+        fogTriangle.state.fogG = 100u;
+        fogTriangle.state.fogB = 200u;
+        const std::array<std::array<float, 3>, 3> fogTriangleVertices = {{
+            {{12.0f, 52.0f, 0.0f}},
+            {{20.0f, 52.0f, 128.0f}},
+            {{12.0f, 60.0f, 255.0f}}
+        }};
+        for (size_t i = 0u; i < fogTriangleVertices.size(); ++i) {
+            auto &vertex = fogTriangle.vertices[i];
+            vertex.x = fogTriangleVertices[i][0];
+            vertex.y = fogTriangleVertices[i][1];
+            vertex.fog = static_cast<uint8_t>(fogTriangleVertices[i][2]);
+            vertex.r = 100u;
+            vertex.g = 150u;
+            vertex.b = 200u;
+            vertex.a = 173u;
+        }
+        backend.Submit(fogTriangle);
+
+        // A sprite is flat shaded: its F value comes from the second endpoint,
+        // not the first endpoint's value.
+        GSPrimitiveBatch fogSprite{};
+        fogSprite.vertexCount = 2u;
+        fogSprite.state.context.frame = triangle.state.context.frame;
+        fogSprite.state.context.scissor = triangle.state.context.scissor;
+        fogSprite.state.prim.type = GS_PRIM_SPRITE;
+        fogSprite.state.prim.fge = true;
+        fogSprite.state.fogR = 50u;
+        fogSprite.state.fogG = 100u;
+        fogSprite.state.fogB = 200u;
+        fogSprite.vertices[0].x = 24.0f;
+        fogSprite.vertices[0].y = 52.0f;
+        fogSprite.vertices[0].fog = 255u;
+        fogSprite.vertices[1].x = 28.0f;
+        fogSprite.vertices[1].y = 56.0f;
+        fogSprite.vertices[1].fog = 0u;
+        for (auto &vertex : fogSprite.vertices) {
+            vertex.r = 100u;
+            vertex.g = 150u;
+            vertex.b = 200u;
+            vertex.a = 173u;
+        }
+        backend.Submit(fogSprite);
+
         // Indexed T8 textures must resolve their palette through TEX0/CLUT
         // state instead of treating the palette index as a direct color.
         const std::array<uint32_t, 4> palette = {
@@ -598,6 +652,17 @@ int main() {
                 interpolatedFogPixel[1] == 112u &&
                 interpolatedFogPixel[2] == 200u,
                 "GS fog factor was not linearly interpolated along the line.");
+
+        const auto triangleFogPixel = pixelAt(14u, 54u);
+        require(triangleFogPixel[0] == 73u &&
+                triangleFogPixel[1] == 123u &&
+                triangleFogPixel[2] == 200u,
+                "GS triangle F was not barycentrically interpolated.");
+        const auto spriteFogPixel = pixelAt(25u, 53u);
+        require(spriteFogPixel[0] == 50u &&
+                spriteFogPixel[1] == 100u &&
+                spriteFogPixel[2] == 200u,
+                "GS sprite fog did not use the second endpoint F value.");
         const auto indexedTopLeft = pixelAt(44u, 12u);
         require(indexedTopLeft[0] == 255u && indexedTopLeft[1] == 0u &&
                 indexedTopLeft[2] == 0u && indexedTopLeft[3] == 255u,
