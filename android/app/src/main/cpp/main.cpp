@@ -11,6 +11,7 @@
 #include "ps2_runtime.h"
 #include "android_runtime_log.h"
 #include "android_performance_hint.h"
+#include "android_aot_identity.h"
 
 #include <android/log.h>
 #include <android/native_window.h>
@@ -131,6 +132,7 @@ jobject gActivityReference = nullptr;
 std::mutex gBootPathMutex;
 std::condition_variable gBootPathCondition;
 std::string gBootRelativePath;
+std::string gPrivateCdRootPath;
 bool gBootPathConfigurationReceived = false;
 PS2Runtime *gActiveRuntime = nullptr;
 bool gGsBackendAttached = false;
@@ -2291,6 +2293,7 @@ Java_org_gowandroid_app_GowGameActivity_nativeConfigurePrivateBoot(
     }
     {
         std::lock_guard<std::mutex> lock(gBootPathMutex);
+        gPrivateCdRootPath = rootReady ? rootPath : std::string{};
         gBootRelativePath = rootReady ? std::move(candidate) : std::string{};
         gBootPathConfigurationReceived = true;
     }
@@ -2352,11 +2355,13 @@ extern "C" void android_main(android_app* app) {
                     "PS2Runtime core ready: %s", coreMessage.data());
 
                 std::string bootPath;
+                std::string privateCdRoot;
                 {
                     std::unique_lock<std::mutex> lock(gBootPathMutex);
                     gBootPathCondition.wait(
                         lock, [] { return gBootPathConfigurationReceived; });
                     bootPath = gBootRelativePath;
+                    privateCdRoot = gPrivateCdRootPath;
                 }
                 if (!bootPath.empty()) {
                     std::array<char, 512> loadMessage{};
@@ -2364,6 +2369,30 @@ extern "C" void android_main(android_app* app) {
                         runtime, bootPath.c_str(),
                         loadMessage.data(), loadMessage.size());
                     gPrivateAotElfReady = elfReady;
+                    if (elfReady) {
+                        const std::filesystem::path discRoot(privateCdRoot);
+                        const std::filesystem::path installationsDir =
+                            discRoot.parent_path().parent_path();
+                        const std::filesystem::path appFilesDir =
+                            installationsDir.parent_path();
+                        const std::filesystem::path captureRoot =
+                            appFilesDir / "gow-aot-captures";
+                        std::string identityError;
+                        if (!gow::android::writePrivateAotGameIdentity(
+                                privateCdRoot, bootPath, captureRoot.string(),
+                                &identityError)) {
+                            __android_log_print(
+                                ANDROID_LOG_WARN, kTag,
+                                "Private AOT identity unavailable: %s",
+                                identityError.empty()
+                                    ? "unknown identity error"
+                                    : identityError.c_str());
+                        } else {
+                            logMessage(
+                                ANDROID_LOG_INFO,
+                                "Private AOT captures are now bound to the loaded BOOT2 ELF SHA-256 identity.");
+                        }
+                    }
                     __android_log_print(
                         elfReady ? ANDROID_LOG_INFO : ANDROID_LOG_WARN,
                         kTag, "PS2Runtime ELF/AOT gate: %s",
