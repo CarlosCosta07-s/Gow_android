@@ -158,14 +158,89 @@ bool writePrivateAotGameIdentity(
 
         const fs::path identityPath = captureDirectory / "game_identity.txt";
         const fs::path temporaryPath = captureDirectory / "game_identity.txt.tmp";
-        if (hasSymlinkComponent(identityPath)) {
-            setError(error, "Private AOT game identity path contains a symbolic link.");
+        std::error_code identityStatusError;
+        const fs::file_status identityStatus =
+            fs::symlink_status(identityPath, identityStatusError);
+        if (identityStatusError != std::errc::no_such_file_or_directory &&
+            identityStatusError) {
+            setError(error, "Could not inspect the previous private AOT identity record.");
             return false;
         }
+        if (!identityStatusError && fs::is_symlink(identityStatus)) {
+            setError(error, "Private AOT game identity path is a symbolic link.");
+            return false;
+        }
+        if (!identityStatusError && !fs::is_regular_file(identityStatus)) {
+            setError(error, "Previous private AOT game identity is not a regular file.");
+            return false;
+        }
+
+        // Never merge VU1/IOP captures collected from a different executable.
+        // Older installations without an identity record are also cleared,
+        // because their capture provenance cannot be established.
+        bool sameGameIdentity = false;
+        if (!identityStatusError) {
+            std::ifstream previous(identityPath, std::ios::binary);
+            std::string line;
+            while (std::getline(previous, line)) {
+                constexpr char kShaPrefix[] = "elf_sha256=";
+                if (line.compare(0u, sizeof(kShaPrefix) - 1u, kShaPrefix) == 0) {
+                    sameGameIdentity =
+                        line.substr(sizeof(kShaPrefix) - 1u) == elfSha256;
+                    break;
+                }
+            }
+            if (!previous.eof() && previous.fail()) {
+                setError(error, "Could not read the previous private AOT identity record.");
+                return false;
+            }
+        }
+
+        for (const char *folder : {"vu1", "iop"}) {
+            const fs::path captureSubdirectory = captureDirectory / folder;
+            std::error_code statusError;
+            const fs::file_status status =
+                fs::symlink_status(captureSubdirectory, statusError);
+            if (statusError != std::errc::no_such_file_or_directory && statusError) {
+                setError(error, "Could not inspect an existing private AOT capture directory.");
+                return false;
+            }
+            if (!statusError && fs::is_symlink(status)) {
+                setError(error, "A private AOT capture directory is a symbolic link.");
+                return false;
+            }
+            if (!statusError && !fs::is_directory(status)) {
+                setError(error, "A private AOT capture path is not a directory.");
+                return false;
+            }
+            if (!sameGameIdentity && !statusError) {
+                std::error_code removeError;
+                fs::remove_all(captureSubdirectory, removeError);
+                if (removeError) {
+                    setError(error, "Could not clear AOT captures from a different game identity.");
+                    return false;
+                }
+            }
+            std::error_code createError;
+            fs::create_directories(captureSubdirectory, createError);
+            if (createError) {
+                setError(error, "Could not create private AOT capture subdirectories.");
+                return false;
+            }
+        }
+
         std::error_code tempStatusError;
         const fs::file_status tempStatus = fs::symlink_status(temporaryPath, tempStatusError);
+        if (tempStatusError != std::errc::no_such_file_or_directory && tempStatusError) {
+            setError(error, "Could not inspect the temporary AOT identity path.");
+            return false;
+        }
         if (!tempStatusError && fs::is_symlink(tempStatus)) {
             setError(error, "Temporary AOT game identity path is a symbolic link.");
+            return false;
+        }
+        if (!tempStatusError && fs::is_directory(tempStatus)) {
+            setError(error, "Temporary AOT game identity path is a directory.");
             return false;
         }
 
