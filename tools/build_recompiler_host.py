@@ -362,10 +362,9 @@ def main() -> int:
     )
     replace_exactly_once(
         vif1_cpp,
-        "#if defined(_MSC_VER) || defined(__SSE4_1__)\n"
-        "#if defined(_MSC_VER) || defined(__SSE4_1__) || (defined(__aarch64__) && defined(__ARM_NEON))\n"
+        "#if defined(_MSC_VER) || defined(__SSE4_1__)\n",
+        "#if defined(_MSC_VER) || defined(__SSE4_1__) || (defined(__aarch64__) && defined(__ARM_NEON))\n",
         "enable the VIF1 SIMD UNPACK fast path through NEON on Android ARM64",
-    )
     )
 
     # Strict IOP mode: dispatch known AOT IRX functions, but refuse the guest CPU fallback.
