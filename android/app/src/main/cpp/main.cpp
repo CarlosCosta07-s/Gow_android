@@ -1798,6 +1798,13 @@ Java_org_gowandroid_app_GowGameActivity_nativeSetTouchButtons(
     gowAndroidPadSetTouchButtons(static_cast<uint16_t>(pressedMask));
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_org_gowandroid_app_GowGameActivity_nativeSetTouchAxes(
+    JNIEnv *, jclass, jfloat leftX, jfloat leftY,
+    jfloat rightX, jfloat rightY) noexcept {
+    gowAndroidPadSetTouchAxes(leftX, leftY, rightX, rightY);
+}
+
 extern "C" JNIEXPORT jboolean JNICALL
 Java_org_gowandroid_app_GowGameActivity_nativeConfigurePrivateBoot(
     JNIEnv *env, jclass, jstring privateCdRoot,
