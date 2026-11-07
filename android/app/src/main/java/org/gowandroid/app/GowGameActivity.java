@@ -110,7 +110,22 @@ public final class GowGameActivity extends GameActivity {
     }
 
     @Override
+    protected void onPause() {
+        clearVirtualPad();
+        super.onPause();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus) {
+            clearVirtualPad();
+        }
+    }
+
+    @Override
     protected void onDestroy() {
+        clearVirtualPad();
         nativeClearActivityReference(this);
         super.onDestroy();
     }
