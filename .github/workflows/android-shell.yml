@@ -120,6 +120,17 @@ jobs:
           python -m json.tool .devcontainer/devcontainer.json >/dev/null
           bash -n .devcontainer/setup-codespaces.sh
 
+      - name: Test private game identity for AOT captures
+        shell: bash
+        run: |
+          c++ -std=c++20 -Wall -Wextra -Werror \
+            android/app/src/test/cpp/android_aot_identity_test.cpp \
+            android/app/src/main/cpp/android_aot_identity.cpp \
+            android/app/src/main/cpp/sha256.cpp \
+            -Iandroid/app/src/main/cpp \
+            -o "$RUNNER_TEMP/android-aot-identity-test"
+          "$RUNNER_TEMP/android-aot-identity-test"
+
       - name: Test bounded private Android runtime log
         shell: bash
         run: |
