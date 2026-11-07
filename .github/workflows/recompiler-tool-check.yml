@@ -6,6 +6,8 @@ on:
     paths:
       - "tools/build_recompiler_host.py"
       - "tools/build_android_game.py"
+      - "tools/inventory_iop_irx.py"
+      - "tools/test_inventory_iop_irx.py"
       - "tools/build_android_native_aot.py"
       - "tools/test_android_native_aot.py"
       - "tools/test_android_game_build.py"
@@ -27,6 +29,8 @@ on:
     paths:
       - "tools/build_recompiler_host.py"
       - "tools/build_android_game.py"
+      - "tools/inventory_iop_irx.py"
+      - "tools/test_inventory_iop_irx.py"
       - "tools/test_android_game_build.py"
       - "tools/sync_android_aot_captures.py"
       - "tools/test_sync_android_aot_captures.py"
@@ -66,6 +70,11 @@ jobs:
 
       - name: Check CLI help
         run: python tools/build_recompiler_host.py --help
+
+      - name: Test ISO-extracted IOP IRX inventory
+        run: |
+          python -m py_compile tools/inventory_iop_irx.py tools/test_inventory_iop_irx.py
+          python tools/test_inventory_iop_irx.py
 
       - name: Test private Android AOT build orchestrator
         run: |
