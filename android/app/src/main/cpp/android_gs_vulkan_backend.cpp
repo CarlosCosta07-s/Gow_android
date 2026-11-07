@@ -102,7 +102,7 @@ void AndroidGSVulkanBackend::Submit(const GSPrimitiveBatch &batch) {
 #else
             std::fprintf(
                 stderr,
-                "[GowAndroid][GS] skipped unsupported batch (reason %zu/%zu): %s\\n",
+                "[GowAndroid][GS] skipped unsupported batch (reason %zu/%zu): %s\n",
                 reasonIndex, kMaxLoggedUnsupportedBatchReasons, reason.c_str());
 #endif
         } else if (reasonIndex > kMaxLoggedUnsupportedBatchReasons &&
@@ -116,7 +116,7 @@ void AndroidGSVulkanBackend::Submit(const GSPrimitiveBatch &batch) {
 #else
             std::fprintf(
                 stderr,
-                "[GowAndroid][GS] further distinct unsupported batch reasons suppressed after %zu entries\\n",
+                "[GowAndroid][GS] further distinct unsupported batch reasons suppressed after %zu entries\n",
                 kMaxLoggedUnsupportedBatchReasons);
 #endif
         }
