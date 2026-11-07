@@ -232,9 +232,12 @@ def main() -> int:
         return 0
 
     if args.command == "install-apk":
-        apk = args.apk.expanduser().resolve()
-        if not apk.is_file() or apk.is_symlink():
-            parser.error(f"APK file not found or unsafe: {apk}")
+        apk_candidate = args.apk.expanduser()
+        if apk_candidate.is_symlink():
+            parser.error(f"APK file may not be a symbolic link: {apk_candidate}")
+        apk = apk_candidate.resolve()
+        if not apk.is_file():
+            parser.error(f"APK file not found: {apk}")
         migration = repo / "tools/migrate_android_debug_installation.py"
         command = [
             sys.executable,
