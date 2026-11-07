@@ -1021,24 +1021,30 @@ private:
                 return false;
             }
 
-            try {
-                uploadPixels_.assign(
-                    pendingFramePixels_.begin(),
-                    pendingFramePixels_.begin() +
-                        static_cast<size_t>(sourceBytes));
-            } catch (...) {
-                logMessage(ANDROID_LOG_WARN,
-                    "Could not prepare the native GS frame staging buffer");
-                return false;
-            }
-            if (swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM) {
-                gow::android::convertRgbaToBgraInPlace(uploadPixels_);
-            }
-
             const VkDeviceSize requiredBytes =
-                static_cast<VkDeviceSize>(uploadPixels_.size());
+                static_cast<VkDeviceSize>(sourceBytes);
             if (!ensureUploadBuffer(requiredBytes)) return false;
-            std::memcpy(uploadMapped_, uploadPixels_.data(), uploadPixels_.size());
+
+            // Upload directly from the reusable GS frame vector. RGBA devices
+            // need one memcpy; BGRA devices swap R/B while writing mapped
+            // Vulkan memory, avoiding a full-size temporary vector and an
+            // additional read/write pass over every source pixel.
+            if (swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM) {
+                const uint8_t *source = pendingFramePixels_.data();
+                auto *destination = static_cast<uint8_t *>(uploadMapped_);
+                for (size_t offset = 0u;
+                     offset + 3u < static_cast<size_t>(sourceBytes);
+                     offset += 4u) {
+                    destination[offset + 0u] = source[offset + 2u];
+                    destination[offset + 1u] = source[offset + 1u];
+                    destination[offset + 2u] = source[offset + 0u];
+                    destination[offset + 3u] = source[offset + 3u];
+                }
+            } else {
+                std::memcpy(
+                    uploadMapped_, pendingFramePixels_.data(),
+                    static_cast<size_t>(sourceBytes));
+            }
 
             if ((uploadMemoryFlags_ & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u) {
                 VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
