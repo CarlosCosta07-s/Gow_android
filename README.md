@@ -1,10 +1,10 @@
 # God of War — Android Native Port
 
-> **Compilação somente pelo celular:** consulte [PHONE_ONLY_BUILD.md](docs/PHONE_ONLY_BUILD.md) para usar o GitHub Codespaces no navegador Android e o Termux para a ponte ADB, sem exportar ELF/IRX/capturas manualmente.
+> **Experiência final obrigatória:** o jogador instala somente o APK, seleciona sua ISO original e joga. Codespaces/Termux/ADB são ferramentas opcionais de desenvolvimento, nunca requisitos para jogadores. Requisitos detalhados em [PLAYER_EXPERIENCE.md](docs/PLAYER_EXPERIENCE.md).
 
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
-> Estado em 07/11/2026: Android CI #510 aprovou o ajuste do fluxo JOGAR. O caminho phone-only foi adicionado em `.devcontainer/`, `tools/phone_only_builder.py`, `tools/termux_phone_bridge.py` e [PHONE_ONLY_BUILD.md](docs/PHONE_ONLY_BUILD.md). A CI #513 aprovou os testes do servidor Codespaces/Termux; a #516 aprovou também o JSON do Dev Container, a sintaxe do setup Codespaces, o build Android ARM64 e a publicação do APK shell. Isso valida a infraestrutura e testes sintéticos, mas **a primeira compilação remota com a ISO do usuário, a conexão ADB pelo Wi-Fi do próprio aparelho e o boot/menu real continuam pendentes**. A única entrada manual do jogo continua sendo a ISO NTSC-U original; ELF, IRX, capturas e C++ recompilado permanecem em workspace privado.
+> Estado em 07/11/2026: o contrato de produto está definido em [PLAYER_EXPERIENCE.md](docs/PLAYER_EXPERIENCE.md): o jogador final deve precisar apenas do APK ARM64 e da ISO original. O fluxo Codespaces/Termux permanece opcional e exclusivo de mantenedores; não é a arquitetura de distribuição. A implementação atual ainda depende de PS2Recomp e compilação C++ no host, portanto o requisito de preparação AOT automática no próprio produto **não está implementado**. O próximo marco arquitetural é provar a rota AOT pré-compilada legalmente distribuível ou um compilador/backend ARM64 executável no próprio Android, mantendo a execução nativa sem interpretador/JIT do EE. Nenhum boot/menu/gameplay real foi comprovado.
 
 [![Android shell](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/android-shell.yml) [![Host recompiler](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml/badge.svg)](https://github.com/CarlosCosta07-s/Gow_android/actions/workflows/recompiler-tool-check.yml)
 
