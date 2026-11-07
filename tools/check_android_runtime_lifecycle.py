@@ -379,6 +379,23 @@ def main() -> int:
     ):
         require(required in main_activity, f"FORGE diagnostic launch is missing: {required}")
 
+    # Do not enter GameActivity from the public shell APK when no private
+    # recompilation table is linked; explain the missing AOT while preserving
+    # the already-verified disc installation.
+    for required in (
+        "private static native boolean nativeHasPrivateAotTable();",
+        "if (!nativeHasPrivateAotTable())",
+        "Código nativo do jogo ainda não preparado",
+        "código recompilado do jogo",
+        "modo --installed-android",
+    ):
+        require(required in main_activity, f"FORGE missing-AOT user guard is missing: {required}")
+    require(
+        "Java_org_gowandroid_app_MainActivity_nativeHasPrivateAotTable" in native_main
+        and "gowRuntimeHasPrivateAotTable() ? JNI_TRUE : JNI_FALSE" in native_main,
+        "FORGE native AOT availability query is missing.",
+    )
+
     # Once installation checks pass, the primary action must become a real
     # first-boot attempt instead of looping through the same verification flow.
     for required in (
