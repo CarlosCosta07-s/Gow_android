@@ -37,7 +37,10 @@ def is_within(path: Path, parent: Path) -> bool:
 
 def validate_private_work_directory(repo_root: Path, work_dir: Path) -> Path:
     root = repo_root.expanduser().resolve()
-    work = work_dir.expanduser().resolve()
+    candidate = work_dir.expanduser()
+    if candidate.is_symlink():
+        raise ValueError("Phone builder workspace may not be a symbolic link.")
+    work = candidate.resolve()
     if work == root or is_within(work, root):
         raise ValueError("Phone builder workspace must remain outside the Git repository.")
     if is_within(root, work):
@@ -213,13 +216,9 @@ class BuilderState:
                 "returncode": returncode,
                 "started_at": self.build_started_at,
                 "iso_uploaded": self.iso_path.is_file(),
-                "iso_sha256": self.last_iso_sha256 or (
-                    sha256_file(self.iso_path) if self.iso_path.is_file() else None
-                ),
+                "iso_sha256": self.last_iso_sha256,
                 "captures_uploaded": self.captures_path.is_file(),
-                "captures_sha256": self.last_capture_sha256 or (
-                    sha256_file(self.captures_path) if self.captures_path.is_file() else None
-                ),
+                "captures_sha256": self.last_capture_sha256,
                 "apk_bytes": apk_size,
                 "log_tail": log_tail,
                 "error": self.last_error,
@@ -231,10 +230,13 @@ class BuilderState:
                 raise RuntimeError("The build has not completed.")
             if self.process.returncode != 0:
                 raise RuntimeError("The latest build failed; inspect the private build log.")
-            apk = (self.repo_root / APK_RELATIVE_PATH).resolve()
-            if is_within(apk, self.repo_root / "android/app/build") is False:
+            candidate = self.repo_root / APK_RELATIVE_PATH
+            if candidate.is_symlink():
+                raise RuntimeError("Refusing to download an APK symlink.")
+            apk = candidate.resolve()
+            if not is_within(apk, self.repo_root / "android/app/build"):
                 raise RuntimeError("APK path escaped the ignored build directory.")
-            if not apk.is_file() or apk.is_symlink() or apk.stat().st_size <= 0:
+            if not apk.is_file() or apk.stat().st_size <= 0:
                 raise RuntimeError("Gradle completed without a valid Debug APK.")
             return apk
 
