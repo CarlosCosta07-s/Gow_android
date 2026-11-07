@@ -1537,7 +1537,7 @@ def main() -> int:
                 std::FILE *missFile = std::fopen(missLog, "a");
                 if (missFile != nullptr)
                 {
-                    std::fprintf(missFile, "%04x\n", pc);
+                    std::fprintf(missFile, "%04x\\n", pc);
                     std::fclose(missFile);
                 }
             }
