@@ -38,6 +38,7 @@ As seguintes mudanças foram colocadas no caminho principal antes do primeiro ga
 - Os targets nativos EE/runtime, IOP e jogo AOT usam otimização O2 no APK Debug, sem fast-math.
 - O caminho VIF1 SIMD é preparado com sse2neon/NEON em ARM64.
 - O rasterizador GS parcial evita divisões por pixel no cálculo baricêntrico de triângulos, usa coordenadas incrementais em sprites e não repete clipping por pixel nos spans já limitados.
+- Quando o formato da swapchain oferece BLIT_SRC/BLIT_DST, a escala do frame é feita por blit Vulkan a partir de uma imagem intermediária do tamanho nativo do GS; nos outros casos, o escalonador CPU permanece como fallback. O upload evita um vetor temporário e faz a conversão RGBA/BGRA diretamente na memória Vulkan mapeada. Quando o frame já tem o mesmo tamanho da tela, o fallback também evita o passo de redimensionamento.
 
 **Validação atual:** são alterações de código e revisões matemáticas/estáticas, não resultados de desempenho medidos no telefone. Não há ainda medições de consumo, FPS, temperatura ou estabilidade térmica. A rasterização GS continua parcialmente em CPU e não substitui um renderer GS/Vulkan completo.
 
