@@ -371,7 +371,7 @@ public:
     }
 
     void submitFrame(
-        std::vector<uint8_t> rgbaPixels,
+        std::vector<uint8_t> &rgbaPixels,
         uint32_t width,
         uint32_t height) {
         if (width == 0u || height == 0u) {
@@ -385,7 +385,10 @@ public:
                 "Rejected invalid or oversized GS presentation frame");
             return;
         }
-        pendingFramePixels_ = std::move(rgbaPixels);
+        // Swap with the caller's reusable frame buffer. The caller receives
+        // the previous upload allocation, so copyLatchedHostPresentationFrame()
+        // can resize it without allocating again after the first two frames.
+        pendingFramePixels_.swap(rgbaPixels);
         pendingFrameWidth_ = width;
         pendingFrameHeight_ = height;
         hasPendingFrame_ = true;
@@ -1942,6 +1945,9 @@ extern "C" void android_main(android_app* app) {
     // independently, but the Android host must not copy the same framebuffer
     // or submit empty swapchain frames while waiting for the next game frame.
     uint64_t lastVulkanPresentedVsyncTick = UINT64_MAX;
+    // Reuse a pair of full-frame vectors instead of allocating/freeing one on
+    // every VBlank. submitFrame() swaps ownership with the renderer.
+    std::vector<uint8_t> framePixels;
     while (app->destroyRequested == 0) {
         int events = 0;
         android_poll_source* source = nullptr;
@@ -1984,7 +1990,6 @@ extern "C" void android_main(android_app* app) {
                 runtime->memory().gs().vsyncTick.load(std::memory_order_acquire);
             if (currentVsyncTick != lastVulkanPresentedVsyncTick) {
                 lastVulkanPresentedVsyncTick = currentVsyncTick;
-                std::vector<uint8_t> framePixels;
                 uint32_t frameWidth = 0u;
                 uint32_t frameHeight = 0u;
                 if (runtime->gs().copyLatchedHostPresentationFrame(
@@ -2046,7 +2051,7 @@ extern "C" void android_main(android_app* app) {
                         }
                     }
                     gRenderer.submitFrame(
-                        std::move(framePixels), frameWidth, frameHeight);
+                        framePixels, frameWidth, frameHeight);
                     gRenderer.drawFrame();
                 }
             }
