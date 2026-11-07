@@ -287,7 +287,7 @@ O painel informa explicitamente que o jogo ainda não iniciou quando o núcleo h
 **Limitações:** apenas primitivos opacos sem textura em CT32/CT24/CT16; `Present()` escolhe um circuito e não compõe DISPLAY1+DISPLAY2/PMODE. Textura/CLUT, depth, alpha test/DATE, blending, fog, dithering e formatos não suportados são bloqueadores. `PS2Runtime::run()` continua bloqueado, e esta fixture não contém o jogo.
 ## Rasterizador GS, composição PMODE e preparação da comparação visual — 06/11/2026
 
-**[IMPLEMENTADO; TESTES HOST APROVADOS; APK ARM64 EM VALIDAÇÃO NA ÚLTIMA CONSULTA]**
+**[IMPLEMENTADO; TESTES HOST ANTERIORES APROVADOS; NOVAS REGRESSÕES FGE PENDENTES; APK ARM64 EM VALIDAÇÃO NA ÚLTIMA CONSULTA]**
 
 A rota Android de correção gráfica usa `AndroidGSVulkanBackend` para manter a VRAM real de 4 MiB por meio de `GSTextureStore`, rasterizar por CPU os fragmentos suportados e entregar o `PresentationFrame` ao presenter Vulkan da GameActivity. Isso é um backend de referência funcional para testes de semântica GS; ainda não é um rasterizador GS inteiramente executado em shaders Vulkan.
 
