@@ -46,6 +46,7 @@ find_program(GOW_GLSLANG_VALIDATOR NAMES glslangValidator
 
 find_library(ANDROID_LOG_LIBRARY log REQUIRED)
 find_library(ANDROID_LIBRARY android REQUIRED)
+find_library(DL_LIBRARY dl REQUIRED)
 find_library(VULKAN_LIBRARY vulkan REQUIRED)
 
 set(GOW_GS_SHADER_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -70,6 +71,7 @@ add_custom_target(gow_android_gs_shaders DEPENDS "${GOW_GS_SHADER_HEADER}")
 add_library(android-game SHARED
     main.cpp
     android_runtime_log.cpp
+    android_performance_hint.cpp
     android_pad_bridge.cpp
     iso9660_reader.cpp
     iso9660_installer.cpp
@@ -301,5 +303,6 @@ target_link_libraries(android-game PRIVATE
     game-activity::game-activity_static
     ${ANDROID_LOG_LIBRARY}
     ${ANDROID_LIBRARY}
+    ${DL_LIBRARY}
     ${VULKAN_LIBRARY}
 )
