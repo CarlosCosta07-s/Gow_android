@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import shlex
@@ -425,6 +426,59 @@ def install_and_launch_android_app(
     )
 
 
+def require_full_native_aot_summary(summary_path: Path) -> dict[str, object]:
+    """Fail closed unless private VU1 and IOP native AOT output is complete."""
+    if not summary_path.is_file() or summary_path.is_symlink():
+        raise RuntimeError(
+            "A complete native AOT summary is required before building a test candidate."
+        )
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError("The private native AOT summary is unreadable.") from error
+
+    if not isinstance(summary, dict) or summary.get("format") != "gow-native-aot-build-v1":
+        raise RuntimeError("The private native AOT summary has an unsupported format.")
+    sources = summary.get("sources")
+    if not isinstance(sources, dict):
+        raise RuntimeError("The private native AOT summary has no source inventory.")
+    vu1_sources = sources.get("vu1")
+    iop_sources = sources.get("iop")
+    if not isinstance(vu1_sources, list) or not isinstance(iop_sources, list):
+        raise RuntimeError("The private native AOT source inventory is incomplete.")
+
+    numeric_fields = (
+        "vu1_micro_memories",
+        "vu1_native_translation_units",
+        "iop_modules",
+        "iop_native_translation_units",
+        "vu1_unsupported_blocks",
+        "vu1_interpreter_callouts",
+    )
+    for field in numeric_fields:
+        if not isinstance(summary.get(field), int) or summary[field] < 0:
+            raise RuntimeError(f"The private native AOT summary has an invalid {field} value.")
+
+    complete = (
+        summary.get("full_native_aot") is True
+        and summary["vu1_micro_memories"] > 0
+        and summary["vu1_native_translation_units"] == 6
+        and len(vu1_sources) == 6
+        and summary["iop_modules"] > 0
+        and summary["iop_native_translation_units"] == summary["iop_modules"]
+        and len(iop_sources) == summary["iop_modules"] + 1
+        and summary["vu1_unsupported_blocks"] == 0
+        and summary["vu1_interpreter_callouts"] == 0
+    )
+    if not complete:
+        raise RuntimeError(
+            "Refusing to build a test APK: native AOT coverage is incomplete. "
+            "Require six VU1 translation units, all captured IOP modules plus registry, "
+            "zero unsupported VU1 blocks, and zero interpreter callouts."
+        )
+    return summary
+
+
 def main() -> int:
     default_work = Path("C:/gowport") if os.name == "nt" else Path("/tmp/gowport")
     parser = argparse.ArgumentParser(
@@ -486,6 +540,14 @@ def main() -> int:
         "--generate-only",
         action="store_true",
         help="generate and stage private C++ but do not invoke Gradle",
+    )
+    parser.add_argument(
+        "--require-full-native-aot",
+        action="store_true",
+        help=(
+            "refuse to compile an APK unless the private VU1/IOP AOT summary is complete; "
+            "this is necessary but not sufficient to certify a playable build"
+        ),
     )
     parser.add_argument(
         "--plan-only",
@@ -656,6 +718,12 @@ def main() -> int:
         print("Plan validated. No private files were read and no build was started.")
         return 0
 
+    if args.require_full_native_aot and captures_zip is None:
+        raise RuntimeError(
+            "No private VU1/IOP capture archive is available. Refusing to create a "
+            "bootstrap APK as a test candidate; a first-boot capture build is diagnostic only."
+        )
+
     assert elf_path is not None
     plan = create_build_plan(
         root, elf_path, work, gradle_executable=gradle_executable
@@ -711,10 +779,17 @@ def main() -> int:
         summary_path = build_root / "native-aot-summary.json"
         if not summary_path.is_file():
             raise RuntimeError("The private VU1/IOP AOT generator did not write its summary.")
-        import json
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary = (
+            require_full_native_aot_summary(summary_path)
+            if args.require_full_native_aot
+            else json.loads(summary_path.read_text(encoding="utf-8"))
+        )
         native_aot_complete = summary.get("full_native_aot") is True
         if not native_aot_complete:
+            if args.require_full_native_aot:
+                raise RuntimeError(
+                    "Refusing to compile a test APK: the native AOT generator reported partial VU1/IOP coverage."
+                )
             print(
                 "Private VU1/IOP captures are partial: all currently available native blocks/modules "
                 "will be linked; the runtime remains in strict capture mode for missing native code."
