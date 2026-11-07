@@ -111,6 +111,7 @@ public final class MainActivity extends AppCompatActivity {
 
     private Uri selectedDiscUri;
     private boolean selectedDiscValid;
+    private boolean installationReadyForBoot;
     private String selectedDiscSerial;
     private String selectedDiscBootPath;
     private boolean installingDisc;
@@ -720,6 +721,11 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void onPlayPressed() {
+        if (installationReadyForBoot) {
+            openRuntimeDiagnostics();
+            return;
+        }
+
         if (selectedDiscUri == null
                 && selectedDiscValid
                 && selectedDiscSerial != null
@@ -803,6 +809,7 @@ public final class MainActivity extends AppCompatActivity {
             File finalInstallation, String bootPath) {
         if (installingDisc) return;
 
+        installationReadyForBoot = false;
         installingDisc = true;
         cancelDiscInstallRequested = false;
         showDiscInstallProgressDialog(
@@ -916,11 +923,15 @@ public final class MainActivity extends AppCompatActivity {
         discInstallProgressBar = null;
         discInstallProgressText = null;
         installingDisc = false;
+        installationReadyForBoot = installationValid && !cancelled;
         if (installDiscButton != null) {
             installDiscButton.setEnabled(true);
             installDiscButton.setAlpha(1f);
-            installDiscButton.setText("DISCO INSTALADO");
-            installDiscButton.setContentDescription("Verificar instalação existente");
+            installDiscButton.setText(installationReadyForBoot ? "JOGAR" : "VERIFICAR DISCO");
+            installDiscButton.setContentDescription(
+                    installationReadyForBoot
+                            ? "Tentar o primeiro boot nativo de God of War"
+                            : "Verificar a instalação privada existente de God of War");
         }
 
         if (cancelled) {
@@ -945,7 +956,7 @@ public final class MainActivity extends AppCompatActivity {
                         + "\nDiscSource: " + discValidation
                         + "\nCDVD/IOP: " + iopCdvdValidation;
         String runtimeStatus = installationValid
-                ? "DiscSource e o dispatcher CDVD do IOP passaram na verificação privada; o runtime de gameplay ainda não foi iniciado."
+                ? "DiscSource e o dispatcher CDVD do IOP passaram na verificação privada. Toque em JOGAR para abrir a tentativa de boot nativo. A execução depende de este APK conter a tabela AOT privada gerada a partir da ISO; sem ela, o painel exibirá o diagnóstico. A primeira tentativa é silenciosa, pois o áudio Android ainda não está integrado."
                 : "A instalação não será utilizada enquanto a validação falhar. Você pode solicitar uma reinstalação dos arquivos desta revisão.";
         AlertDialog.Builder resultDialog = new AlertDialog.Builder(this)
                 .setTitle(installationValid
@@ -954,9 +965,9 @@ public final class MainActivity extends AppCompatActivity {
                 .setMessage("A pasta de instalação já existe no armazenamento privado. "
                         + detail + "\n\n" + runtimeStatus);
         if (installationValid) {
-            discStatus.setText("Integridade e fontes de disco verificadas. O runtime ainda não foi iniciado.");
+            discStatus.setText("Instalação verificada. Toque em JOGAR para tentar o primeiro boot nativo.");
             resultDialog.setPositiveButton(
-                    "Verificar runtime",
+                    "JOGAR",
                     (dialog, which) -> openRuntimeDiagnostics());
         } else {
             discStatus.setText("A instalação precisa ser reparada antes de qualquer execução.");
@@ -984,6 +995,7 @@ public final class MainActivity extends AppCompatActivity {
             return;
         }
 
+        installationReadyForBoot = false;
         final Uri sourceUri = selectedDiscUri;
         final String expectedSerial = selectedDiscSerial;
         final String bootPath = selectedDiscBootPath;
@@ -1268,12 +1280,15 @@ public final class MainActivity extends AppCompatActivity {
         discInstallProgressBar = null;
         discInstallProgressText = null;
         installingDisc = false;
+        installationReadyForBoot = success;
         if (installDiscButton != null) {
             installDiscButton.setEnabled(true);
             installDiscButton.setAlpha(1f);
-            installDiscButton.setText(success ? "DISCO INSTALADO" : "TENTAR NOVAMENTE");
+            installDiscButton.setText(success ? "JOGAR" : "TENTAR NOVAMENTE");
             installDiscButton.setContentDescription(
-                    success ? "Verificar instalação existente" : "Tentar a instalação novamente");
+                    success
+                            ? "Tentar o primeiro boot nativo de God of War"
+                            : "Tentar a instalação novamente");
         }
 
         if (success) {
@@ -1288,9 +1303,13 @@ public final class MainActivity extends AppCompatActivity {
                                     + "privado do aplicativo. Os metadados .disc_layout e "
                                     + ".disc_meta foram gerados e publicados junto com os dados. "
                                     + preparedDiscSummary + ". A instalação foi preparada e a "
-                                    + "fonte de disco foi validada; o jogo ainda não foi iniciado.")
+                                    + "fonte de disco foi validada. Toque em JOGAR para abrir a "
+                                    + "tentativa de boot nativo. Ela só poderá executar se este "
+                                    + "APK incluir a tabela AOT privada gerada a partir da ISO; "
+                                    + "caso contrário, o painel mostrará o diagnóstico. A primeira "
+                                    + "tentativa é silenciosa, pois o áudio Android ainda não está integrado.")
                     .setPositiveButton(
-                            "Verificar runtime",
+                            "JOGAR",
                             (dialog, which) -> openRuntimeDiagnostics())
                     .show();
         } else {
@@ -1382,6 +1401,7 @@ public final class MainActivity extends AppCompatActivity {
 
         selectedDiscUri = uri;
         selectedDiscValid = false;
+        installationReadyForBoot = false;
         selectedDiscBootPath = null;
         try {
             getContentResolver().takePersistableUriPermission(
@@ -1443,6 +1463,7 @@ public final class MainActivity extends AppCompatActivity {
             }
             selectedDiscUri = null;
             selectedDiscValid = true;
+            installationReadyForBoot = false;
             selectedDiscSerial = "SCUS_973.99 (NTSC-U)";
             selectedDiscBootPath = bootPath;
             discName.setText("God of War (instalação privada)");
@@ -1471,6 +1492,7 @@ public final class MainActivity extends AppCompatActivity {
         discName.setText("Verificando imagem...");
         discStatus.setText("Lendo ISO9660 e identificando SYSTEM.CNF.");
         discStatus.setTextColor(COLOR_MUTED);
+        installationReadyForBoot = false;
         selectedDiscValid = false;
         selectedDiscSerial = null;
         selectedDiscBootPath = null;
