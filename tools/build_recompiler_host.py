@@ -788,6 +788,7 @@ def main() -> int:
         scheduler_cpp,
         "void EeScheduler::waitForEvent()\n"
         "{\n"
+        "    ps2_perf::Scope perf(ps2_perf::Bucket::GuestWait);\n"
         "    std::unique_lock lock(m_eventMutex);\n"
         "    if (!m_events.empty() || m_stopRequested.load(std::memory_order_acquire))\n",
         "void EeScheduler::waitForEvent()\n"
