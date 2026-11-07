@@ -24,6 +24,21 @@ endif()
 
 find_package(game-activity REQUIRED CONFIG)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+# Pin the SSE-to-NEON intrinsic translation layer used by the PS2 runtime.
+# Populate only the header repository; it does not need to be built as a target.
+include(FetchContent)
+FetchContent_Declare(
+    sse2neon
+    GIT_REPOSITORY https://github.com/DLTcollab/sse2neon.git
+    GIT_TAG v1.9.1
+    GIT_SHALLOW TRUE
+)
+FetchContent_GetProperties(sse2neon)
+if(NOT sse2neon_POPULATED)
+    FetchContent_Populate(sse2neon)
+endif()
+
 find_program(GOW_GLSLANG_VALIDATOR NAMES glslangValidator
     HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin"
     REQUIRED)
@@ -123,7 +138,7 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
     # Compile the PS2 core itself against sse2neon on Android ARM64.
     target_compile_definitions(ps2_runtime PRIVATE USE_SSE2NEON)
     target_include_directories(ps2_runtime PRIVATE
-        "${CMAKE_BINARY_DIR}/_deps/sse2neon-src")
+        "${sse2neon_SOURCE_DIR}")
 
     # Private VU1 blocks are generated from the user's captured 16 KiB micro-memory
     # images. They are compiled into the Android runtime; no interpreter fallback
