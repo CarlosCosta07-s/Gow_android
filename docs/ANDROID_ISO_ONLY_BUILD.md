@@ -97,6 +97,18 @@ A recompilação estática atual usa ferramentas nativas de desenvolvimento e é
 
 A geração inicial pode consumir bastante memória e espaço. O número de jobs padrão é conservador. O computador não faz parte do produto e não executa o jogo.
 
+## Build candidato (somente após as capturas AOT)
+
+A primeira execução de `tools/build_android_game.py --iso ...` pode gerar apenas um APK bootstrap para capturar VU1/IOP; esse APK é **diagnóstico interno, não jogável e não deve ser entregue para teste**. Depois que as capturas privadas forem sincronizadas e a geração AOT for completa, o mantenedor pode usar:
+
+```bash
+python tools/build_android_game.py --iso "/caminho/privado/God of War.iso" --work-dir "/workspace/privado/gowport" --require-full-native-aot
+```
+
+O parâmetro `--require-full-native-aot` falha antes de compilar o APK quando não existe arquivo privado de capturas ou quando o relatório não comprova seis partes VU1, todos os módulos IOP mais o registro, zero blocos VU1 sem suporte e zero callouts ao interpretador. O modo padrão continua permitindo builds bootstrap/iterativas para desenvolvimento, mas esses resultados não são candidatos de teste.
+
+Mesmo um APK produzido com essa opção **não está automaticamente aprovado para download**. Ainda precisa passar pela execução da ISO real, primeiro frame, menu, controles, reinicializações e validação da assinatura descritos em [TEST_RELEASE_GATE.md](TEST_RELEASE_GATE.md).
+
 ## Limites honestos
 
 - O sucesso do build ou a geração de C++ AOT não provam que o jogo iniciou.
