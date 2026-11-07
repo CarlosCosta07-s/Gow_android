@@ -111,7 +111,9 @@ def validate_private_installation_backup(
         for member in archive:
             path = _safe_member_path(member.name)
             parts = path.parts
-            if parts[0] == "installations":
+            if parts == ("installations",):
+                allowed = member.isdir()
+            elif parts[0] == "installations":
                 if len(parts) < 2 or parts[1] != installation_directory:
                     raise ValueError(f"Unexpected installation tree entry: {member.name}")
                 if len(parts) == 2:
@@ -136,6 +138,9 @@ def validate_private_installation_backup(
             total_size += member.size
             if file_count > MAX_INSTALL_FILES or total_size > MAX_INSTALL_BYTES:
                 raise ValueError("The private installation exceeds its file-count or 16 GiB limit.")
+
+        if not saw_installation_root:
+            raise ValueError("The private backup does not contain the expected installation root.")
 
         required = {
             f"{install_prefix}/disc/SYSTEM.CNF",
