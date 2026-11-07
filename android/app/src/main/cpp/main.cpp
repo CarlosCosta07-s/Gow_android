@@ -44,6 +44,8 @@ extern "C" bool gowRuntimeStartGuestExecutionAndroid(
     PS2Runtime *runtime, char *message, size_t capacity) noexcept;
 extern "C" bool gowRuntimeGuestExecutionFinishedAndroid(
     PS2Runtime *runtime) noexcept;
+extern "C" void gowRuntimeSetAndroidPaused(
+    PS2Runtime *runtime, bool paused) noexcept;
 extern "C" void gowAndroidDiscCloseImage() noexcept;
 
 namespace {
@@ -1685,6 +1687,7 @@ void handleAppCommand(android_app* app, int32_t command) {
             break;
 
         case APP_CMD_TERM_WINDOW:
+            gowRuntimeSetAndroidPaused(gActiveRuntime, true);
 #if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
 #if defined(GOW_ANDROID_ENABLE_GS_VULKAN)
             detachAndroidGsBackend();
@@ -1703,9 +1706,11 @@ void handleAppCommand(android_app* app, int32_t command) {
         case APP_CMD_LOST_FOCUS:
         case APP_CMD_PAUSE:
             gowAndroidPadResetAll();
+            gowRuntimeSetAndroidPaused(gActiveRuntime, true);
             break;
 
         case APP_CMD_GAINED_FOCUS:
+            gowRuntimeSetAndroidPaused(gActiveRuntime, false);
             break;
 
         case APP_CMD_LOW_MEMORY:
