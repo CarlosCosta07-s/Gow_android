@@ -9,7 +9,72 @@ from build_android_game import (
     create_build_plan,
     locate_ntsc_u_elf,
     parse_system_cnf_boot_path,
+    require_full_native_aot_summary,
 )
+
+
+class FullNativeAotReleaseGateTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory(prefix="gow-aot-release-gate-")
+        self.summary_path = Path(self.temporary.name) / "native-aot-summary.json"
+        self.summary = {
+            "format": "gow-native-aot-build-v1",
+            "vu1_micro_memories": 3,
+            "vu1_native_translation_units": 6,
+            "iop_modules": 8,
+            "iop_native_translation_units": 8,
+            "full_native_aot": True,
+            "vu1_unsupported_blocks": 0,
+            "vu1_interpreter_callouts": 0,
+            "sources": {
+                "vu1": [f"vu1n_part{i}.cpp" for i in range(6)],
+                "iop": [f"iopn_{i}.cpp" for i in range(8)] + ["iopn_registry.cpp"],
+            },
+        }
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def _write_summary(self) -> None:
+        import json
+        self.summary_path.write_text(
+            json.dumps(self.summary), encoding="utf-8"
+        )
+
+    def test_accepts_only_complete_private_native_aot_inventory(self) -> None:
+        self._write_summary()
+        summary = require_full_native_aot_summary(self.summary_path)
+        self.assertIs(summary["full_native_aot"], True)
+        self.assertEqual(summary["vu1_native_translation_units"], 6)
+        self.assertEqual(summary["iop_native_translation_units"], 8)
+
+    def test_rejects_partial_vu1_or_iop_coverage(self) -> None:
+        self.summary["full_native_aot"] = False
+        self.summary["vu1_unsupported_blocks"] = 1
+        self._write_summary()
+        with self.assertRaisesRegex(RuntimeError, "coverage is incomplete"):
+            require_full_native_aot_summary(self.summary_path)
+
+    def test_rejects_missing_iop_registry(self) -> None:
+        self.summary["sources"]["iop"].pop()
+        self._write_summary()
+        with self.assertRaisesRegex(RuntimeError, "coverage is incomplete"):
+            require_full_native_aot_summary(self.summary_path)
+
+    def test_rejects_interpreter_callouts(self) -> None:
+        self.summary["vu1_interpreter_callouts"] = 1
+        self._write_summary()
+        with self.assertRaisesRegex(RuntimeError, "coverage is incomplete"):
+            require_full_native_aot_summary(self.summary_path)
+
+    def test_rejects_missing_or_symlinked_summary(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "summary is required"):
+            require_full_native_aot_summary(self.summary_path)
+        target = Path(self.temporary.name) / "target.json"
+        target.write_text("{}", encoding="utf-8")
+        self.summary_path.symlink_to(target)
+        with self.assertRaisesRegex(RuntimeError, "summary is required"):
+            require_full_native_aot_summary(self.summary_path)
 
 
 class AndroidGameBuildPlanTests(unittest.TestCase):
