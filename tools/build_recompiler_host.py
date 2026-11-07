@@ -345,6 +345,41 @@ def main() -> int:
         )
         print(f"Applied Android-compatible KIexster patch: {relative_patch}", flush=True)
 
+    # GS XYZF carries F in the vertex and also latches it as the current GS
+    # fog value. A following XYZ (without F) inherits m_curFog. The pinned
+    # PS2Recomp frontend initially copied F only into the current vertex,
+    # which made subsequent PACKED/REGLIST XYZ vertices use stale fog.
+    gs_frontend = recompiler_source / "ps2xRuntime/src/lib/gs/gs_frontend.cpp"
+    replace_exactly_once(
+        gs_frontend,
+        "        vtx.fog = f;\\n"
+        "        vertexKick(!adk);\\n",
+        "        vtx.fog = f;\\n"
+        "        m_curFog = f;\\n"
+        "        vertexKick(!adk);\\n",
+        "latch persistent GS F after PACKED XYZF2",
+    )
+    replace_exactly_once(
+        gs_frontend,
+        "        vtx.fog = static_cast<uint8_t>((hi >> 36) & 0xFF);\\n"
+        "        vertexKick(false);\\n",
+        "        const uint8_t fog = static_cast<uint8_t>((hi >> 36) & 0xFF);\\n"
+        "        vtx.fog = fog;\\n"
+        "        m_curFog = fog;\\n"
+        "        vertexKick(false);\\n",
+        "latch persistent GS F after PACKED XYZF3",
+    )
+    replace_exactly_once(
+        gs_frontend,
+        "        vtx.fog = static_cast<uint8_t>((value >> 56) & 0xFF);\\n"
+        "        vtx.r = m_curR;\\n",
+        "        const uint8_t fog = static_cast<uint8_t>((value >> 56) & 0xFF);\\n"
+        "        vtx.fog = fog;\\n"
+        "        m_curFog = fog;\\n"
+        "        vtx.r = m_curR;\\n",
+        "latch persistent GS F after A+D/REGLIST XYZF2/XYZF3",
+    )
+
     # The VIF1 UNPACK fast path uses SSE2 intrinsics. Select sse2neon on ARM64
     # so the same ahead-of-time VIF path compiles to native NEON instructions.
     vif1_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_vif1_interpreter.cpp"
