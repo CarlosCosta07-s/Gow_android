@@ -93,7 +93,7 @@ O pacote Android de Debug precisa continuar instalado e ser depurável para que 
 
 ## Requisitos de build host
 
-A recompilação estática atual usa ferramentas nativas de desenvolvimento e é executada num host Windows x64 ou Linux x86-64: Python 3.11, Git, CMake, Ninja, compilador C++20, Java 17, **Gradle 9.6 disponível no PATH**, Android SDK/NDK e `glslangValidator`. O repositório não contém `gradlew`; o orquestrador executa Gradle 9.6 diretamente com `--project-dir android`, como no CI. O host é apenas ferramenta para gerar/compilar o código nativo; o executável entregue e a execução do jogo continuam sendo Android ARM64.
+A recompilação estática atual usa ferramentas nativas de desenvolvimento e é executada num host Windows x64 ou Linux x86-64: Python 3.11, Git, CMake, Ninja, compilador C++20, Java 17, **Gradle 9.6.0 disponível no PATH**, Android SDK/NDK e `glslangValidator`. O repositório não contém `gradlew`; o orquestrador executa Gradle 9.6 diretamente com `--project-dir android`, como no CI. O host é apenas ferramenta para gerar/compilar o código nativo; o executável entregue e a execução do jogo continuam sendo Android ARM64.
 
 A geração inicial pode consumir bastante memória e espaço. O número de jobs padrão é conservador. O computador não faz parte do produto e não executa o jogo.
 
