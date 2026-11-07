@@ -10,8 +10,9 @@ class GSTextureStore;
 namespace gow::android {
 
 // CPU GS rasterizer for CT32/CT24/CT16/CT16S framebuffers. Supports decoded texture
-// sampling, FGE fog, GS alpha/depth tests and GS alpha blending; AA1 coverage
-// remains unsupported and is rejected explicitly. Writes into 4 MiB swizzled VRAM.
+// sampling, FGE fog, DTHE/DIMX dithering for CT16/CT16S, GS alpha/depth tests
+// and GS alpha blending; AA1 coverage remains unsupported and is rejected.
+// Writes into the 4 MiB swizzled PS2 VRAM image.
 bool rasterizeGsBatchToVram(
     GSTextureStore &store,
     const GSPrimitiveBatch &batch,
