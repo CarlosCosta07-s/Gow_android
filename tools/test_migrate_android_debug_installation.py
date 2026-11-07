@@ -9,6 +9,7 @@ from pathlib import Path
 
 from migrate_android_debug_installation import (
     DEFAULT_NTSC_INSTALLATION_DIRECTORY,
+    _parse_boot2,
     validate_private_installation_backup,
 )
 
@@ -95,6 +96,16 @@ class PrivateAndroidInstallBackupTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "not the supported NTSC-U"):
             validate_private_installation_backup(self.archive)
+
+    def test_boot2_parser_supports_a_nested_executable_path(self) -> None:
+        self.assertEqual(
+            _parse_boot2(b"BOOT2 = cdrom0:\\\\BOOT\\\\SCUS_973.99;1\\n"),
+            "BOOT/SCUS_973.99",
+        )
+
+    def test_boot2_parser_rejects_non_cdrom_devices(self) -> None:
+        with self.assertRaisesRegex(ValueError, "does not point to cdrom0"):
+            _parse_boot2(b"BOOT2 = host0:\\\\SCUS_973.99;1\\n")
 
     def test_backup_rejects_path_traversal(self) -> None:
         with tarfile.open(self.archive, "w") as archive:
