@@ -63,7 +63,7 @@ class FullNativeAotReleaseGateTests(unittest.TestCase):
         self.summary["vu1_unsupported_blocks"] = 1
         self._write_summary()
         with self.assertRaisesRegex(RuntimeError, "coverage is incomplete"):
-            require_full_native_aot_summary(self.summary_path)
+            require_full_native_aot_summary(self.summary_path, self.elf_path)
 
     def test_rejects_missing_iop_registry(self) -> None:
         self.summary["sources"]["iop"].pop()
