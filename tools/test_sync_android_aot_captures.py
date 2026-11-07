@@ -59,6 +59,8 @@ class AndroidAotAdbCaptureSyncTests(unittest.TestCase):
             ("gow-aot-captures/vu1/vu1n_heads.txt", b"0010\n"),
             ("gow-aot-captures/iop/module_a.bin", iop),
             ("gow-aot-captures/iop/modules.txt", b"module_a 1f000 14 1234\n"),
+            ("gow-aot-captures/game_identity.txt",
+             b"format=gow-android-game-identity-v1\ninstallation_id=gow_scus_973_99_ntsc_u\nboot_path=SCUS_973.99\nelf_size=25\nelf_sha256=" + b"a" * 64 + b"\n"),
         ])
         result = capture_tar_to_zip(self.tar_path, self.zip_path)
         self.assertEqual(result, self.zip_path)
@@ -70,10 +72,15 @@ class AndroidAotAdbCaptureSyncTests(unittest.TestCase):
                     "vu1/vu1n_heads.txt",
                     "iop/module_a.bin",
                     "iop/modules.txt",
+                    "game_identity.txt",
                     "capture_manifest.txt",
                 },
             )
             self.assertEqual(archive.read("vu1/vu1_0001.bin"), vu1)
+            self.assertIn(
+                "elf_sha256=" + "a" * 64,
+                archive.read("game_identity.txt").decode("ascii"),
+            )
             self.assertIn(
                 "source=android-private-files-via-adb",
                 archive.read("capture_manifest.txt").decode("utf-8"),
