@@ -345,7 +345,7 @@ def _probe_run_as_and_stdin(adb: str, serial: str, package_name: str) -> None:
 
 def _restore_private_installation(
     adb: str, serial: str, package_name: str, archive_path: Path,
-    installation_directory: str,
+    installation_directory: str, boot_relative_path: str,
 ) -> None:
     _run([
         adb, "-s", serial, "shell",
@@ -357,7 +357,9 @@ def _restore_private_installation(
     with archive_path.open("rb") as archive:
         _run([adb, "-s", serial, "shell", remote], input_stream=archive)
 
-    boot_path = "SCUS_973.99"
+    boot_path = _safe_member_path(boot_relative_path).as_posix()
+    if PurePosixPath(boot_path).name != "SCUS_973.99":
+        raise ValueError("The restored BOOT2 path is not the supported NTSC-U executable.")
     verify_script = (
         f"test -s files/installations/{installation_directory}/disc/SYSTEM.CNF"
         f" && test -s files/installations/{installation_directory}/disc/{boot_path}"
@@ -431,7 +433,8 @@ def migrate_debug_installation(
         uninstalled = True
         _install_apks(adb, serial, [apk_path])
         _restore_private_installation(
-            adb, serial, package_name, backup_tar, installation_directory
+            adb, serial, package_name, backup_tar, installation_directory,
+            str(summary["boot_relative_path"]),
         )
     except Exception as migration_error:
         if not uninstalled:
@@ -447,7 +450,8 @@ def migrate_debug_installation(
             )
             _install_apks(adb, serial, old_apks, multiple=len(old_apks) > 1)
             _restore_private_installation(
-                adb, serial, package_name, backup_tar, installation_directory
+                adb, serial, package_name, backup_tar, installation_directory,
+                str(summary["boot_relative_path"]),
             )
         except Exception as rollback_error:
             raise RuntimeError(
