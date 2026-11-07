@@ -17,7 +17,17 @@ class FullNativeAotReleaseGateTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="gow-aot-release-gate-")
         self.summary_path = Path(self.temporary.name) / "native-aot-summary.json"
+        self.elf_path = Path(self.temporary.name) / "SCUS_973.99"
+        self.elf_path.write_bytes(b"synthetic private NTSC-U BOOT2 ELF")
+        elf_digest = __import__("hashlib").sha256(self.elf_path.read_bytes()).hexdigest()
         self.summary = {
+            "game_identity": {
+                "format": "gow-android-game-identity-v1",
+                "installation_id": "gow_scus_973_99_ntsc_u",
+                "boot_path": "SCUS_973.99",
+                "elf_size": self.elf_path.stat().st_size,
+                "elf_sha256": elf_digest,
+            },
             "format": "gow-native-aot-build-v1",
             "vu1_micro_memories": 3,
             "vu1_native_translation_units": 6,
@@ -43,7 +53,7 @@ class FullNativeAotReleaseGateTests(unittest.TestCase):
 
     def test_accepts_only_complete_private_native_aot_inventory(self) -> None:
         self._write_summary()
-        summary = require_full_native_aot_summary(self.summary_path)
+        summary = require_full_native_aot_summary(self.summary_path, self.elf_path)
         self.assertIs(summary["full_native_aot"], True)
         self.assertEqual(summary["vu1_native_translation_units"], 6)
         self.assertEqual(summary["iop_native_translation_units"], 8)
@@ -66,6 +76,18 @@ class FullNativeAotReleaseGateTests(unittest.TestCase):
         self._write_summary()
         with self.assertRaisesRegex(RuntimeError, "coverage is incomplete"):
             require_full_native_aot_summary(self.summary_path)
+
+    def test_rejects_aot_captures_for_a_different_elf_revision(self) -> None:
+        self._write_summary()
+        self.elf_path.write_bytes(b"different NTSC-U ELF revision")
+        with self.assertRaisesRegex(RuntimeError, "different BOOT2 ELF/ISO revision"):
+            require_full_native_aot_summary(self.summary_path, self.elf_path)
+
+    def test_rejects_missing_game_identity(self) -> None:
+        self.summary.pop("game_identity")
+        self._write_summary()
+        with self.assertRaisesRegex(RuntimeError, "not bound to a BOOT2 ELF identity"):
+            require_full_native_aot_summary(self.summary_path, self.elf_path)
 
     def test_rejects_missing_or_symlinked_summary(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "summary is required"):
