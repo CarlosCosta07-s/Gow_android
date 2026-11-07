@@ -57,7 +57,7 @@ def make_elf(
         5,          # PF_R | PF_X
         0x10,
     )
-    image = bytearray(max(0x180, 0x100 + 16))
+    image = bytearray(max(0x200 if relocations else 0x180, 0x100 + 16))
     image[: len(header)] = header
     image[phoff : phoff + len(program)] = program
     image[0x100 : 0x110] = bytes(range(16))
@@ -101,7 +101,7 @@ class IopIrxInventoryTests(unittest.TestCase):
         self.assertFalse(result["loader_would_relocate"])
         self.assertEqual(result["load_base"], 0x10000)
         self.assertEqual(result["loaded_span"], 24)
-        self.assertIn("not yet approved for AOT", result["reasons"][-1])
+        self.assertIn("fixed-address image candidate only", result["reasons"][-1])
 
     def test_iop_relocatable_elf_is_not_a_fixed_candidate(self) -> None:
         path = self.root / "IRX/RELOC.IRX"
