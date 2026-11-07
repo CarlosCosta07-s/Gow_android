@@ -34,6 +34,24 @@ O comando executa automaticamente:
 
 O ELF nunca é selecionado ou exportado pelo usuário. Ele é um arquivo intermediário extraído automaticamente da ISO.
 
+### Usar a instalação que já está no Android
+
+Quando a ISO já foi instalada pelo FORGE no aparelho, não é necessário copiar os 7,94 GB de volta para o computador. Com o aplicativo Debug instalado, Depuração USB autorizada e ADB disponível no host, use:
+
+```powershell
+python tools/build_android_game.py --installed-android --work-dir "C:\gowport"
+```
+
+Linux:
+
+```bash
+python3 tools/build_android_game.py --installed-android --work-dir "$HOME/gowport"
+```
+
+Nesse modo, o host encontra o aparelho, lê `SYSTEM.CNF` e o executável BOOT2 diretamente do armazenamento privado de `org.gowandroid.app.debug` usando `run-as`, valida o perfil NTSC-U e gera o C++ EE. O mesmo dispositivo é usado para tentar sincronizar as capturas VU1/IOP. Somente `SYSTEM.CNF` e o ELF BOOT2 são copiados para o workspace privado do host; o restante do disco permanece no Android para o runtime usar durante o jogo. Não há seletor de arquivos, ZIP manual nem exportação pelo usuário.
+
+O caminho pressupõe a pasta privada criada pela instalação NTSC-U do FORGE (`files/installations/gow_scus_973_99_ntsc_u/disc`). Se houver mais de um aparelho autorizado, acrescente `--device-serial SEU_SERIAL`. O comando não desinstala nem atualiza o aplicativo e não altera a instalação privada.
+
 ## Capturas VU1/IOP sem exportação pelo usuário
 
 A primeira build com o ELF real é um bootstrap AOT estrito: ela contém o código EE gerado, mas ainda não presume cobertura VU1/IOP. Instale essa build Debug no Android e execute **FORGE → Verificar runtime**. Os dados carregados são guardados em `files/gow-aot-captures/`, no armazenamento privado do app. O runtime continua sem fallback interpretado e para quando chega a código que ainda não possui implementação nativa.
