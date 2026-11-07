@@ -66,6 +66,7 @@ def create_build_plan(
     *,
     python_executable: str | None = None,
     windows: bool | None = None,
+    gradle_executable: str | None = None,
 ) -> BuildPlan:
     """Validate private paths and create commands without executing them."""
     root = repo_root.expanduser().resolve()
@@ -102,10 +103,6 @@ def create_build_plan(
     if not _is_within(generated, build_root) or generated == build_root:
         raise ValueError("Generated C++ staging must remain inside android/app/build.")
 
-    wrapper = root / ("gradlew.bat" if use_windows else "gradlew")
-    if not wrapper.is_file():
-        raise ValueError(f"Gradle wrapper is missing: {wrapper}")
-
     generator = root / "tools/build_recompiler_host.py"
     if not generator.is_file():
         raise ValueError(f"Host recompiler entry point is missing: {generator}")
@@ -127,10 +124,15 @@ def create_build_plan(
         "--export-game-cpp-dir",
         str(generated),
     )
+    gradle = gradle_executable or ("gradle.bat" if use_windows else "gradle")
+    android_project = (root / "android").resolve()
     gradle_command = (
-        ("cmd", "/c", str(wrapper), "--no-daemon", "--max-workers=1", "assembleDebug")
-        if use_windows
-        else (str(wrapper), "--no-daemon", "--max-workers=1", "assembleDebug")
+        gradle,
+        "--project-dir",
+        str(android_project),
+        "--no-daemon",
+        "--max-workers=1",
+        "assembleDebug",
     )
     return BuildPlan(
         elf=elf,
@@ -498,9 +500,16 @@ def main() -> int:
             parser.error(f"Generated staging may not be a symlink: {generated_path}")
         _require_ignored_generated_dir(root, generated_path)
 
-    gradle_wrapper = root / ("gradlew.bat" if os.name == "nt" else "gradlew")
-    if not gradle_wrapper.is_file():
-        parser.error(f"Gradle wrapper is missing: {gradle_wrapper}")
+    gradle_executable = shutil.which("gradle")
+    if gradle_executable is None and os.name == "nt":
+        gradle_executable = shutil.which("gradle.bat")
+    if gradle_executable is None:
+        gradle_executable = "gradle.bat" if os.name == "nt" else "gradle"
+        if not (args.plan_only or args.generate_only):
+            parser.error(
+                "Gradle 9.6 was not found on PATH. Install Gradle 9.6 before building the Android APK. "
+                "The host CI uses gradle/actions/setup-gradle@v4."
+            )
 
     prepare_command = (
         sys.executable,
@@ -601,13 +610,17 @@ def main() -> int:
                     f"Details: {error}"
                 )
     elif elf_path is not None and args.plan_only:
-        plan = create_build_plan(root, elf_path, work)
+        plan = create_build_plan(
+            root, elf_path, work, gradle_executable=gradle_executable
+        )
         print("Private ELF: " + str(plan.elf))
         print("Plan validated. No private files were read and no build was started.")
         return 0
 
     assert elf_path is not None
-    plan = create_build_plan(root, elf_path, work)
+    plan = create_build_plan(
+        root, elf_path, work, gradle_executable=gradle_executable
+    )
     _require_ignored_generated_dir(root, plan.generated_dir)
 
     elf_info = validate_ps2_elf(plan.elf)
