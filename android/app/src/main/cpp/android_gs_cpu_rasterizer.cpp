@@ -410,6 +410,51 @@ uint32_t applyGsAlphaBlend(
     return result;
 }
 
+int signedDitherValue(uint32_t value) {
+    const uint32_t encoded = value & 0x7u;
+    return (encoded & 0x4u) != 0u
+        ? static_cast<int>(encoded) - 8
+        : static_cast<int>(encoded);
+}
+
+uint8_t applyDitherChannel(uint8_t channel, int dither, bool colorClamp) {
+    const int adjusted = static_cast<int>(channel) + dither;
+    if (colorClamp) {
+        return static_cast<uint8_t>(std::clamp(adjusted, 0, 255));
+    }
+    const int wrapped = (adjusted % 256 + 256) % 256;
+    return static_cast<uint8_t>(wrapped);
+}
+
+uint32_t applyGsDither(
+    uint32_t sourceRgba,
+    uint32_t x,
+    uint32_t y,
+    const GSDrawState &state) {
+    const uint8_t psm = state.context.frame.psm;
+    if ((state.dthe & 1u) == 0u ||
+        (psm != GS_PSM_CT16 && psm != GS_PSM_CT16S)) {
+        return sourceRgba;
+    }
+
+    // DIMX contains sixteen signed 3-bit values, each in a 4-bit slot.
+    // The matrix repeats every four framebuffer pixels in both axes.
+    const uint32_t matrixIndex = (y & 3u) * 4u + (x & 3u);
+    const uint32_t shift = matrixIndex * 4u;
+    const int dither = signedDitherValue(
+        static_cast<uint32_t>((state.dimx >> shift) & 0x7u));
+    const bool colorClamp = (state.colclamp & 1u) != 0u;
+
+    const uint32_t red = applyDitherChannel(
+        static_cast<uint8_t>(sourceRgba & 0xFFu), dither, colorClamp);
+    const uint32_t green = applyDitherChannel(
+        static_cast<uint8_t>((sourceRgba >> 8u) & 0xFFu), dither, colorClamp);
+    const uint32_t blue = applyDitherChannel(
+        static_cast<uint8_t>((sourceRgba >> 16u) & 0xFFu), dither, colorClamp);
+    return (sourceRgba & 0xFF000000u) |
+        red | (green << 8u) | (blue << 16u);
+}
+
 uint32_t applyGsFog(
     uint32_t sourceRgba,
     float interpolatedFog,
@@ -481,6 +526,10 @@ void writePixelUnchecked(
                 sourceRgba, oldFramebuffer, state.context.frame.psm,
                 state.context.alpha, (state.colclamp & 1u) != 0u);
         }
+        // GS dithering is applied after texture/fog/blending and before
+        // CT16/CT16S RGB5551 conversion. It does not affect alpha or CT32.
+        outputRgba = applyGsDither(
+            outputRgba, pixelX, pixelY, state);
         if ((state.context.fba & 1u) != 0u) {
             if (state.context.frame.psm == GS_PSM_CT32) {
                 outputRgba |= 0x80000000u;
