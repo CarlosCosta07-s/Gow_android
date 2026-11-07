@@ -356,13 +356,21 @@ public final class GowGameActivity extends GameActivity {
     private TextView createTouchButton(String label, int mask) {
         TextView button = new TextView(this);
         button.setText(label);
-        button.setTextColor(Color.WHITE);
+        button.setTextColor(touchButtonColor(mask));
         button.setTextSize(20.0f);
         button.setGravity(Gravity.CENTER);
         button.setBackground(createTouchButtonBackground());
         button.setContentDescription("Botão PS2 " + label);
         bindTouchButton(button, mask);
         return button;
+    }
+
+    private int touchButtonColor(int mask) {
+        if (mask == PAD_TRIANGLE) return Color.rgb(90, 220, 160);
+        if (mask == PAD_CIRCLE) return Color.rgb(245, 95, 105);
+        if (mask == PAD_CROSS) return Color.rgb(90, 160, 255);
+        if (mask == PAD_SQUARE) return Color.rgb(225, 130, 235);
+        return Color.WHITE;
     }
 
     private TextView createShoulderButton(String label, int mask) {
