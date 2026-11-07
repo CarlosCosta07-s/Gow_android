@@ -1792,6 +1792,12 @@ Java_org_gowandroid_app_GowGameActivity_nativeRequestGsSceneCapture(
     return JNI_TRUE;
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_org_gowandroid_app_GowGameActivity_nativeSetTouchButtons(
+    JNIEnv *, jclass, jint pressedMask) noexcept {
+    gowAndroidPadSetTouchButtons(static_cast<uint16_t>(pressedMask));
+}
+
 extern "C" JNIEXPORT jboolean JNICALL
 Java_org_gowandroid_app_GowGameActivity_nativeConfigurePrivateBoot(
     JNIEnv *env, jclass, jstring privateCdRoot,
