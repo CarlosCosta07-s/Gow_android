@@ -15,6 +15,11 @@ on:
       - "port/kiexter/tools/iopn_gen.py"
       - "port/kiexter/tools/vu1n_heads.txt"
       - "tools/check_android_runtime_lifecycle.py"
+      - "tools/phone_only_builder.py"
+      - "tools/termux_phone_bridge.py"
+      - "tools/test_phone_only_builder.py"
+      - ".devcontainer/**"
+      - "docs/PHONE_ONLY_BUILD.md"
       - "tools/ps2_vfs_cdroot_smoke.cpp"
       - "tools/run_ps2_vfs_cdroot_smoke.py"
       - "tools/compare_gs_scene.py"
@@ -103,6 +108,12 @@ jobs:
         shell: bash
         run: |
           python tools/test_android_native_aot.py
+
+      - name: Test phone-only Codespaces and Termux bridge
+        shell: bash
+        run: |
+          python tools/test_phone_only_builder.py
+          python -m py_compile tools/phone_only_builder.py tools/termux_phone_bridge.py
 
       - name: Test bounded private Android runtime log
         shell: bash
