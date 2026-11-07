@@ -347,6 +347,71 @@ int main() {
         }
         backend.Submit(fogSprite);
 
+        // DIMX dithering applies signed 3-bit matrix values only to 16-bit
+        // framebuffer RGB, before the RGB5551 conversion.
+        const uint64_t ditherMatrix =
+            1ull | (7ull << 4u) | (2ull << 8u) | (6ull << 12u) |
+            (3ull << 16u);
+        GSPrimitiveBatch ditherPoint{};
+        ditherPoint.vertexCount = 1u;
+        ditherPoint.state.context.frame = {300u, 1u, GS_PSM_CT16, 0u};
+        ditherPoint.state.context.scissor = triangle.state.context.scissor;
+        ditherPoint.state.prim.type = GS_PRIM_POINT;
+        ditherPoint.state.dthe = 1u;
+        ditherPoint.state.dimx = ditherMatrix;
+        ditherPoint.vertices[0].x = 0.0f;
+        ditherPoint.vertices[0].y = 40.0f;
+        ditherPoint.vertices[0].r = 15u;
+        ditherPoint.vertices[0].g = 16u;
+        ditherPoint.vertices[0].b = 23u;
+        ditherPoint.vertices[0].a = 255u;
+        backend.Submit(ditherPoint);
+
+        GSPrimitiveBatch negativeDitherPoint = ditherPoint;
+        negativeDitherPoint.vertices[0].x = 1.0f;
+        negativeDitherPoint.vertices[0].r = 16u;
+        negativeDitherPoint.vertices[0].g = 16u;
+        negativeDitherPoint.vertices[0].b = 16u;
+        backend.Submit(negativeDitherPoint);
+
+        GSPrimitiveBatch rowDitherPoint = ditherPoint;
+        rowDitherPoint.vertices[0].y = 41.0f;
+        rowDitherPoint.vertices[0].r = 15u;
+        rowDitherPoint.vertices[0].g = 15u;
+        rowDitherPoint.vertices[0].b = 15u;
+        backend.Submit(rowDitherPoint);
+
+        GSPrimitiveBatch disabledDitherPoint = ditherPoint;
+        disabledDitherPoint.state.dthe = 0u;
+        disabledDitherPoint.vertices[0].x = 2.0f;
+        backend.Submit(disabledDitherPoint);
+
+        GSPrimitiveBatch dither16SPoint = ditherPoint;
+        dither16SPoint.state.context.frame.psm = GS_PSM_CT16S;
+        dither16SPoint.state.context.frame.fbp = 301u;
+        backend.Submit(dither16SPoint);
+
+        // COLCLAMP=0 wraps an over-range dither result to 8 bits; COLCLAMP=1
+        // saturates it before the 5-bit framebuffer conversion.
+        GSPrimitiveBatch wrappedDitherPoint = ditherPoint;
+        wrappedDitherPoint.vertices[0].x = 4.0f;
+        wrappedDitherPoint.vertices[0].r = 255u;
+        wrappedDitherPoint.vertices[0].g = 0u;
+        wrappedDitherPoint.vertices[0].b = 0u;
+        wrappedDitherPoint.state.colclamp = 0u;
+        backend.Submit(wrappedDitherPoint);
+
+        GSPrimitiveBatch clampedDitherPoint = wrappedDitherPoint;
+        clampedDitherPoint.vertices[0].x = 8.0f;
+        clampedDitherPoint.state.colclamp = 1u;
+        backend.Submit(clampedDitherPoint);
+
+        // DTHE must not alter 32-bit framebuffer output.
+        GSPrimitiveBatch dither32Point = ditherPoint;
+        dither32Point.state.context.frame = {302u, 1u, GS_PSM_CT32, 0u};
+        dither32Point.vertices[0].x = 0.0f;
+        backend.Submit(dither32Point);
+
         // Indexed T8 textures must resolve their palette through TEX0/CLUT
         // state instead of treating the palette index as a direct color.
         const std::array<uint32_t, 4> palette = {
@@ -710,6 +775,40 @@ int main() {
                 spriteFogPixel[1] == 100u &&
                 spriteFogPixel[2] == 200u,
                 "GS sprite fog did not use the second endpoint F value.");
+
+        const uint32_t positiveDither = backend.ReadVram(
+            GS_PSM_CT16, 300u, 1u, 0u, 40u);
+        require((positiveDither & 0x7FFFu) == 0x0C42u &&
+                (positiveDither & 0x8000u) != 0u,
+                "GS DIMX positive dither did not adjust CT16 RGB before packing.");
+        const uint32_t negativeDither = backend.ReadVram(
+            GS_PSM_CT16, 300u, 1u, 1u, 40u);
+        require((negativeDither & 0x7FFFu) == 0x0421u,
+                "GS DIMX signed negative matrix value was not sign-extended.");
+        const uint32_t nextDitherRow = backend.ReadVram(
+            GS_PSM_CT16, 300u, 1u, 0u, 41u);
+        require((nextDitherRow & 0x7FFFu) == 0x0882u,
+                "GS DIMX did not select its next matrix row using framebuffer Y.");
+        const uint32_t ditherDisabled = backend.ReadVram(
+            GS_PSM_CT16, 300u, 1u, 2u, 40u);
+        require((ditherDisabled & 0x7FFFu) == 0x0841u,
+                "GS DTHE=0 modified a 16-bit framebuffer pixel.");
+        const uint32_t dither16S = backend.ReadVram(
+            GS_PSM_CT16S, 301u, 1u, 0u, 40u);
+        require((dither16S & 0x7FFFu) == 0x0C42u,
+                "GS DIMX dithering was not applied to CT16S framebuffers.");
+        const uint32_t wrappedDither = backend.ReadVram(
+            GS_PSM_CT16, 300u, 1u, 4u, 40u);
+        require((wrappedDither & 0x7FFFu) == 0u,
+                "GS COLCLAMP=0 did not wrap an over-range dither result.");
+        const uint32_t clampedDither = backend.ReadVram(
+            GS_PSM_CT16, 300u, 1u, 8u, 40u);
+        require((clampedDither & 0x7FFFu) == 0x001Fu,
+                "GS COLCLAMP=1 did not saturate an over-range dither result.");
+        const uint32_t dither32 = backend.ReadVram(
+            GS_PSM_CT32, 302u, 1u, 0u, 40u);
+        require(dither32 == 0xFF17100Fu,
+                "GS DTHE unexpectedly modified a CT32 framebuffer.");
         const auto indexedTopLeft = pixelAt(44u, 12u);
         require(indexedTopLeft[0] == 255u && indexedTopLeft[1] == 0u &&
                 indexedTopLeft[2] == 0u && indexedTopLeft[3] == 255u,
