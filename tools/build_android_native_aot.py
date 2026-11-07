@@ -52,9 +52,11 @@ def fnv1a64(data: bytes) -> int:
 
 def parse_game_identity_manifest(path: Path) -> dict[str, object] | None:
     """Parse the Android-generated identity of the exact BOOT2 ELF that produced captures."""
+    if path.is_symlink():
+        raise ValueError("AOT game identity manifest may not be a symbolic link.")
     if not path.exists():
         return None
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > 4096:
+    if not path.is_file() or path.stat().st_size > 4096:
         raise ValueError("AOT game identity manifest is missing, unsafe or too large.")
     values: dict[str, str] = {}
     for line_number, line in enumerate(path.read_text(encoding="ascii").splitlines(), start=1):
@@ -79,7 +81,7 @@ def parse_game_identity_manifest(path: Path) -> dict[str, object] | None:
         boot_path.is_absolute()
         or not boot_path.parts
         or any(part in ("", ".", "..") for part in boot_path.parts)
-        or "\\\\" in values["boot_path"]
+        or "\\" in values["boot_path"]
         or boot_path.name.upper() != "SCUS_973.99"
     ):
         raise ValueError("AOT game identity BOOT2 path is not the supported NTSC-U executable.")
