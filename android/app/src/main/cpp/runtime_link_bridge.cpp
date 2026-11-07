@@ -225,6 +225,14 @@ void gowDestroyPs2Runtime(PS2Runtime *runtime) noexcept {
     delete runtime;
 }
 
+// The shell-only APK deliberately links a zero-slot placeholder table. Check
+// this before constructing the PS2 core or touching the Vulkan device so a
+// diagnostic launch cannot enter an unvalidated native startup path.
+extern "C" bool gowRuntimeHasPrivateAotTable() noexcept {
+    return g_ps2RecompiledFunctionTableSlotCount != 0u &&
+        g_ps2RecompiledFunctionTable != nullptr;
+}
+
 extern "C" __attribute__((visibility("default")))
 bool gowInitializePs2RuntimeCoreHeadless(
     PS2Runtime *runtime, char *message, size_t capacity) noexcept {
