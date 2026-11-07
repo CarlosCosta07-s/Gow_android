@@ -69,13 +69,13 @@ class FullNativeAotReleaseGateTests(unittest.TestCase):
         self.summary["sources"]["iop"].pop()
         self._write_summary()
         with self.assertRaisesRegex(RuntimeError, "coverage is incomplete"):
-            require_full_native_aot_summary(self.summary_path)
+            require_full_native_aot_summary(self.summary_path, self.elf_path)
 
     def test_rejects_interpreter_callouts(self) -> None:
         self.summary["vu1_interpreter_callouts"] = 1
         self._write_summary()
         with self.assertRaisesRegex(RuntimeError, "coverage is incomplete"):
-            require_full_native_aot_summary(self.summary_path)
+            require_full_native_aot_summary(self.summary_path, self.elf_path)
 
     def test_rejects_aot_captures_for_a_different_elf_revision(self) -> None:
         self._write_summary()
@@ -91,12 +91,12 @@ class FullNativeAotReleaseGateTests(unittest.TestCase):
 
     def test_rejects_missing_or_symlinked_summary(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "summary is required"):
-            require_full_native_aot_summary(self.summary_path)
+            require_full_native_aot_summary(self.summary_path, self.elf_path)
         target = Path(self.temporary.name) / "target.json"
         target.write_text("{}", encoding="utf-8")
         self.summary_path.symlink_to(target)
         with self.assertRaisesRegex(RuntimeError, "summary is required"):
-            require_full_native_aot_summary(self.summary_path)
+            require_full_native_aot_summary(self.summary_path, self.elf_path)
 
 
 class AndroidGameBuildPlanTests(unittest.TestCase):
