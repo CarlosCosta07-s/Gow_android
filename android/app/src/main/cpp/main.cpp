@@ -1964,7 +1964,9 @@ extern "C" void android_main(android_app* app) {
 #if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
         // 16 ms keeps the host near the PS2 NTSC frame cadence without a
         // zero-timeout busy loop; input/lifecycle events still wake it early.
-        const int timeout = gRenderer.isReady() ? 16 : -1;
+        const int timeout =
+            gRenderer.isReady() &&
+            !gAndroidHostPaused.load(std::memory_order_acquire) ? 16 : -1;
 #else
         const int timeout = -1;
 #endif
