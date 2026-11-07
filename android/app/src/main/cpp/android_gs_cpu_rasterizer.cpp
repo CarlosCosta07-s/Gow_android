@@ -550,12 +550,16 @@ void rasterizeTriangle(
     const float wcStepY = (b.x - a.x) * inverseArea;
     constexpr float epsilon = -1.0e-6f;
 
+    const float firstX = static_cast<float>(left) + 0.5f;
+    const float firstY = static_cast<float>(top) + 0.5f;
+    float waRow = edge(b, c, firstX, firstY) * inverseArea;
+    float wbRow = edge(c, a, firstX, firstY) * inverseArea;
+    float wcRow = edge(a, b, firstX, firstY) * inverseArea;
+
     for (int y = top; y <= bottom; ++y) {
-        const float px = static_cast<float>(left) + 0.5f;
-        const float py = static_cast<float>(y) + 0.5f;
-        float wa = edge(b, c, px, py) * inverseArea;
-        float wb = edge(c, a, px, py) * inverseArea;
-        float wc = edge(a, b, px, py) * inverseArea;
+        float wa = waRow;
+        float wb = wbRow;
+        float wc = wcRow;
 
         for (int x = left; x <= right; ++x) {
             if (wa >= epsilon && wb >= epsilon && wc >= epsilon) {
@@ -567,11 +571,11 @@ void rasterizeTriangle(
             wb += wbStepX;
             wc += wcStepX;
         }
-        // Recompute at the start of the next row instead of carrying the
-        // horizontal accumulation across the entire bounding rectangle.
-        (void)waStepY;
-        (void)wbStepY;
-        (void)wcStepY;
+        // The scanline origin advances by the y slope; x accumulation is
+        // restarted on each row to limit floating-point drift.
+        waRow += waStepY;
+        wbRow += wbStepY;
+        wcRow += wcStepY;
     }
 }
 
