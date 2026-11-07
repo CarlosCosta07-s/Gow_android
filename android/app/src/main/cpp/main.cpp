@@ -808,6 +808,105 @@ private:
         }
     }
 
+    void destroyFrameSourceImage() {
+        if (device_ == VK_NULL_HANDLE) return;
+        if (frameSourceImage_ != VK_NULL_HANDLE) {
+            vkDestroyImage(device_, frameSourceImage_, nullptr);
+            frameSourceImage_ = VK_NULL_HANDLE;
+        }
+        if (frameSourceMemory_ != VK_NULL_HANDLE) {
+            vkFreeMemory(device_, frameSourceMemory_, nullptr);
+            frameSourceMemory_ = VK_NULL_HANDLE;
+        }
+        frameSourceExtent_ = {};
+        frameSourceFormat_ = VK_FORMAT_UNDEFINED;
+        frameSourceLayout_ = VK_IMAGE_LAYOUT_UNDEFINED;
+        frameUploadDirty_ = hasPendingFrame_;
+    }
+
+    bool ensureFrameSourceImage() {
+        if (pendingFrameWidth_ == 0u || pendingFrameHeight_ == 0u) {
+            return false;
+        }
+        if (frameSourceImage_ != VK_NULL_HANDLE &&
+            frameSourceExtent_.width == pendingFrameWidth_ &&
+            frameSourceExtent_.height == pendingFrameHeight_ &&
+            frameSourceFormat_ == swapchainFormat_) {
+            return true;
+        }
+
+        destroyFrameSourceImage();
+
+        VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.format = swapchainFormat_;
+        imageInfo.extent = {
+            pendingFrameWidth_, pendingFrameHeight_, 1u};
+        imageInfo.mipLevels = 1u;
+        imageInfo.arrayLayers = 1u;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.usage =
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (!isSuccess(
+                vkCreateImage(device_, &imageInfo, nullptr, &frameSourceImage_),
+                "vkCreateImage(GS native frame)")) {
+            destroyFrameSourceImage();
+            return false;
+        }
+
+        VkMemoryRequirements requirements{};
+        vkGetImageMemoryRequirements(device_, frameSourceImage_, &requirements);
+        VkPhysicalDeviceMemoryProperties memoryProperties{};
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &memoryProperties);
+
+        uint32_t selectedType = UINT32_MAX;
+        uint32_t fallbackType = UINT32_MAX;
+        for (uint32_t i = 0u; i < memoryProperties.memoryTypeCount; ++i) {
+            if ((requirements.memoryTypeBits & (1u << i)) == 0u) continue;
+            if (fallbackType == UINT32_MAX) fallbackType = i;
+            if ((memoryProperties.memoryTypes[i].propertyFlags &
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0u) {
+                selectedType = i;
+                break;
+            }
+        }
+        if (selectedType == UINT32_MAX) selectedType = fallbackType;
+        if (selectedType == UINT32_MAX) {
+            logMessage(ANDROID_LOG_WARN,
+                "No compatible Vulkan memory type for the native GS frame image");
+            destroyFrameSourceImage();
+            return false;
+        }
+
+        VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        allocation.allocationSize = requirements.size;
+        allocation.memoryTypeIndex = selectedType;
+        if (!isSuccess(
+                vkAllocateMemory(
+                    device_, &allocation, nullptr, &frameSourceMemory_),
+                "vkAllocateMemory(GS native frame)")) {
+            destroyFrameSourceImage();
+            return false;
+        }
+        if (!isSuccess(
+                vkBindImageMemory(
+                    device_, frameSourceImage_, frameSourceMemory_, 0u),
+                "vkBindImageMemory(GS native frame)")) {
+            destroyFrameSourceImage();
+            return false;
+        }
+
+        frameSourceExtent_ = {
+            pendingFrameWidth_, pendingFrameHeight_};
+        frameSourceFormat_ = swapchainFormat_;
+        frameSourceLayout_ = VK_IMAGE_LAYOUT_UNDEFINED;
+        frameUploadDirty_ = true;
+        return true;
+    }
+
     void destroyUploadBuffer() {
         if (device_ == VK_NULL_HANDLE) return;
         if (uploadMapped_ != nullptr && uploadMemory_ != VK_NULL_HANDLE) {
@@ -901,10 +1000,345 @@ private:
         return true;
     }
 
+    void destroyFrameSourceImage() {
+        if (device_ == VK_NULL_HANDLE) return;
+        if (frameSourceImage_ != VK_NULL_HANDLE) {
+            vkDestroyImage(device_, frameSourceImage_, nullptr);
+            frameSourceImage_ = VK_NULL_HANDLE;
+        }
+        if (frameSourceMemory_ != VK_NULL_HANDLE) {
+            vkFreeMemory(device_, frameSourceMemory_, nullptr);
+            frameSourceMemory_ = VK_NULL_HANDLE;
+        }
+        frameSourceExtent_ = {};
+        frameSourceFormat_ = VK_FORMAT_UNDEFINED;
+        frameSourceLayout_ = VK_IMAGE_LAYOUT_UNDEFINED;
+        frameUploadDirty_ = hasPendingFrame_;
+    }
+
+    bool ensureFrameSourceImage() {
+        if (pendingFrameWidth_ == 0u || pendingFrameHeight_ == 0u) {
+            return false;
+        }
+        if (frameSourceImage_ != VK_NULL_HANDLE &&
+            frameSourceExtent_.width == pendingFrameWidth_ &&
+            frameSourceExtent_.height == pendingFrameHeight_ &&
+            frameSourceFormat_ == swapchainFormat_) {
+            return true;
+        }
+
+        destroyFrameSourceImage();
+
+        VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.format = swapchainFormat_;
+        imageInfo.extent = {
+            pendingFrameWidth_, pendingFrameHeight_, 1u};
+        imageInfo.mipLevels = 1u;
+        imageInfo.arrayLayers = 1u;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.usage =
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (!isSuccess(
+                vkCreateImage(device_, &imageInfo, nullptr, &frameSourceImage_),
+                "vkCreateImage(GS native frame)")) {
+            destroyFrameSourceImage();
+            return false;
+        }
+
+        VkMemoryRequirements requirements{};
+        vkGetImageMemoryRequirements(device_, frameSourceImage_, &requirements);
+        VkPhysicalDeviceMemoryProperties memoryProperties{};
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &memoryProperties);
+
+        uint32_t selectedType = UINT32_MAX;
+        uint32_t fallbackType = UINT32_MAX;
+        for (uint32_t i = 0u; i < memoryProperties.memoryTypeCount; ++i) {
+            if ((requirements.memoryTypeBits & (1u << i)) == 0u) continue;
+            if (fallbackType == UINT32_MAX) fallbackType = i;
+            if ((memoryProperties.memoryTypes[i].propertyFlags &
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0u) {
+                selectedType = i;
+                break;
+            }
+        }
+        if (selectedType == UINT32_MAX) selectedType = fallbackType;
+        if (selectedType == UINT32_MAX) {
+            logMessage(ANDROID_LOG_WARN,
+                "No compatible Vulkan memory type for the native GS frame image");
+            destroyFrameSourceImage();
+            return false;
+        }
+
+        VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        allocation.allocationSize = requirements.size;
+        allocation.memoryTypeIndex = selectedType;
+        if (!isSuccess(
+                vkAllocateMemory(
+                    device_, &allocation, nullptr, &frameSourceMemory_),
+                "vkAllocateMemory(GS native frame)")) {
+            destroyFrameSourceImage();
+            return false;
+        }
+        if (!isSuccess(
+                vkBindImageMemory(
+                    device_, frameSourceImage_, frameSourceMemory_, 0u),
+                "vkBindImageMemory(GS native frame)")) {
+            destroyFrameSourceImage();
+            return false;
+        }
+
+        frameSourceExtent_ = {
+            pendingFrameWidth_, pendingFrameHeight_};
+        frameSourceFormat_ = swapchainFormat_;
+        frameSourceLayout_ = VK_IMAGE_LAYOUT_UNDEFINED;
+        frameUploadDirty_ = true;
+        return true;
+    }
+
+    bool uploadFrameToSwapchainBlit(
+        VkCommandBuffer commandBuffer,
+        uint32_t imageIndex) {
+        if (imageIndex >= swapchainImages_.size() ||
+            pendingFrameWidth_ == 0u || pendingFrameHeight_ == 0u) {
+            return false;
+        }
+
+        if (frameUploadDirty_ ||
+            frameSourceLayout_ == VK_IMAGE_LAYOUT_UNDEFINED) {
+            const uint64_t sourceBytes =
+                static_cast<uint64_t>(pendingFrameWidth_) *
+                pendingFrameHeight_ * 4ull;
+            if (sourceBytes == 0u ||
+                sourceBytes > pendingFramePixels_.size() ||
+                sourceBytes > std::numeric_limits<size_t>::max()) {
+                logMessage(ANDROID_LOG_WARN,
+                    "Rejected invalid native GS frame before Vulkan blit");
+                return false;
+            }
+
+            try {
+                uploadPixels_.assign(
+                    pendingFramePixels_.begin(),
+                    pendingFramePixels_.begin() +
+                        static_cast<size_t>(sourceBytes));
+            } catch (...) {
+                logMessage(ANDROID_LOG_WARN,
+                    "Could not prepare the native GS frame staging buffer");
+                return false;
+            }
+            if (swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM) {
+                gow::android::convertRgbaToBgraInPlace(uploadPixels_);
+            }
+
+            const VkDeviceSize requiredBytes =
+                static_cast<VkDeviceSize>(uploadPixels_.size());
+            if (!ensureUploadBuffer(requiredBytes)) return false;
+            std::memcpy(uploadMapped_, uploadPixels_.data(), uploadPixels_.size());
+
+            if ((uploadMemoryFlags_ & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u) {
+                VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+                range.memory = uploadMemory_;
+                range.offset = 0u;
+                range.size = VK_WHOLE_SIZE;
+                if (!isSuccess(
+                        vkFlushMappedMemoryRanges(device_, 1u, &range),
+                        "vkFlushMappedMemoryRanges(GS native frame)")) {
+                    return false;
+                }
+            }
+
+            VkImageMemoryBarrier toTransferDestination{
+                VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+            toTransferDestination.srcAccessMask =
+                frameSourceLayout_ == VK_IMAGE_LAYOUT_UNDEFINED
+                    ? 0u : VK_ACCESS_TRANSFER_READ_BIT;
+            toTransferDestination.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            toTransferDestination.oldLayout = frameSourceLayout_;
+            toTransferDestination.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            toTransferDestination.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toTransferDestination.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toTransferDestination.image = frameSourceImage_;
+            toTransferDestination.subresourceRange.aspectMask =
+                VK_IMAGE_ASPECT_COLOR_BIT;
+            toTransferDestination.subresourceRange.baseMipLevel = 0u;
+            toTransferDestination.subresourceRange.levelCount = 1u;
+            toTransferDestination.subresourceRange.baseArrayLayer = 0u;
+            toTransferDestination.subresourceRange.layerCount = 1u;
+            const VkPipelineStageFlags sourceStage =
+                frameSourceLayout_ == VK_IMAGE_LAYOUT_UNDEFINED
+                    ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+                    : VK_PIPELINE_STAGE_TRANSFER_BIT;
+            vkCmdPipelineBarrier(
+                commandBuffer,
+                sourceStage,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0u, 0u, nullptr, 0u, nullptr, 1u,
+                &toTransferDestination);
+
+            VkBufferImageCopy copyRegion{};
+            copyRegion.bufferOffset = 0u;
+            copyRegion.bufferRowLength = 0u;
+            copyRegion.bufferImageHeight = 0u;
+            copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.imageSubresource.mipLevel = 0u;
+            copyRegion.imageSubresource.baseArrayLayer = 0u;
+            copyRegion.imageSubresource.layerCount = 1u;
+            copyRegion.imageOffset = {0, 0, 0};
+            copyRegion.imageExtent = {
+                pendingFrameWidth_, pendingFrameHeight_, 1u};
+            vkCmdCopyBufferToImage(
+                commandBuffer,
+                uploadBuffer_,
+                frameSourceImage_,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1u,
+                &copyRegion);
+
+            VkImageMemoryBarrier toTransferSource{
+                VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+            toTransferSource.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            toTransferSource.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            toTransferSource.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            toTransferSource.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            toTransferSource.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toTransferSource.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toTransferSource.image = frameSourceImage_;
+            toTransferSource.subresourceRange =
+                toTransferDestination.subresourceRange;
+            vkCmdPipelineBarrier(
+                commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0u, 0u, nullptr, 0u, nullptr, 1u, &toTransferSource);
+
+            frameSourceLayout_ = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            frameUploadDirty_ = false;
+        }
+
+        VkImageMemoryBarrier toSwapchainTransfer{
+            VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        toSwapchainTransfer.srcAccessMask = 0u;
+        toSwapchainTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        toSwapchainTransfer.oldLayout = swapchainLayouts_[imageIndex];
+        toSwapchainTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toSwapchainTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toSwapchainTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toSwapchainTransfer.image = swapchainImages_[imageIndex];
+        toSwapchainTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        toSwapchainTransfer.subresourceRange.baseMipLevel = 0u;
+        toSwapchainTransfer.subresourceRange.levelCount = 1u;
+        toSwapchainTransfer.subresourceRange.baseArrayLayer = 0u;
+        toSwapchainTransfer.subresourceRange.layerCount = 1u;
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0u, 0u, nullptr, 0u, nullptr, 1u,
+            &toSwapchainTransfer);
+
+        VkClearColorValue clearColor{};
+        clearColor.float32[3] = 1.0f;
+        vkCmdClearColorImage(
+            commandBuffer,
+            swapchainImages_[imageIndex],
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            &clearColor,
+            1u,
+            &toSwapchainTransfer.subresourceRange);
+
+        const uint64_t widthLimited =
+            static_cast<uint64_t>(swapchainExtent_.width) * pendingFrameHeight_;
+        const uint64_t heightLimited =
+            static_cast<uint64_t>(swapchainExtent_.height) * pendingFrameWidth_;
+        uint32_t scaledWidth = 0u;
+        uint32_t scaledHeight = 0u;
+        if (widthLimited <= heightLimited) {
+            scaledWidth = swapchainExtent_.width;
+            scaledHeight = static_cast<uint32_t>(
+                std::max<uint64_t>(
+                    1u,
+                    static_cast<uint64_t>(pendingFrameHeight_) *
+                        swapchainExtent_.width / pendingFrameWidth_));
+        } else {
+            scaledHeight = swapchainExtent_.height;
+            scaledWidth = static_cast<uint32_t>(
+                std::max<uint64_t>(
+                    1u,
+                    static_cast<uint64_t>(pendingFrameWidth_) *
+                        swapchainExtent_.height / pendingFrameHeight_));
+        }
+        scaledWidth = std::min(scaledWidth, swapchainExtent_.width);
+        scaledHeight = std::min(scaledHeight, swapchainExtent_.height);
+        const uint32_t left = (swapchainExtent_.width - scaledWidth) / 2u;
+        const uint32_t top = (swapchainExtent_.height - scaledHeight) / 2u;
+
+        VkImageBlit blit{};
+        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.mipLevel = 0u;
+        blit.srcSubresource.baseArrayLayer = 0u;
+        blit.srcSubresource.layerCount = 1u;
+        blit.srcOffsets[0] = {0, 0, 0};
+        blit.srcOffsets[1] = {
+            static_cast<int32_t>(pendingFrameWidth_),
+            static_cast<int32_t>(pendingFrameHeight_), 1};
+        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.mipLevel = 0u;
+        blit.dstSubresource.baseArrayLayer = 0u;
+        blit.dstSubresource.layerCount = 1u;
+        blit.dstOffsets[0] = {
+            static_cast<int32_t>(left), static_cast<int32_t>(top), 0};
+        blit.dstOffsets[1] = {
+            static_cast<int32_t>(left + scaledWidth),
+            static_cast<int32_t>(top + scaledHeight), 1};
+        vkCmdBlitImage(
+            commandBuffer,
+            frameSourceImage_,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            swapchainImages_[imageIndex],
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1u,
+            &blit,
+            VK_FILTER_NEAREST);
+
+        VkImageMemoryBarrier toPresent{
+            VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        toPresent.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        toPresent.dstAccessMask = 0u;
+        toPresent.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toPresent.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        toPresent.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toPresent.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toPresent.image = swapchainImages_[imageIndex];
+        toPresent.subresourceRange = toSwapchainTransfer.subresourceRange;
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            0u, 0u, nullptr, 0u, nullptr, 1u, &toPresent);
+
+        swapchainLayouts_[imageIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        return true;
+    }
+
     bool uploadFrameToSwapchain(
         VkCommandBuffer commandBuffer,
         uint32_t imageIndex) {
         if (!frameUploadSupported_) return false;
+
+        if (frameBlitSupported_) {
+            if (ensureFrameSourceImage() &&
+                uploadFrameToSwapchainBlit(commandBuffer, imageIndex)) {
+                return true;
+            }
+            frameBlitSupported_ = false;
+            destroyFrameSourceImage();
+            logMessage(ANDROID_LOG_WARN,
+                "Vulkan native-frame blit is unavailable at runtime; using the CPU scaler fallback");
+        }
 
         const bool targetChanged =
             uploadTargetWidth_ != swapchainExtent_.width ||
@@ -1272,6 +1706,14 @@ private:
         frameUploadSupported_ = rgbaCompatible &&
             (capabilities.supportedUsageFlags &
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT) != 0u;
+        VkFormatProperties frameFormatProperties{};
+        vkGetPhysicalDeviceFormatProperties(
+            physicalDevice_, selectedFormat.format, &frameFormatProperties);
+        const VkFormatFeatureFlags frameFormatFeatures =
+            frameFormatProperties.optimalTilingFeatures;
+        frameBlitSupported_ = frameUploadSupported_ &&
+            (frameFormatFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) != 0u &&
+            (frameFormatFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT) != 0u;
         swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         if (frameUploadSupported_) {
             swapchainInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -1471,6 +1913,7 @@ private:
             return;
         }
 
+        destroyFrameSourceImage();
         for (const VkSemaphore semaphore : renderFinished_) {
             if (semaphore != VK_NULL_HANDLE) {
                 vkDestroySemaphore(device_, semaphore, nullptr);
@@ -1542,6 +1985,11 @@ private:
     void *uploadMapped_ = nullptr;
     VkDeviceSize uploadBufferCapacity_ = 0u;
     VkMemoryPropertyFlags uploadMemoryFlags_ = 0u;
+    VkImage frameSourceImage_ = VK_NULL_HANDLE;
+    VkDeviceMemory frameSourceMemory_ = VK_NULL_HANDLE;
+    VkExtent2D frameSourceExtent_{};
+    VkFormat frameSourceFormat_ = VK_FORMAT_UNDEFINED;
+    VkImageLayout frameSourceLayout_ = VK_IMAGE_LAYOUT_UNDEFINED;
     std::vector<uint8_t> pendingFramePixels_;
     std::vector<uint8_t> uploadPixels_;
     uint32_t pendingFrameWidth_ = 0u;
@@ -1552,6 +2000,7 @@ private:
     bool frameUploadDirty_ = false;
     bool uploadBufferReady_ = false;
     bool frameUploadSupported_ = false;
+    bool frameBlitSupported_ = false;
     std::mutex gsQueueMutex_;
     std::vector<gow::android::GsGpuVertex> queuedGsVertices_;
     std::vector<QueuedGsDraw> queuedGsDraws_;
