@@ -350,13 +350,14 @@ def main() -> int:
     vif1_cpp = recompiler_source / "ps2xRuntime/src/lib/ps2_vif1_interpreter.cpp"
     replace_exactly_once(
         vif1_cpp,
-        "#include <immintrin.h>\\n",
-        "#if defined(__aarch64__) && defined(__ARM_NEON)\\n"
-        '#include "sse2neon.h"\\n'
-        "#else\\n"
-        "#include <immintrin.h>\\n"
-        "#endif\\n",
+        "#include <immintrin.h>\n",
+        "#if defined(__aarch64__) && defined(__ARM_NEON)\n"
+        '#include "sse2neon.h"\n'
+        "#else\n"
+        "#include <immintrin.h>\n"
+        "#endif\n",
         "select sse2neon for the native ARM64 VIF1 UNPACK fast path",
+    )
     )
 
     # Strict IOP mode: dispatch known AOT IRX functions, but refuse the guest CPU fallback.
