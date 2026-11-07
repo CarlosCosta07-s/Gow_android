@@ -138,7 +138,9 @@ public final class MainActivity extends AppCompatActivity {
                         updateBattery(reading);
                     }
                 });
-        restoreSelectedDisc();
+        if (!restoreSelectedDisc()) {
+            restorePrivateInstallationIfAvailable();
+        }
     }
 
     @Override
@@ -717,6 +719,20 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void onPlayPressed() {
+        if (selectedDiscUri == null
+                && selectedDiscValid
+                && selectedDiscSerial != null
+                && selectedDiscBootPath != null
+                && !selectedDiscBootPath.isEmpty()) {
+            File installation = new File(
+                    new File(getFilesDir(), "installations"),
+                    installationDirectoryName(selectedDiscSerial));
+            if (installation.isDirectory()) {
+                showExistingInstallationVerification(installation, selectedDiscBootPath);
+                return;
+            }
+        }
+
         if (selectedDiscUri == null) {
             new AlertDialog.Builder(this)
                     .setTitle("Nenhuma imagem selecionada")
@@ -746,16 +762,8 @@ public final class MainActivity extends AppCompatActivity {
         File existingInstallation = new File(
                 installationRoot, installationDirectoryName(selectedDiscSerial));
         if (existingInstallation.exists()) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Verificar disco instalado")
-                    .setMessage(
-                            "Já existe uma instalação privada para " + selectedDiscSerial
-                                    + ". O FORGE vai conferir o ELF, os metadados do disco "
-                                    + "e o serviço CDVD antes de permitir qualquer próxima etapa. "
-                                    + "Esta verificação não inicia o jogo.")
-                    .setPositiveButton("Verificar", (dialog, which) -> startFullDiscInstall())
-                    .setNegativeButton("Cancelar", null)
-                    .show();
+            showExistingInstallationVerification(
+                    existingInstallation, selectedDiscBootPath);
             return;
         }
 
@@ -769,6 +777,23 @@ public final class MainActivity extends AppCompatActivity {
                                 + "não inicia o jogo. A instalação só será publicada quando "
                                 + "todos os arquivos e metadados forem concluídos.")
                 .setPositiveButton("Preparar", (dialog, which) -> startFullDiscInstall())
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    private void showExistingInstallationVerification(
+            File installation, String bootPath) {
+        new AlertDialog.Builder(this)
+                .setTitle("Verificar disco instalado")
+                .setMessage(
+                        "Já existe uma instalação privada para " + selectedDiscSerial
+                                + ". O FORGE vai conferir o ELF, os metadados do disco "
+                                + "e o serviço CDVD antes de permitir a próxima etapa. "
+                                + "Esta verificação não inicia o jogo nem copia a ISO novamente.")
+                .setPositiveButton(
+                        "Verificar",
+                        (dialog, which) ->
+                                verifyExistingInstallationAsync(installation, bootPath))
                 .setNegativeButton("Cancelar", null)
                 .show();
     }
@@ -934,10 +959,16 @@ public final class MainActivity extends AppCompatActivity {
                     (dialog, which) -> openRuntimeDiagnostics());
         } else {
             discStatus.setText("A instalação precisa ser reparada antes de qualquer execução.");
-            resultDialog
-                    .setPositiveButton("Reinstalar", (dialog, which) ->
-                            confirmInstallationRepair())
-                    .setNegativeButton("Cancelar", null);
+            if (selectedDiscUri != null) {
+                resultDialog.setPositiveButton("Reinstalar", (dialog, which) ->
+                        confirmInstallationRepair());
+            } else {
+                resultDialog.setPositiveButton(
+                        "Selecionar ISO",
+                        (dialog, which) ->
+                                openDocumentLauncher.launch(new String[]{"*/*"}));
+            }
+            resultDialog.setNegativeButton("Cancelar", null);
         }
         resultDialog.show();
     }
@@ -1366,14 +1397,69 @@ public final class MainActivity extends AppCompatActivity {
         validateAndDisplay(uri);
     }
 
-    private void restoreSelectedDisc() {
+    private boolean restoreSelectedDisc() {
         String savedUri = getPreferences(MODE_PRIVATE)
                 .getString(PREF_DISC_URI, null);
         if (savedUri == null || savedUri.isEmpty()) {
-            return;
+            return false;
         }
         selectedDiscUri = Uri.parse(savedUri);
         validateAndDisplay(selectedDiscUri);
+        return true;
+    }
+
+    /**
+     * Recovers the installed NTSC-U game without requiring the original SAF URI.
+     * This is used after a safe Debug-signing migration or when the user no
+     * longer has access to the document provider that supplied the ISO.
+     */
+    private void restorePrivateInstallationIfAvailable() {
+        File installation = new File(
+                new File(getFilesDir(), "installations"),
+                "gow_scus_973_99_ntsc_u");
+        File cdRoot = new File(installation, "disc");
+        File systemCnf = new File(cdRoot, "SYSTEM.CNF");
+        if (!systemCnf.isFile() || systemCnf.length() <= 0L
+                || systemCnf.length() > 64L * 1024L) {
+            return;
+        }
+
+        try (InputStream input = new FileInputStream(systemCnf)) {
+            byte[] bytes = new byte[(int) systemCnf.length()];
+            int total = 0;
+            while (total < bytes.length) {
+                int count = input.read(bytes, total, bytes.length - total);
+                if (count <= 0) {
+                    throw new IOException("SYSTEM.CNF privado foi truncado.");
+                }
+                total += count;
+            }
+            String bootPath = parseSystemCnfBootPath(
+                    new String(bytes, StandardCharsets.US_ASCII));
+            if (!"SCUS_973.99".equals(new File(bootPath).getName())) {
+                throw new IOException(
+                        "A instalação privada não pertence ao perfil NTSC-U suportado.");
+            }
+            selectedDiscUri = null;
+            selectedDiscValid = true;
+            selectedDiscSerial = "SCUS_973.99 (NTSC-U)";
+            selectedDiscBootPath = bootPath;
+            discName.setText("God of War (instalação privada)");
+            discStatus.setText(
+                    "Instalação privada NTSC-U encontrada. A integridade SHA-256 "
+                            + "ainda precisa ser verificada antes de abrir o runtime.");
+            discStatus.setTextColor(COLOR_WARNING);
+            if (installDiscButton != null) {
+                installDiscButton.setText("VERIFICAR DISCO");
+                installDiscButton.setContentDescription(
+                        "Verificar a instalação privada existente de God of War");
+            }
+        } catch (IOException | SecurityException exception) {
+            discStatus.setText(
+                    "Foi encontrada uma instalação privada, mas SYSTEM.CNF não pôde "
+                            + "ser validado: " + safeMessage(exception));
+            discStatus.setTextColor(COLOR_ERROR);
+        }
     }
 
     private void validateAndDisplay(Uri uri) {
@@ -1505,42 +1591,16 @@ public final class MainActivity extends AppCompatActivity {
         byte[] systemCnf = readAt(
                 descriptor, systemCnfExtent * ISO_SECTOR_SIZE, (int) systemCnfSize);
         String text = new String(systemCnf, StandardCharsets.US_ASCII);
-        String bootTarget = null;
-
-        for (String line : text.split("\\r?\\n")) {
-            int equals = line.indexOf('=');
-            if (equals < 0) {
-                continue;
-            }
-            String key = line.substring(0, equals).trim();
-            if ("BOOT2".equalsIgnoreCase(key)) {
-                bootTarget = line.substring(equals + 1).trim();
-                break;
-            }
-        }
-
-        if (bootTarget == null || bootTarget.isEmpty()) {
-            throw new IOException("SYSTEM.CNF não contém a entrada BOOT2.");
-        }
-
-        String executablePath = bootTarget.replace('\\', '/');
-        int colon = executablePath.indexOf(':');
-        if (colon >= 0) {
-            executablePath = executablePath.substring(colon + 1);
-        }
-        int slash = executablePath.lastIndexOf('/');
+        String normalizedBootPath = parseSystemCnfBootPath(text);
+        int slash = normalizedBootPath.lastIndexOf('/');
         String executable = slash >= 0
-                ? executablePath.substring(slash + 1)
-                : executablePath;
-        int version = executable.indexOf(';');
-        if (version >= 0) {
-            executable = executable.substring(0, version);
-        }
-        String serial = executable.trim().toUpperCase(Locale.ROOT);
+                ? normalizedBootPath.substring(slash + 1)
+                : normalizedBootPath;
+        String serial = executable.toUpperCase(Locale.ROOT);
         if (executablePathOut == null || executablePathOut.length == 0) {
             throw new IOException("Não foi possível armazenar o caminho BOOT2.");
         }
-        executablePathOut[0] = normalizeIsoPathForInstall(executablePath);
+        executablePathOut[0] = normalizedBootPath;
 
         if ("SCUS_973.99".equals(serial)) {
             return "SCUS_973.99 (NTSC-U)";
@@ -1551,6 +1611,33 @@ public final class MainActivity extends AppCompatActivity {
         throw new IOException(
                 "SYSTEM.CNF aponta para " + serial
                         + ". Esta versão reconhece SCUS_973.99 (NTSC-U) e SCES_531.33 (PAL).");
+    }
+
+    private static String parseSystemCnfBootPath(String systemCnfText)
+            throws IOException {
+        String bootTarget = null;
+        for (String line : systemCnfText.split("\\r?\\n")) {
+            int equals = line.indexOf('=');
+            if (equals < 0) continue;
+            String key = line.substring(0, equals).trim();
+            if ("BOOT2".equalsIgnoreCase(key)) {
+                bootTarget = line.substring(equals + 1).trim();
+                break;
+            }
+        }
+        if (bootTarget == null || bootTarget.isEmpty()) {
+            throw new IOException("SYSTEM.CNF não contém a entrada BOOT2.");
+        }
+        String executablePath = bootTarget.replace('\\', '/');
+        int colon = executablePath.indexOf(':');
+        if (colon >= 0) {
+            String device = executablePath.substring(0, colon).trim();
+            if (!"cdrom0".equalsIgnoreCase(device)) {
+                throw new IOException("SYSTEM.CNF aponta para um dispositivo BOOT2 não suportado.");
+            }
+            executablePath = executablePath.substring(colon + 1);
+        }
+        return normalizeIsoPathForInstall(executablePath);
     }
 
     private static String normalizeIsoPathForInstall(String path) throws IOException {
