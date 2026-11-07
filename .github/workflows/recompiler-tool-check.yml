@@ -72,6 +72,10 @@ jobs:
           python -m py_compile tools/build_android_game.py tools/test_android_game_build.py
           python tools/test_android_game_build.py
           python tools/build_android_game.py --help
+          python tools/build_android_game.py \
+            --installed-android \
+            --plan-only \
+            --work-dir "$RUNNER_TEMP/gowport-installed-plan"
 
       - name: Test automatic private Android AOT capture sync
         run: |
