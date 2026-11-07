@@ -9,8 +9,9 @@ class GSTextureStore;
 
 namespace gow::android {
 
-// Initial software GS path: opaque CT32/CT24/CT16 primitives with optional decoded texture sampling.
-// Writes pixels into the same 4 MiB swizzled VRAM image used by CDVD/GS.
+// CPU GS rasterizer for CT32/CT24/CT16/CT16S framebuffers. Supports decoded texture
+// sampling, GS alpha/depth tests and GS alpha blending; FGE fog and AA1 coverage remain
+// unsupported and are rejected explicitly. Writes into the 4 MiB swizzled PS2 VRAM image.
 bool rasterizeGsBatchToVram(
     GSTextureStore &store,
     const GSPrimitiveBatch &batch,
