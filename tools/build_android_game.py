@@ -126,14 +126,17 @@ def create_build_plan(
     )
     gradle = gradle_executable or ("gradle.bat" if use_windows else "gradle")
     android_project = (root / "android").resolve()
-    gradle_command = (
-        gradle,
+    gradle_arguments = (
         "--project-dir",
         str(android_project),
         "--no-daemon",
         "--max-workers=1",
         "assembleDebug",
     )
+    if use_windows and gradle.lower().endswith((".bat", ".cmd")):
+        gradle_command = ("cmd", "/c", gradle, *gradle_arguments)
+    else:
+        gradle_command = (gradle, *gradle_arguments)
     return BuildPlan(
         elf=elf,
         work_dir=work,
