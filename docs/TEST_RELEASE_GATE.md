@@ -20,6 +20,10 @@ O primeiro boot de captura é apenas uma etapa interna de desenvolvimento. Ele p
 - [ ] Todos os módulos IOP capturados têm código nativo e registro correspondente.
 - [ ] O relatório não indica blocos VU1 sem suporte nem callouts ao interpretador.
 - [ ] Todos os itens acima pertencem à mesma ISO/revisão e ao mesmo workspace/build identificado.
+- [ ] O Android grava `game_identity.txt` após validar BOOT2, incluindo instalação, caminho BOOT2, tamanho e SHA-256 do ELF; o manifesto acompanha as capturas privadas.
+- [ ] O host confirma que o SHA-256 e o tamanho do ELF atual coincidem com a identidade capturada; capturas de outra revisão são rejeitadas.
+- [ ] Todos os arquivos C++ VU1/IOP enumerados no resumo existem, são regulares, não são symlinks e têm conteúdo não vazio.
+- [ ] Se a identidade do BOOT2 mudar, as capturas VU1/IOP antigas são descartadas antes de novas capturas serem coletadas.
 - [ ] A compilação do candidato usa `tools/build_android_game.py --require-full-native-aot`; o modo bootstrap/parcial deve falhar antes de gerar APK.
 
 **Limite dessa verificação:** `full_native_aot=true` significa que o material presente nas capturas está completo segundo o gerador. Não prova que uma fase ainda não executada nunca carregará um novo microprograma ou módulo. Por isso a verificação de boot/menu abaixo continua obrigatória.
