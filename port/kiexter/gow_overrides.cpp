@@ -7,7 +7,9 @@
 #include "ps2_runtime_macros.h"
 #include "ps2_host_backend.h"
 #include "gow_pad2_packet.h"
+#if !defined(__ANDROID__)
 #include "gow_gs_replay.h" // GOW-Port: captura opcional y acotada para comparar backends.
+#endif
 #include "runtime/gs/gs_display.h" // GOW-Port: native display state + GS FINISH handshake (step 5).
 #include <ps2_recompiled_functions.h>
 void sub_00110E40_0x110e40(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime); // GOW-Port: pose blend entry, for GOW_BLEND_DIAG
@@ -25,7 +27,11 @@ void gowDumpBranchRing(const char *why);
 #include <unordered_map>
 #include <cctype>
 #include <cmath>
+#if defined(__aarch64__) && defined(__ARM_NEON)
+#include "runtime/ps2_vu1_neon_compat.h"
+#else
 #include <xmmintrin.h>
+#endif
 #include <thread>
 #include <algorithm>
 #include <cstdio>
@@ -2118,7 +2124,9 @@ namespace
             }).detach();
         }
         configureGowCdImage();
+#if !defined(__ANDROID__)
         gow_gs_replay::configure(runtime.memory(),runtime.gs());
+#endif
         // El heap interno del runtime va bajo el ELF (memoria libre) para no pisar el heap propio del juego,
         // que este crea con SetupHeap al final del .bss (patches/ps2recomp-heap.patch).
         runtime.setPrivateGuestHeap(0x000A0000u, 0x000FF000u);
