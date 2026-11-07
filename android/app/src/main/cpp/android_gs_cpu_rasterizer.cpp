@@ -406,16 +406,13 @@ uint32_t applyGsAlphaBlend(
     return result;
 }
 
-void writePixel(
+void writePixelUnchecked(
     GSTextureStore &store,
     const GSDrawState &state,
-    uint32_t targetWidth,
     int x,
     int y,
     const RasterVertex &inputColor,
     const std::vector<uint32_t> *texturePixels) {
-    if (!insideTarget(state.context, targetWidth, x, y)) return;
-
     const uint32_t pixelX = static_cast<uint32_t>(x);
     const uint32_t pixelY = static_cast<uint32_t>(y);
     const uint32_t zMask = depthMaskForPsm(state.context.zbuf.psm);
@@ -467,6 +464,18 @@ void writePixel(
             state.context.zbuf.psm, state.context.zbuf.zbp,
             state.context.frame.fbw, pixelX, pixelY, z);
     }
+}
+
+void writePixel(
+    GSTextureStore &store,
+    const GSDrawState &state,
+    uint32_t targetWidth,
+    int x,
+    int y,
+    const RasterVertex &inputColor,
+    const std::vector<uint32_t> *texturePixels) {
+    if (!insideTarget(state.context, targetWidth, x, y)) return;
+    writePixelUnchecked(store, state, x, y, inputColor, texturePixels);
 }
 
 void rasterizePoint(
@@ -565,7 +574,7 @@ void rasterizeTriangle(
             if (wa >= epsilon && wb >= epsilon && wc >= epsilon) {
                 const RasterVertex pixel = interpolateTriangle(
                     a, b, c, wa, wb, wc);
-                writePixel(store, state, width, x, y, pixel, texturePixels);
+                writePixelUnchecked(store, state, x, y, pixel, texturePixels);
             }
             wa += waStepX;
             wb += wbStepX;
@@ -621,7 +630,7 @@ void rasterizeSprite(
                 pixel.t = first.t + (second.t - first.t) * v;
                 pixel.q = first.q + (second.q - first.q) * ((u + v) * 0.5f);
             }
-            writePixel(store, state, width, x, y, pixel, texturePixels);
+            writePixelUnchecked(store, state, x, y, pixel, texturePixels);
         }
     }
 }
