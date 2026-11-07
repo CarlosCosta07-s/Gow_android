@@ -129,12 +129,14 @@ class AndroidAotAdbCaptureSyncTests(unittest.TestCase):
                 self.stdout = io.BytesIO(payload)
                 self.stderr = io.BytesIO(b"")
                 self.killed = False
+                self.completed = False
 
             def wait(self) -> int:
+                self.completed = True
                 return 0
 
-            def poll(self) -> int:
-                return 0
+            def poll(self) -> int | None:
+                return -9 if self.killed else (0 if self.completed else None)
 
             def kill(self) -> None:
                 self.killed = True
