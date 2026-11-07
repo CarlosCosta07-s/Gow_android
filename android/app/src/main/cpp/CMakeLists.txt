@@ -167,6 +167,12 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
     # in the prepared runtime until a native Android audio adapter is available.
     target_compile_definitions(ps2_runtime PRIVATE PS2X_ANDROID_LIFECYCLE_MANAGED=1)
 
+    # Keep the Debug APK useful for real-device performance testing. The NDK
+    # Debug profile normally favors diagnostics over execution speed; compile
+    # the guest runtime and the generated game AOT at -O2 while retaining -g.
+    # Avoid -ffast-math: PS2 floating-point behavior must remain deterministic.
+    target_compile_options(ps2_runtime PRIVATE -O2 -fno-strict-aliasing)
+
     set_property(GLOBAL APPEND PROPERTY JOB_POOLS
         gow_android_native_compile=${GOW_ANDROID_NATIVE_COMPILE_JOBS})
     set_property(TARGET ps2_runtime PROPERTY JOB_POOL_COMPILE gow_android_native_compile)
@@ -276,6 +282,8 @@ if(GOW_ANDROID_ENABLE_GS_VULKAN)
 endif()
 
 target_compile_options(android-game PRIVATE
+    -O2
+    -fno-strict-aliasing
     -Wall
     -Wextra
     -Wpedantic
