@@ -2002,6 +2002,11 @@ extern "C" void android_main(android_app* app) {
                 runtime->memory().gs().vsyncTick.load(std::memory_order_acquire);
             if (currentVsyncTick != lastVulkanPresentedVsyncTick) {
                 lastVulkanPresentedVsyncTick = currentVsyncTick;
+                // Match the PC port's UploadFrame() contract: first ask the GS
+                // backend to flush/present the current CRTC state, then copy the
+                // newly latched image. Merely copying here can leave Android on
+                // an empty frame forever because the Raylib host uploader is absent.
+                runtime->gs().latchHostPresentationFrame();
                 uint32_t frameWidth = 0u;
                 uint32_t frameHeight = 0u;
                 if (runtime->gs().copyLatchedHostPresentationFrame(
