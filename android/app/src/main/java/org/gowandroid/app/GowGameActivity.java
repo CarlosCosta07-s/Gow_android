@@ -592,6 +592,10 @@ public final class GowGameActivity extends GameActivity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
+    private int dp(float value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
     /**
      * Called by the Android native-app thread through JNI. UI changes are
      * always posted to the Activity's main thread.
