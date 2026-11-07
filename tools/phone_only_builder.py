@@ -340,6 +340,8 @@ def make_handler(state: BuilderState) -> type[http.server.BaseHTTPRequestHandler
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(payload)))
             self.send_header("Cache-Control", "no-store")
+            if self.close_connection:
+                self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(payload)
 
@@ -360,6 +362,10 @@ def make_handler(state: BuilderState) -> type[http.server.BaseHTTPRequestHandler
         def require_auth(self) -> bool:
             if self.authorized():
                 return True
+            # A rejected request body has not been consumed. Close this HTTP/1.1
+            # connection after the 401 so those bytes cannot be parsed as the
+            # next request on the same keep-alive socket.
+            self.close_connection = True
             self.send_json(401, {"message": "Token inválido ou ausente."})
             return False
 
