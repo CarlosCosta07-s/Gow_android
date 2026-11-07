@@ -53,12 +53,13 @@ In Termux, pair ADB with the same phone using the values shown by Android:
 
 ```bash
 python tools/termux_phone_bridge.py connect \
+  --host-ip IP_MOSTRADO_NO_ANDROID \
   --pairing-port PORTA_DE_PAREAMENTO \
   --code CODIGO \
   --connection-port PORTA_DE_CONEXAO
 ```
 
-The bridge uses `127.0.0.1` intentionally: Termux is connecting to the Android Debug Bridge running on the same phone. This self-connection works on some Android builds but is OEM-dependent. The script verifies both the ADB device and `run-as org.gowandroid.app.debug` before continuing. If it reports `unauthorized` or connection refused, do not uninstall the game; stop there and retain the verified private installation.
+Use the IPv4 address displayed on Android's Wireless debugging page as `--host-ip`; the pairing dialog shows its pairing port/code, while the main Wireless debugging page shows the separate connection port. Termux then tries to reach the phone's own Wi-Fi interface address from the same device. This self-connection is OEM-dependent and has not yet been confirmed on the user's ColorOS build. The script verifies both the ADB device and `run-as org.gowandroid.app.debug` before continuing. If it reports `unauthorized` or connection refused, do not uninstall the game; stop there and retain the verified private installation.
 
 ## 4. Install the APK without losing the installed ISO
 
