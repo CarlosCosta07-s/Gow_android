@@ -152,7 +152,8 @@ PS2Runtime::RecompiledFunction g_ps2RecompiledFunctionTable[1u] = {};
             gradle_executable="C:/Gradle/bin/gradle.bat",
         )
         self.assertEqual(
-            plan.gradle_command[0], "C:/Gradle/bin/gradle.bat"
+            plan.gradle_command[:3],
+            ("cmd", "/c", "C:/Gradle/bin/gradle.bat"),
         )
         self.assertIn("--project-dir", plan.gradle_command)
         self.assertEqual(
