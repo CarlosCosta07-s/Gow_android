@@ -20,7 +20,6 @@ class AndroidGameBuildPlanTests(unittest.TestCase):
         (self.root / "tools").mkdir()
         (self.root / "tools/build_recompiler_host.py").write_text("# test", encoding="utf-8")
         (self.root / "android/app/build").mkdir(parents=True)
-        (self.root / "gradlew").write_text("#!/bin/sh\n", encoding="utf-8")
         self.private = Path(self.temporary.name) / "private"
         self.private.mkdir()
         self.elf = self.private / "SCUS_973.99"
@@ -106,6 +105,7 @@ PS2Runtime::RecompiledFunction g_ps2RecompiledFunctionTable[1u] = {};
         plan = create_build_plan(
             self.root, self.elf, self.work,
             python_executable="python-test", windows=False,
+            gradle_executable="gradle-test",
         )
         self.assertEqual(plan.elf, self.elf.resolve())
         self.assertEqual(plan.work_dir, self.work.resolve())
@@ -117,6 +117,12 @@ PS2Runtime::RecompiledFunction g_ps2RecompiledFunctionTable[1u] = {};
         self.assertIn(str(plan.work_dir), plan.prepare_runtime_command)
         self.assertIn("--export-game-cpp-dir", plan.recompiler_command)
         self.assertIn(str(plan.generated_dir), plan.recompiler_command)
+        self.assertEqual(plan.gradle_command[0], "gradle-test")
+        self.assertIn("--project-dir", plan.gradle_command)
+        self.assertEqual(
+            plan.gradle_command[plan.gradle_command.index("--project-dir") + 1],
+            str((self.root / "android").resolve()),
+        )
         self.assertIn("--max-workers=1", plan.gradle_command)
         self.assertEqual(plan.gradle_command[-1], "assembleDebug")
         self.assertTrue(str(plan.apk_path).endswith("outputs/apk/debug/app-debug.apk"))
@@ -139,14 +145,20 @@ PS2Runtime::RecompiledFunction g_ps2RecompiledFunctionTable[1u] = {};
         with self.assertRaisesRegex(ValueError, "ASCII characters"):
             create_build_plan(self.root, self.elf, non_ascii, windows=False)
 
-    def test_windows_plan_uses_cmd_for_gradle_batch_wrapper(self) -> None:
-        (self.root / "gradlew.bat").write_text("@echo off\\r\\n", encoding="utf-8")
+    def test_windows_plan_uses_installed_gradle_batch_command(self) -> None:
         plan = create_build_plan(
             self.root, self.elf, self.work,
             python_executable="python-test", windows=True,
+            gradle_executable="C:/Gradle/bin/gradle.bat",
         )
-        self.assertEqual(plan.gradle_command[:2], ("cmd", "/c"))
-        self.assertTrue(plan.gradle_command[2].endswith("gradlew.bat"))
+        self.assertEqual(
+            plan.gradle_command[0], "C:/Gradle/bin/gradle.bat"
+        )
+        self.assertIn("--project-dir", plan.gradle_command)
+        self.assertEqual(
+            plan.gradle_command[plan.gradle_command.index("--project-dir") + 1],
+            str((self.root / "android").resolve()),
+        )
         self.assertEqual(plan.gradle_command[-1], "assembleDebug")
 
     def test_rejects_pal_executable_for_ntsc_u_map(self) -> None:
