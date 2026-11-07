@@ -45,6 +45,10 @@ struct AndroidGSVulkanBackend::Impl {
     void *userData = nullptr;
     GeometrySink geometrySink = nullptr;
     GSTextureStore textureStore;
+    // Decode one texture at a time into a persistent buffer. DecodeTextureRgba
+    // uses vector::resize(), so capacity survives between adjacent GS batches.
+    // This avoids one heap allocation/free pair for every textured primitive.
+    std::vector<uint32_t> decodedTextureScratch;
     uint8_t *vram = nullptr;
     uint32_t vramSize = 0u;
     bool initialized = false;
@@ -81,11 +85,11 @@ void AndroidGSVulkanBackend::Submit(const GSPrimitiveBatch &batch) {
     if (!impl_->initialized) return;
 
     std::string error;
-    std::vector<uint32_t> decodedTexture;
     const std::vector<uint32_t> *texturePixels = nullptr;
     if (batch.state.prim.tme) {
-        impl_->textureStore.DecodeTextureRgba(batch.state, decodedTexture);
-        texturePixels = &decodedTexture;
+        impl_->textureStore.DecodeTextureRgba(
+            batch.state, impl_->decodedTextureScratch);
+        texturePixels = &impl_->decodedTextureScratch;
     }
     if (!rasterizeGsBatchToVram(
             impl_->textureStore, batch, texturePixels, error)) {
