@@ -91,6 +91,7 @@ def inspect_irx(path: Path, relative_path: str) -> dict[str, Any]:
     load_segments: list[tuple[int, int, int, int, int]] = []
     module_entry = entry
     module_gp: int | None = None
+    fallback_gp: int | None = None
 
     for index in range(phnum):
         offset = phoff + index * phentsize
@@ -114,9 +115,10 @@ def inspect_irx(path: Path, relative_path: str) -> dict[str, Any]:
         if p_type == PT_MIPS_REGINFO and p_filesz >= 24:
             if p_offset > len(data) or 24 > len(data) - p_offset:
                 raise IrxFormatError("PT_MIPS_REGINFO metadata is outside the IRX file")
-            gp = struct.unpack_from("<I", data, p_offset + 20)[0]
-            if module_gp in (None, 0):
-                module_gp = gp
+            fallback_gp = struct.unpack_from("<I", data, p_offset + 20)[0]
+
+    if module_gp in (None, 0):
+        module_gp = fallback_gp
 
     sections: list[tuple[int, ...]] = []
     relocation_sections = 0
