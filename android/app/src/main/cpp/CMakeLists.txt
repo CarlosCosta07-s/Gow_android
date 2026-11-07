@@ -118,6 +118,13 @@ if(EXISTS "${GOW_WAFFLE_SOURCE_DIR}/CMakeLists.txt")
         message(FATAL_ERROR "Prepared Waffle tree did not define ps2_runtime.")
     endif()
 
+    # The runtime is a separate CMake target: android-game's USE_SSE2NEON
+    # definition and include path do not propagate backwards through linking.
+    # Compile the PS2 core itself against sse2neon on Android ARM64.
+    target_compile_definitions(ps2_runtime PRIVATE USE_SSE2NEON)
+    target_include_directories(ps2_runtime PRIVATE
+        "${CMAKE_BINARY_DIR}/_deps/sse2neon-src")
+
     # Private VU1 blocks are generated from the user's captured 16 KiB micro-memory
     # images. They are compiled into the Android runtime; no interpreter fallback
     # is enabled in the shipped native-only profile.
