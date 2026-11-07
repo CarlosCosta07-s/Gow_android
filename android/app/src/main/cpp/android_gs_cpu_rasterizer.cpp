@@ -694,7 +694,7 @@ bool rasterizeGsBatchToVram(
     const GSContext &context = batch.state.context;
     if (context.frame.fbw == 0u ||
         !supportedFramebufferPsm(context.frame.psm)) {
-        error = "GS rasterizer supports only non-zero FBW CT32/CT24/CT16 framebuffers.";
+        error = "GS rasterizer supports only non-zero FBW CT32/CT24/CT16/CT16S framebuffers.";
         return false;
     }
     if (batch.state.prim.fge || batch.state.prim.aa1) {
