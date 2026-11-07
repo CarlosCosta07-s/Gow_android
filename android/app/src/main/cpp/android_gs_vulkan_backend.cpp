@@ -12,14 +12,32 @@
 #endif
 #include <atomic>
 #include <exception>
+#include <mutex>
 #include <stdexcept>
+#include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 namespace gow::android {
 namespace {
 
-std::atomic<bool> gUnsupportedBatchLogged{false};
+std::mutex gUnsupportedBatchLogMutex;
+std::unordered_set<std::string> gUnsupportedBatchReasons;
+std::atomic<bool> gUnsupportedBatchOverflowLogged{false};
+constexpr size_t kMaxLoggedUnsupportedBatchReasons = 8u;
+
+size_t registerUnsupportedBatchReason(const std::string &reason) {
+    std::lock_guard<std::mutex> lock(gUnsupportedBatchLogMutex);
+    if (gUnsupportedBatchReasons.find(reason) != gUnsupportedBatchReasons.end()) {
+        return 0u;
+    }
+    if (gUnsupportedBatchReasons.size() >= kMaxLoggedUnsupportedBatchReasons) {
+        return kMaxLoggedUnsupportedBatchReasons + 1u;
+    }
+    gUnsupportedBatchReasons.insert(reason);
+    return gUnsupportedBatchReasons.size();
+}
 
 } // namespace
 
@@ -71,19 +89,35 @@ void AndroidGSVulkanBackend::Submit(const GSPrimitiveBatch &batch) {
     }
     if (!rasterizeGsBatchToVram(
             impl_->textureStore, batch, texturePixels, error)) {
-        bool expected = false;
-        if (gUnsupportedBatchLogged.compare_exchange_strong(
-                expected, true, std::memory_order_acq_rel)) {
+        const std::string reason = error.empty()
+            ? "no detail supplied" : error;
+        const size_t reasonIndex = registerUnsupportedBatchReason(reason);
+        if (reasonIndex > 0u &&
+            reasonIndex <= kMaxLoggedUnsupportedBatchReasons) {
 #if defined(__ANDROID__)
             __android_log_print(
                 ANDROID_LOG_WARN, "GowAndroid",
-                "GS CPU rasterizer skipped a batch with unsupported state: %s",
-                error.empty() ? "no detail supplied" : error.c_str());
+                "GS CPU rasterizer skipped an unsupported batch (reason %zu/%zu): %s",
+                reasonIndex, kMaxLoggedUnsupportedBatchReasons, reason.c_str());
 #else
             std::fprintf(
                 stderr,
-                "[GowAndroid][GS] skipped a batch with unsupported state: %s\\n",
-                error.empty() ? "no detail supplied" : error.c_str());
+                "[GowAndroid][GS] skipped unsupported batch (reason %zu/%zu): %s\\n",
+                reasonIndex, kMaxLoggedUnsupportedBatchReasons, reason.c_str());
+#endif
+        } else if (reasonIndex > kMaxLoggedUnsupportedBatchReasons &&
+                   !gUnsupportedBatchOverflowLogged.exchange(
+                       true, std::memory_order_acq_rel)) {
+#if defined(__ANDROID__)
+            __android_log_print(
+                ANDROID_LOG_WARN, "GowAndroid",
+                "Further distinct unsupported GS batch reasons are suppressed after %zu entries",
+                kMaxLoggedUnsupportedBatchReasons);
+#else
+            std::fprintf(
+                stderr,
+                "[GowAndroid][GS] further distinct unsupported batch reasons suppressed after %zu entries\\n",
+                kMaxLoggedUnsupportedBatchReasons);
 #endif
         }
         return;
