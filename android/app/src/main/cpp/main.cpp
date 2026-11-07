@@ -35,6 +35,7 @@
 class PS2Runtime;
 extern "C" PS2Runtime *gowCreatePs2Runtime() noexcept;
 extern "C" void gowDestroyPs2Runtime(PS2Runtime *runtime) noexcept;
+extern "C" bool gowRuntimeHasPrivateAotTable() noexcept;
 extern "C" bool gowInitializePs2RuntimeCoreHeadless(
     PS2Runtime *runtime, char *message, size_t capacity) noexcept;
 extern "C" bool gowRuntimeLoadElfAndCheckAot(
@@ -131,6 +132,7 @@ std::string gBootRelativePath;
 bool gBootPathConfigurationReceived = false;
 PS2Runtime *gActiveRuntime = nullptr;
 bool gGsBackendAttached = false;
+bool gPrivateAotTableAvailable = false;
 bool gPrivateAotElfReady = false;
 bool gGuestExecutionStartAttempted = false;
 bool gGuestExecutionStarted = false;
@@ -2071,6 +2073,12 @@ void handleAppCommand(android_app* app, int32_t command) {
     switch (command) {
         case APP_CMD_INIT_WINDOW:
             if (app->window != nullptr) {
+                if (!gPrivateAotTableAvailable) {
+                    logMessage(
+                        ANDROID_LOG_WARN,
+                        "Vulkan/GS startup skipped: this APK has no private game AOT table");
+                    break;
+                }
 #if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
                 if (gRenderer.initialize(app->window)) {
 #if defined(GOW_ANDROID_ENABLE_GS_VULKAN)
@@ -2098,7 +2106,9 @@ void handleAppCommand(android_app* app, int32_t command) {
         case APP_CMD_WINDOW_RESIZED:
         case APP_CMD_CONTENT_RECT_CHANGED:
 #if defined(GOW_ANDROID_ENABLE_VULKAN_SMOKE) || defined(GOW_ANDROID_ENABLE_GS_VULKAN)
-            gRenderer.recreateSwapchain();
+            if (gPrivateAotTableAvailable) {
+                gRenderer.recreateSwapchain();
+            }
 #endif
             break;
 
@@ -2274,79 +2284,96 @@ extern "C" void android_main(android_app* app) {
     android_app_set_motion_event_filter(app, nullptr);
 
     logMessage(ANDROID_LOG_INFO, "Gow_android native shell started");
+    gPrivateAotTableAvailable = gowRuntimeHasPrivateAotTable();
     gPrivateAotElfReady = false;
     gGuestExecutionStartAttempted = false;
     gGuestExecutionStarted = false;
     gGuestExecutionFinishReported = false;
+    gGsBackendAttached = false;
 
-    // Initialize the EE/IOP/VU core without Raylib. The first-boot worker is a
-    // diagnostic attempt, gated by the user's private ELF/AOT entry point and by
-    // the experimental CPU GS->VRAM->CRTC backend plus a ready Vulkan surface.
-    // This does not imply full GS parity or validated gameplay. Audio output stays
-    // silent until an Android AAudio/Oboe backend is integrated.
-    reportRuntimeStatus(
-        app, "Preparando o núcleo PS2 (memória, EE, IOP e VU)...", false);
-    PS2Runtime *runtime = gowCreatePs2Runtime();
-    gActiveRuntime = runtime;
-    if (runtime != nullptr) {
-        std::array<char, 512> coreMessage{};
-        if (gowInitializePs2RuntimeCoreHeadless(
-                runtime, coreMessage.data(), coreMessage.size())) {
-            __android_log_print(
-                ANDROID_LOG_INFO, kTag,
-                "PS2Runtime core ready: %s", coreMessage.data());
-
-            std::string bootPath;
-            {
-                std::unique_lock<std::mutex> lock(gBootPathMutex);
-                gBootPathCondition.wait(
-                    lock, [] { return gBootPathConfigurationReceived; });
-                bootPath = gBootRelativePath;
-            }
-            if (!bootPath.empty()) {
-                std::array<char, 512> loadMessage{};
-                const bool elfReady = gowRuntimeLoadElfAndCheckAot(
-                    runtime, bootPath.c_str(),
-                    loadMessage.data(), loadMessage.size());
-                gPrivateAotElfReady = elfReady;
-                __android_log_print(
-                    elfReady ? ANDROID_LOG_INFO : ANDROID_LOG_WARN,
-                    kTag, "PS2Runtime ELF/AOT gate: %s",
-                    loadMessage[0] == '\0'
-                        ? (elfReady ? "ELF gate passed." : "ELF gate failed without a diagnostic.")
-                        : loadMessage.data());
-                reportRuntimeStatus(
-                    app,
-                    loadMessage[0] == '\0'
-                        ? (elfReady
-                            ? "ELF e função AOT de entrada validados. Aguardando a surface Vulkan e o backend GS Android experimental para a tentativa de primeiro boot; a saída de áudio permanece silenciosa."
-                            : "A validação ELF/AOT não passou. Consulte o Logcat GowAndroid.")
-                        : loadMessage.data(),
-                    !elfReady);
-            } else {
-                reportRuntimeStatus(
-                    app,
-                    "Núcleo PS2 inicializado. Nenhum BOOT2 foi encaminhado; o jogo não foi carregado.",
-                    false);
-            }
-        } else {
-            __android_log_print(
-                ANDROID_LOG_ERROR, kTag,
-                "PS2Runtime core initialization failed: %s", coreMessage.data());
-            std::string status =
-                "Falha ao inicializar o núcleo PS2: ";
-            status += coreMessage[0] == '\0'
-                ? "motivo não informado."
-                : coreMessage.data();
-            status += " Consulte o Logcat com a etiqueta GowAndroid.";
-            reportRuntimeStatus(app, status.c_str(), true);
-        }
-    } else {
-        logMessage(ANDROID_LOG_ERROR, "PS2Runtime construction failed");
+    PS2Runtime *runtime = nullptr;
+    gActiveRuntime = nullptr;
+    if (!gPrivateAotTableAvailable) {
+        // The public CI APK intentionally contains only a zero-slot function
+        // table. Do not construct the PS2 core or initialize Vulkan in this
+        // diagnostic-only package: both paths are unnecessary without private
+        // generated game code and have not been validated on this device.
+        logMessage(
+            ANDROID_LOG_WARN,
+            "Private game AOT table is empty; native core and Vulkan startup were skipped");
         reportRuntimeStatus(
             app,
-            "Não foi possível criar PS2Runtime. O jogo não foi iniciado; consulte o Logcat com a etiqueta GowAndroid.",
+            "Este APK de diagnóstico não contém o código AOT privado de God of War. A instalação do disco foi preservada. A compilação AOT precisa ser gerada em um ambiente host privado a partir da ISO; nenhum boot foi tentado.",
             true);
+    } else {
+        // Initialize the EE/IOP/VU core without Raylib. The first-boot worker
+        // remains gated by a validated ELF entry point and an attached Android
+        // GS/CRTC backend plus a ready Vulkan surface. Audio remains silent
+        // until an Android AAudio/Oboe backend is integrated.
+        reportRuntimeStatus(
+            app, "Preparando o núcleo PS2 (memória, EE, IOP e VU)...", false);
+        runtime = gowCreatePs2Runtime();
+        gActiveRuntime = runtime;
+        if (runtime != nullptr) {
+            std::array<char, 512> coreMessage{};
+            if (gowInitializePs2RuntimeCoreHeadless(
+                    runtime, coreMessage.data(), coreMessage.size())) {
+                __android_log_print(
+                    ANDROID_LOG_INFO, kTag,
+                    "PS2Runtime core ready: %s", coreMessage.data());
+
+                std::string bootPath;
+                {
+                    std::unique_lock<std::mutex> lock(gBootPathMutex);
+                    gBootPathCondition.wait(
+                        lock, [] { return gBootPathConfigurationReceived; });
+                    bootPath = gBootRelativePath;
+                }
+                if (!bootPath.empty()) {
+                    std::array<char, 512> loadMessage{};
+                    const bool elfReady = gowRuntimeLoadElfAndCheckAot(
+                        runtime, bootPath.c_str(),
+                        loadMessage.data(), loadMessage.size());
+                    gPrivateAotElfReady = elfReady;
+                    __android_log_print(
+                        elfReady ? ANDROID_LOG_INFO : ANDROID_LOG_WARN,
+                        kTag, "PS2Runtime ELF/AOT gate: %s",
+                        loadMessage[0] == '\\0'
+                            ? (elfReady ? "ELF gate passed." : "ELF gate failed without a diagnostic.")
+                            : loadMessage.data());
+                    reportRuntimeStatus(
+                        app,
+                        loadMessage[0] == '\\0'
+                            ? (elfReady
+                                ? "ELF e função AOT de entrada validados. Aguardando a surface Vulkan e o backend GS Android experimental para a tentativa de primeiro boot; a saída de áudio permanece silenciosa."
+                                : "A validação ELF/AOT não passou. Consulte o Logcat GowAndroid.")
+                            : loadMessage.data(),
+                        !elfReady);
+                } else {
+                    reportRuntimeStatus(
+                        app,
+                        "Núcleo PS2 inicializado. Nenhum BOOT2 foi encaminhado; o jogo não foi carregado.",
+                        false);
+                }
+            } else {
+                __android_log_print(
+                    ANDROID_LOG_ERROR, kTag,
+                    "PS2Runtime core initialization failed: %s", coreMessage.data());
+                std::string status =
+                    "Falha ao inicializar o núcleo PS2: ";
+                status += coreMessage[0] == '\\0'
+                    ? "motivo não informado."
+                    : coreMessage.data();
+                status += " Consulte o Logcat com a etiqueta GowAndroid.";
+                reportRuntimeStatus(app, status.c_str(), true);
+            }
+        } else {
+            logMessage(ANDROID_LOG_ERROR, "PS2Runtime construction failed");
+            reportRuntimeStatus(
+                app,
+                "Não foi possível criar PS2Runtime. O jogo não foi iniciado; consulte o Logcat com a etiqueta GowAndroid.",
+                true);
+        }
     }
 
     // One Vulkan upload/present per new PS2 VBlank. The GS worker may run
