@@ -10,7 +10,11 @@
 #if !defined(__ANDROID__)
 #include "gow_gs_replay.h" // GOW-Port: captura opcional y acotada para comparar backends.
 #endif
+#if defined(__ANDROID__)
+#include "gow_android_gs_display.h"
+#else
 #include "runtime/gs/gs_display.h" // GOW-Port: native display state + GS FINISH handshake (step 5).
+#endif
 #include <ps2_recompiled_functions.h>
 void sub_00110E40_0x110e40(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime); // GOW-Port: pose blend entry, for GOW_BLEND_DIAG
 void sub_0017D778_0x17d778(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime); // GOW-Port: frame time step, for GOW_HZ=120
