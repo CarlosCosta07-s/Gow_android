@@ -87,7 +87,7 @@ def connect_to_phone(
         for marker in ("connected to", "already connected")
     ):
         raise RuntimeError(
-            "ADB could not connect to this phone over localhost. This self-connect "
+            "ADB could not connect to the phone's displayed Wi-Fi IP. This self-connect "
             "method depends on the device's Android/ColorOS wireless-debugging implementation."
         )
 
