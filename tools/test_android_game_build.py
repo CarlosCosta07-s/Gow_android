@@ -79,7 +79,8 @@ class FullNativeAotReleaseGateTests(unittest.TestCase):
 
     def test_rejects_aot_captures_for_a_different_elf_revision(self) -> None:
         self._write_summary()
-        self.elf_path.write_bytes(b"different NTSC-U ELF revision")
+        original = self.elf_path.read_bytes()
+        self.elf_path.write_bytes(b"x" * len(original))
         with self.assertRaisesRegex(RuntimeError, "different BOOT2 ELF/ISO revision"):
             require_full_native_aot_summary(self.summary_path, self.elf_path)
 
