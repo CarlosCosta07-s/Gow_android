@@ -1251,29 +1251,64 @@ private:
             uploadTargetWidth_ != swapchainExtent_.width ||
             uploadTargetHeight_ != swapchainExtent_.height;
         if (frameUploadDirty_ || targetChanged || !uploadBufferReady_) {
-            std::string scaleError;
-            if (!gow::android::scaleRgbaToFit(
-                    pendingFramePixels_.data(),
-                    pendingFramePixels_.size(),
-                    pendingFrameWidth_,
-                    pendingFrameHeight_,
-                    swapchainExtent_.width,
-                    swapchainExtent_.height,
-                    uploadPixels_,
-                    scaleError)) {
-                __android_log_print(
-                    ANDROID_LOG_WARN, kTag,
-                    "GS frame upload rejected: %s", scaleError.c_str());
-                return false;
-            }
-            if (swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM) {
-                gow::android::convertRgbaToBgraInPlace(uploadPixels_);
-            }
+            const bool sourceMatchesSwapchain =
+                pendingFrameWidth_ == swapchainExtent_.width &&
+                pendingFrameHeight_ == swapchainExtent_.height;
+            VkDeviceSize requiredBytes = 0u;
 
-            const VkDeviceSize requiredBytes =
-                static_cast<VkDeviceSize>(uploadPixels_.size());
-            if (!ensureUploadBuffer(requiredBytes)) return false;
-            std::memcpy(uploadMapped_, uploadPixels_.data(), uploadPixels_.size());
+            if (sourceMatchesSwapchain) {
+                const uint64_t sourceBytes =
+                    static_cast<uint64_t>(pendingFrameWidth_) *
+                    pendingFrameHeight_ * 4ull;
+                if (sourceBytes == 0u ||
+                    sourceBytes > pendingFramePixels_.size() ||
+                    sourceBytes > std::numeric_limits<size_t>::max()) {
+                    logMessage(ANDROID_LOG_WARN,
+                        "Rejected invalid GS frame in the same-size CPU upload path");
+                    return false;
+                }
+                requiredBytes = static_cast<VkDeviceSize>(sourceBytes);
+                if (!ensureUploadBuffer(requiredBytes)) return false;
+                if (swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM) {
+                    const uint8_t *source = pendingFramePixels_.data();
+                    auto *destination = static_cast<uint8_t *>(uploadMapped_);
+                    for (size_t offset = 0u;
+                         offset + 3u < static_cast<size_t>(sourceBytes);
+                         offset += 4u) {
+                        destination[offset + 0u] = source[offset + 2u];
+                        destination[offset + 1u] = source[offset + 1u];
+                        destination[offset + 2u] = source[offset + 0u];
+                        destination[offset + 3u] = source[offset + 3u];
+                    }
+                } else {
+                    std::memcpy(
+                        uploadMapped_, pendingFramePixels_.data(),
+                        static_cast<size_t>(sourceBytes));
+                }
+            } else {
+                std::string scaleError;
+                if (!gow::android::scaleRgbaToFit(
+                        pendingFramePixels_.data(),
+                        pendingFramePixels_.size(),
+                        pendingFrameWidth_,
+                        pendingFrameHeight_,
+                        swapchainExtent_.width,
+                        swapchainExtent_.height,
+                        uploadPixels_,
+                        scaleError)) {
+                    __android_log_print(
+                        ANDROID_LOG_WARN, kTag,
+                        "GS frame upload rejected: %s", scaleError.c_str());
+                    return false;
+                }
+                if (swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM) {
+                    gow::android::convertRgbaToBgraInPlace(uploadPixels_);
+                }
+                requiredBytes = static_cast<VkDeviceSize>(uploadPixels_.size());
+                if (!ensureUploadBuffer(requiredBytes)) return false;
+                std::memcpy(
+                    uploadMapped_, uploadPixels_.data(), uploadPixels_.size());
+            }
 
             if ((uploadMemoryFlags_ & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u) {
                 VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
