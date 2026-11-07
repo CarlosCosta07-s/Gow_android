@@ -20,6 +20,7 @@ struct RasterVertex {
     float g = 0.0f;
     float b = 0.0f;
     float a = 1.0f;
+    float fog = 0.0f;
     float s = 0.0f;
     float t = 0.0f;
     float q = 1.0f;
@@ -100,6 +101,7 @@ RasterVertex makeRasterVertex(
     vertex.g = channel(color.g);
     vertex.b = channel(color.b);
     vertex.a = channel(color.a);
+    vertex.fog = static_cast<float>(source.fog);
     vertex.s = source.s;
     vertex.t = source.t;
     vertex.q = std::isfinite(source.q) && std::fabs(source.q) > 1.0e-8f
@@ -121,6 +123,7 @@ RasterVertex interpolate(
     result.g = a.g + (b.g - a.g) * t;
     result.b = a.b + (b.b - a.b) * t;
     result.a = a.a + (b.a - a.a) * t;
+    result.fog = a.fog + (b.fog - a.fog) * t;
     result.s = a.s + (b.s - a.s) * t;
     result.t = a.t + (b.t - a.t) * t;
     result.q = a.q + (b.q - a.q) * t;
@@ -142,6 +145,7 @@ RasterVertex interpolateTriangle(
     result.g = a.g * wa + b.g * wb + c.g * wc;
     result.b = a.b * wa + b.b * wb + c.b * wc;
     result.a = a.a * wa + b.a * wb + c.a * wc;
+    result.fog = a.fog * wa + b.fog * wb + c.fog * wc;
     result.s = a.s * wa + b.s * wb + c.s * wc;
     result.t = a.t * wa + b.t * wb + c.t * wc;
     result.q = a.q * wa + b.q * wb + c.q * wc;
@@ -406,6 +410,36 @@ uint32_t applyGsAlphaBlend(
     return result;
 }
 
+uint32_t applyGsFog(
+    uint32_t sourceRgba,
+    float interpolatedFog,
+    const GSDrawState &state) {
+    // GS F is an 8-bit vertex attribute, linearly interpolated in screen
+    // space. The verified GS blend uses F and (256-F), with the two products
+    // added before the single >> 8 truncation. Alpha is not affected by fog.
+    const double fog = std::clamp(
+        std::isfinite(interpolatedFog)
+            ? static_cast<double>(interpolatedFog) : 0.0,
+        0.0, 255.0);
+    const double inverseFog = 256.0 - fog;
+    const auto blendChannel = [fog, inverseFog](
+        uint32_t source, uint8_t fogColor) -> uint32_t {
+        const double weighted =
+            fog * static_cast<double>(source) +
+            inverseFog * static_cast<double>(fogColor);
+        return static_cast<uint32_t>(std::clamp(
+            std::floor(weighted / 256.0), 0.0, 255.0));
+    };
+
+    const uint32_t red = blendChannel(sourceRgba & 0xFFu, state.fogR);
+    const uint32_t green =
+        blendChannel((sourceRgba >> 8u) & 0xFFu, state.fogG);
+    const uint32_t blue =
+        blendChannel((sourceRgba >> 16u) & 0xFFu, state.fogB);
+    return (sourceRgba & 0xFF000000u) |
+        red | (green << 8u) | (blue << 16u);
+}
+
 void writePixelUnchecked(
     GSTextureStore &store,
     const GSDrawState &state,
@@ -429,7 +463,10 @@ void writePixelUnchecked(
     }
 
     const RasterVertex color = applyTexture(inputColor, state, texturePixels);
-    const uint32_t sourceRgba = packRgba(color);
+    uint32_t sourceRgba = packRgba(color);
+    if (state.prim.fge) {
+        sourceRgba = applyGsFog(sourceRgba, inputColor.fog, state);
+    }
     const uint8_t alpha = static_cast<uint8_t>((sourceRgba >> 24u) & 0xFFu);
     const GSCpuInternal::PixelWriteMask writeMask =
         GSCpuInternal::classifyAlphaTest(
@@ -640,6 +677,9 @@ void rasterizeSprite(
             const float u = std::clamp(static_cast<float>(uRaw), 0.0f, 1.0f);
             const float average = (u + v) * 0.5f;
             RasterVertex pixel = interpolate(first, second, average);
+            // PS2 sprites are flat shaded: colour, Z and fog come from
+            // the second endpoint, independent of the screen-space UV axes.
+            pixel.fog = second.fog;
             if (state.prim.fst) {
                 pixel.u = first.u + (second.u - first.u) * u;
                 pixel.v = first.v + (second.v - first.v) * v;
@@ -697,8 +737,8 @@ bool rasterizeGsBatchToVram(
         error = "GS rasterizer supports only non-zero FBW CT32/CT24/CT16/CT16S framebuffers.";
         return false;
     }
-    if (batch.state.prim.fge || batch.state.prim.aa1) {
-        error = "GS rasterizer currently rejects fog and antialiasing until their interpolation and coverage rules are implemented.";
+    if (batch.state.prim.aa1) {
+        error = "GS rasterizer currently rejects AA1 until its coverage and edge rules are implemented.";
         return false;
     }
     if (((context.test >> 16u) & 1u) != 0u &&
