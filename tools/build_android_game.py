@@ -29,6 +29,7 @@ from sync_android_aot_captures import (
     pull_private_installed_file,
     resolve_adb_device,
 )
+from migrate_android_debug_installation import migrate_debug_installation
 
 
 @dataclass(frozen=True)
@@ -427,6 +428,14 @@ def main() -> int:
         default=None,
         help="ADB serial when more than one authorized Android device is connected",
     )
+    parser.add_argument(
+        "--migrate-installed-debug-signature",
+        action="store_true",
+        help=(
+            "after a successful --installed-android build, back up and verify the private disc, "
+            "then replace an ephemeral-signature Debug APK and restore the installation"
+        ),
+    )
     # Private ADB synchronization supplies this archive automatically. The
     # hidden option remains only for internal tests and offline maintainer use.
     parser.add_argument(
@@ -467,6 +476,8 @@ def main() -> int:
         elf_path = Path(args.elf).expanduser().resolve()
     else:
         elf_path = None
+    if args.migrate_installed_debug_signature and not args.installed_android:
+        parser.error("--migrate-installed-debug-signature requires --installed-android.")
 
     captures_zip: Path | None = None
     if args.aot_captures:
@@ -690,6 +701,17 @@ def main() -> int:
         print("Captures remain in the app's private files directory; they are not a user-facing export.")
     else:
         print("All private AOT captures supplied to this build were compiled; later game stages may request more code.")
+
+    if args.migrate_installed_debug_signature:
+        print("")
+        print("Explicit one-time Debug signing migration requested.")
+        migrate_debug_installation(
+            apk_path=plan.apk_path,
+            work_dir=work,
+            repo_root=root,
+            device_serial=args.device_serial,
+        )
+
     return 0
 
 
