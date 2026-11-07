@@ -330,11 +330,11 @@ def main() -> int:
         "parseSystemCnfBootPath(",
         'selectedDiscSerial = "SCUS_973.99 (NTSC-U)"',
         '"VERIFICAR DISCO"',
-        "private SYSTEM.CNF",
+        "SYSTEM.CNF privado foi truncado.",
         "showExistingInstallationVerification(",
         "verifyExistingInstallationAsync(installation, bootPath)",
         "selectedDiscUri == null",
-        "java.io.FileInputStream",
+        "import java.io.FileInputStream;",
     ):
         require(required in main_activity, f"Private installed-disc recovery is missing: {required}")
     private_restore = main_activity[
