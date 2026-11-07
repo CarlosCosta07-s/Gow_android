@@ -12,15 +12,15 @@ A arquitetura já deve evitar escolhas que inviabilizem o desempenho móvel (có
 
 O único dado do jogo fornecido pelo usuário é a ISO original. O comando de desenvolvimento atual é `tools/build_android_game.py --iso <ISO>`: ele prepara os commits fixados, extrai automaticamente ELF/IRX/pacotes/metadados e gera o C++ privado. Os botões de exportação manual de ELF, ZIP AOT e log foram removidos do FORGE. Após uma primeira tentativa de boot, o mesmo comando procura capturas VU1/IOP no Android Debug via ADB e sincroniza os dados diretamente para o workspace privado. ACI e o aparelho ainda precisam validar esse novo caminho com uma ISO real; sem capturas o resultado é apenas um bootstrap estrito.
 
-## Execução somente pelo celular — Codespaces + Termux (07/11/2026)
+## Ferramentas opcionais de desenvolvimento — Codespaces + Termux (07/11/2026)
 
-- [x] Criar Dev Container Linux com JDK 17, Gradle 9.6.0, SDK 37, NDK 30, CMake 3.22.1 e Ninja.
-- [x] Criar servidor Codespaces autenticado para upload da ISO original/capturas privadas, execução do pipeline atual, exibição do log e download do APK.
-- [x] Criar bridge Termux para Wireless Debugging, sincronização ADB das capturas privadas e atualização segura do APK com backup/restauração SHA-256.
-- [x] Testar servidor/bridge e limites/autenticação na CI #513; validar Dev Container/setup e compilar APK ARM64 na CI #516.
-- [ ] Executar primeiro build remoto usando a ISO NTSC-U original do usuário.
-- [ ] Confirmar pareamento ADB ao IP Wi-Fi do próprio aparelho no ColorOS; a conexão é dependente do OEM.
-- [ ] Sincronizar a primeira captura VU1/IOP do aparelho, gerar os blocos AOT e repetir a compilação até obter cobertura completa.
+O ambiente Codespaces e a ponte Termux/ADB são ferramentas temporárias para mantenedores que não possuem um computador local. **Não são parte do produto final e nunca devem ser exigidas dos jogadores.** O contrato de distribuição está em [PLAYER_EXPERIENCE.md](PLAYER_EXPERIENCE.md): instalar APK, selecionar ISO original e jogar.
+
+- [x] Criar Dev Container Linux e servidor Codespaces autenticado para builds privados de desenvolvimento.
+- [x] Criar bridge Termux/ADB para sincronização privada e migração segura de APK durante o desenvolvimento.
+- [x] Testar os componentes auxiliares nas CIs #513 e #516.
+- [ ] Provar uma arquitetura de AOT compatível com a experiência final: código previamente preparado e legalmente distribuível ou geração/compilação ARM64 no próprio Android.
+- [ ] Remover qualquer dependência de Codespaces, Termux, ADB, internet ou ferramenta externa do fluxo de release/jogador.
 
 ## Fase 0 — Fundação e auditoria
 
