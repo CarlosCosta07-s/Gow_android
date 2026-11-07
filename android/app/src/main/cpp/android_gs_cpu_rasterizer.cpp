@@ -615,16 +615,21 @@ void rasterizeSprite(
         static_cast<int>(std::ceil(maxY)));
     const float dx = std::max(1.0e-7f, second.x - first.x);
     const float dy = std::max(1.0e-7f, second.y - first.y);
-    const float inverseDx = 1.0f / dx;
-    const float inverseDy = 1.0f / dy;
-    float vRawRow =
-        (static_cast<float>(top) + 0.5f - first.y) * inverseDy;
+    // Keep the stepped coordinates in double precision. The final UV is
+    // still rounded to float before interpolation, but the scanline additions
+    // no longer accumulate visible drift across wide sprites.
+    const double inverseDx = 1.0 / static_cast<double>(dx);
+    const double inverseDy = 1.0 / static_cast<double>(dy);
+    double vRawRow =
+        (static_cast<double>(top) + 0.5 - static_cast<double>(first.y)) *
+        inverseDy;
     for (int y = top; y <= bottom; ++y) {
-        float uRaw =
-            (static_cast<float>(left) + 0.5f - first.x) * inverseDx;
-        const float v = std::clamp(vRawRow, 0.0f, 1.0f);
+        double uRaw =
+            (static_cast<double>(left) + 0.5 - static_cast<double>(first.x)) *
+            inverseDx;
+        const float v = std::clamp(static_cast<float>(vRawRow), 0.0f, 1.0f);
         for (int x = left; x <= right; ++x) {
-            const float u = std::clamp(uRaw, 0.0f, 1.0f);
+            const float u = std::clamp(static_cast<float>(uRaw), 0.0f, 1.0f);
             const float average = (u + v) * 0.5f;
             RasterVertex pixel = interpolate(first, second, average);
             if (state.prim.fst) {
