@@ -52,6 +52,35 @@ Nesse modo, o host encontra o aparelho, lê `SYSTEM.CNF` e o executável BOOT2 d
 
 O caminho pressupõe a pasta privada criada pela instalação NTSC-U do FORGE (`files/installations/gow_scus_973_99_ntsc_u/disc`). Se houver mais de um aparelho autorizado, acrescente `--device-serial SEU_SERIAL`. O comando não desinstala nem atualiza o aplicativo e não altera a instalação privada.
 
+### Migração segura da assinatura Debug
+
+O APK entregue pelo CI #412 foi assinado por uma chave temporária do runner. Um APK construído em outro computador não pode atualizá-lo diretamente; o Android rejeitaria a assinatura diferente. **Não desinstale o FORGE manualmente**, pois isso apagaria os 7,94 GB instalados.
+
+Depois de gerar a build local conectada ao mesmo aparelho, a migração única é solicitada explicitamente assim:
+
+```powershell
+python tools/build_android_game.py --installed-android --migrate-installed-debug-signature --work-dir "C:\gowport"
+```
+
+Linux:
+
+```bash
+python3 tools/build_android_game.py --installed-android --migrate-installed-debug-signature --work-dir "$HOME/gowport"
+```
+
+Antes de remover o app antigo, o fluxo:
+1. Confirma que `run-as` consegue acessar o pacote Debug e que o ADB aceita a restauração por fluxo.
+2. Salva cópias do APK atualmente instalado para rollback.
+3. Copia a instalação privada completa para o workspace host, confere a estrutura, o BOOT2 NTSC-U e **todos os hashes do manifesto SHA-256**.
+4. Só depois desinstala o pacote com a assinatura temporária, instala o APK local e restaura a pasta privada.
+5. Se a instalação/restauração falhar, tenta reinstalar o APK original e restaurar os dados anteriores automaticamente.
+
+O backup verificado permanece em `<work-dir>/android-signature-migrations/`; ele não é enviado ao GitHub nem à CI. A operação transfere aproximadamente o tamanho da instalação (nesta cópia, cerca de 7,94 GB) para o computador e exige espaço livre equivalente no host. A cópia antiga é removida do aparelho somente após a validação do backup. **Mantenha o arquivo de backup até abrir o FORGE e confirmar novamente a integridade do disco.**
+
+Depois da migração, preserve a chave Debug local do Gradle em `%USERPROFILE%\\.android\\debug.keystore` (Windows) ou `$HOME/.android/debug.keystore` (Linux). Ela permite que builds futuras feitas no mesmo computador atualizem o app sem repetir a migração. O FORGE agora recupera `SYSTEM.CNF` e BOOT2 da instalação privada quando a preferência do seletor de ISO não existe, portanto não exige selecionar novamente o arquivo original.
+
+Este procedimento já possui testes sintéticos de backup, SHA-256, caminhos e BOOT2 na CI. A migração ADB completa ainda precisa ser executada num aparelho real antes de ser considerada comprovada.
+
 ## Capturas VU1/IOP sem exportação pelo usuário
 
 A primeira build com o ELF real é um bootstrap AOT estrito: ela contém o código EE gerado, mas ainda não presume cobertura VU1/IOP. Instale essa build Debug no Android e execute **FORGE → Verificar runtime**. Os dados carregados são guardados em `files/gow-aot-captures/`, no armazenamento privado do app. O runtime continua sem fallback interpretado e para quando chega a código que ainda não possui implementação nativa.
