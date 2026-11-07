@@ -691,8 +691,9 @@ def main() -> int:
     ):
         require(required in native_aot_source, f"Host AOT game identity validation is missing: {required}")
     for required in (
-        "game_identity.txt",
-        "format=gow-android-game-identity-v1",
+        'parts[1] == "game_identity.txt"',
+        'return "game_identity.txt"',
+        "capture_manifest.txt",
     ):
         require(required in capture_sync, f"Android AOT capture sync is missing game identity: {required}")
     for required in (
