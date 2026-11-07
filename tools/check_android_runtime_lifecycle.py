@@ -497,6 +497,47 @@ def main() -> int:
         "enqueueGsBatch(",
     ):
         require(required in gs_renderer, f"Android GS Vulkan draw path is missing: {required}")
+
+    # Black Android's frame-resource discipline and Dragon Rage's ADPF pattern
+    # are adapted without importing either project's incompatible game renderer.
+    performance_hint_header = project_root / "android/app/src/main/cpp/android_performance_hint.h"
+    performance_hint_source = project_root / "android/app/src/main/cpp/android_performance_hint.cpp"
+    require(
+        performance_hint_header.is_file() and performance_hint_source.is_file(),
+        "Android adaptive performance-hint module is missing.",
+    )
+    for required in (
+        "android_performance_hint.cpp",
+        "find_library(DL_LIBRARY dl REQUIRED)",
+        "${DL_LIBRARY}",
+    ):
+        require(required in cmake_text, f"Android performance-hint CMake integration is missing: {required}")
+    for required in (
+        '#include "android_performance_hint.h"',
+        "reportPerformanceHintFrame(",
+        "performanceHintTargetDurationNs(",
+        "accumulatedLooperWaitNs",
+        "lastPresentedFrameAt",
+        "frameVerticesScratch_.clear()",
+        "frameVerticesScratch_.swap(queuedGsVertices_)",
+        "frameDrawsScratch_.swap(queuedGsDraws_)",
+    ):
+        require(required in gs_renderer, f"Android sustained-performance/frame-buffer path is missing: {required}")
+    require(
+        "std::vector<gow::android::GsGpuVertex> frameVertices;" not in gs_renderer
+        and "std::vector<QueuedGsDraw> frameDraws;" not in gs_renderer,
+        "GS render-frame batches must use reusable member buffers instead of per-frame local allocations.",
+    )
+    for required in (
+        "APerformanceHint_getManager",
+        "APerformanceHint_createSession",
+        "APerformanceHint_reportActualWorkDuration",
+        "APerformanceHint_updateTargetWorkDuration",
+        "GOW_ANDROID_ADPF",
+        "kMaximumReportedWorkNs",
+    ):
+        require(required in performance_hint_source.read_text(encoding="utf-8"),
+                f"Android ADPF integration is missing: {required}")
     require(
         "runtime->run(" not in gs_renderer,
         "The experimental GS renderer must not start guest execution.",
