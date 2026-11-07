@@ -320,6 +320,34 @@ def main() -> int:
     ):
         require(required in main_activity, f"FORGE diagnostic launch is missing: {required}")
 
+    # An already-installed private disc must remain discoverable even when a
+    # Debug package migration has cleared the original Storage Access Framework URI.
+    for required in (
+        "if (!restoreSelectedDisc())",
+        "restorePrivateInstallationIfAvailable()",
+        '"gow_scus_973_99_ntsc_u"',
+        '"SYSTEM.CNF"',
+        "parseSystemCnfBootPath(",
+        'selectedDiscSerial = "SCUS_973.99 (NTSC-U)"',
+        '"VERIFICAR DISCO"',
+        "private SYSTEM.CNF",
+        "showExistingInstallationVerification(",
+        "verifyExistingInstallationAsync(installation, bootPath)",
+        "selectedDiscUri == null",
+        "java.io.FileInputStream",
+    ):
+        require(required in main_activity, f"Private installed-disc recovery is missing: {required}")
+    private_restore = main_activity[
+        main_activity.find("private void restorePrivateInstallationIfAvailable()"):
+        main_activity.find("private void onDiscSelected(")
+    ]
+    require(
+        "new File(getFilesDir(), \"installations\")" in private_restore
+        and "getFilesDir()" in private_restore
+        and "selectedDiscBootPath = bootPath" in private_restore,
+        "Private installed-disc recovery does not restore the BOOT2 path from app files.",
+    )
+
     on_create_start = activity.find("protected void onCreate(Bundle savedInstanceState)")
     on_create_super = activity.find("super.onCreate(savedInstanceState)", on_create_start)
     on_create_register = activity.find("nativeSetActivityReference(this)", on_create_start)
