@@ -287,7 +287,7 @@ O painel informa explicitamente que o jogo ainda não iniciou quando o núcleo h
 **Limitações:** apenas primitivos opacos sem textura em CT32/CT24/CT16; `Present()` escolhe um circuito e não compõe DISPLAY1+DISPLAY2/PMODE. Textura/CLUT, depth, alpha test/DATE, blending, fog, dithering e formatos não suportados são bloqueadores. `PS2Runtime::run()` continua bloqueado, e esta fixture não contém o jogo.
 ## Rasterizador GS, composição PMODE e preparação da comparação visual — 06/11/2026
 
-**[IMPLEMENTADO; TESTES HOST ANTERIORES APROVADOS; NOVAS REGRESSÕES FGE PENDENTES; APK ARM64 EM VALIDAÇÃO NA ÚLTIMA CONSULTA]**
+**[IMPLEMENTADO; REGRESSÕES HOST FGE APROVADAS NA CI; BUILD APK ARM64 EM VALIDAÇÃO]**
 
 A rota Android de correção gráfica usa `AndroidGSVulkanBackend` para manter a VRAM real de 4 MiB por meio de `GSTextureStore`, rasterizar por CPU os fragmentos suportados e entregar o `PresentationFrame` ao presenter Vulkan da GameActivity. Isso é um backend de referência funcional para testes de semântica GS; ainda não é um rasterizador GS inteiramente executado em shaders Vulkan.
 
@@ -297,7 +297,7 @@ Cobertura atual exercitada em `android_gs_vulkan_backend_test.cpp`:
 - Texturas CT32 e formatos indexados T8/T4/T4HL/T4HH/T8H, com carregamento de CLUT CSM2 e fixture de índices swizzled CSM1.
 - UV e STQ básicos, amostragem nearest/bilinear e modos de clamp suportados pelo caminho CPU.
 - Z32 com teste GEQUAL e escrita de depth; alpha test com ação KEEP; DATE; equação GS ALPHA com color clamp.
-- Fog FGE em pontos, linhas, triângulos e sprites: campo F por vértice, cor FOGCOL por estado, blend após TFX e alpha preservado; o preparador também corrige o latch de F nos caminhos PACKED XYZF2/XYZF3 e A+D/REGLIST, para que XYZ posteriores herdem o F atual. Fixtures sintéticas cobrem dois grupos RGB de referência (F=0/1/77/128/201/255), FGE desligado, ponto texturizado, interpolação de linha e triângulo, alpha preservado e F do segundo vértice em sprite. Os valores esperados foram recalculados pela fórmula de referência; compilação/execução local continuam pendentes nesta sessão.
+- Fog FGE em pontos, linhas, triângulos e sprites: campo F por vértice, cor FOGCOL por estado, blend após TFX e alpha preservado; o preparador também corrige o latch de F nos caminhos PACKED XYZF2/XYZF3 e A+D/REGLIST, para que XYZ posteriores herdem o F atual. Fixtures sintéticas cobrem dois grupos RGB de referência (F=0/1/77/128/201/255), FGE desligado, ponto texturizado, interpolação de linha e triângulo, alpha preservado e F do segundo vértice em sprite. A bateria C++ completa passou na CI Android shell run `42380170456` (07/11/2026); o build ARM64 do APK dessa execução ainda não tinha terminado na última consulta.
 - Composição dos circuitos 1/2 com PMODE, ALP/MMOD e SLBG/BGCOLOR.
 - Testes FBP/VRAM e quadro CRTC com pixels esperados.
 
