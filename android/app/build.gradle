@@ -111,8 +111,8 @@ android {
             externalNativeBuild {
                 cmake {
                     // Keep the experimental CPU GS rasterizer + Vulkan CRTC presenter in Debug.
-                    // It supports textured batches, depth/alpha tests and GS blending, but still
-                    // rejects fog/AA1 and has not passed reference-image or device validation.
+                    // It supports texture, depth/alpha tests, GS blending and interpolated FGE fog.
+                    // AA1 remains unsupported; reference-image and device validation are pending.
                     arguments "-DGOW_ANDROID_ENABLE_GS_VULKAN=ON"
                 }
             }
