@@ -598,6 +598,43 @@ def main() -> int:
     ):
         require(required in native_main, f"Private VU1/IOP capture setup is missing: {required}")
 
+    aot_identity_source = project_root / "android/app/src/main/cpp/android_aot_identity.cpp"
+    aot_identity_header = project_root / "android/app/src/main/cpp/android_aot_identity.h"
+    require(
+        aot_identity_source.is_file() and aot_identity_header.is_file(),
+        "Private Android AOT game identity module is missing.",
+    )
+    for required in (
+        '#include "android_aot_identity.h"',
+        "gPrivateCdRootPath",
+        "writePrivateAotGameIdentity(",
+        "Private AOT captures are now bound to the loaded BOOT2 ELF SHA-256 identity.",
+    ):
+        require(required in native_main, f"Private AOT BOOT2 identity handoff is missing: {required}")
+    require(
+        "android_aot_identity.cpp" in cmake_text,
+        "Android AOT identity hashing must be compiled into the native game library.",
+    )
+    for required in (
+        "parse_game_identity_manifest",
+        "game_identity.txt",
+        '"game_identity": game_identity',
+        "game_identity is not None",
+    ):
+        require(required in native_aot_source, f"Host AOT game identity validation is missing: {required}")
+    for required in (
+        "game_identity.txt",
+        "format=gow-android-game-identity-v1",
+    ):
+        require(required in capture_sync, f"Android AOT capture sync is missing game identity: {required}")
+    for required in (
+        "expected_elf_path",
+        "game_identity.get(\"elf_sha256\")",
+        "_sha256_file(elf)",
+        "different BOOT2 ELF/ISO revision",
+    ):
+        require(required in build_host, f"Strict AOT candidate identity gate is missing: {required}")
+
     for required in (
         "GOW_ANDROID_GENERATED_VU1_DIR",
         "GOW_ANDROID_GENERATED_IOP_DIR",
