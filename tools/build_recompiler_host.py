@@ -781,11 +781,11 @@ def main() -> int:
         scheduler_cpp,
         "    const bool signaled = m_eventCv.wait_until(lock, hostDeadline, [this]()\n"
         "                                               { return !m_events.empty() ||\n"
-        "                                                         m_stopRequested.load(std::memory_order_acquire); });\n",
+        "                                                        m_stopRequested.load(std::memory_order_acquire); });\n",
         "    const bool signaled = m_eventCv.wait_until(lock, hostDeadline, [this]()\n"
         "                                               { return !m_events.empty() ||\n"
         "                                                         m_hostPaused.load(std::memory_order_acquire) ||\n"
-        "                                                         m_stopRequested.load(std::memory_order_acquire); });\n",
+        "                                                        m_stopRequested.load(std::memory_order_acquire); });\n",
         "interrupt timer deadline waits on Android pause",
     )
 
