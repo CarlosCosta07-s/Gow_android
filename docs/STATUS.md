@@ -1,6 +1,6 @@
 # Estado do projeto
 
-**Data da auditoria:** 2026-11-06  
+**Data da auditoria:** 2026-11-07  
 **Branch de desenvolvimento:** `main`  
 **Objetivo:** port nativo de God of War (PS2, 2005) para Android ARM64, usando recompilação estática e runtime de serviços PS2 nativo; não é um emulador.
 
@@ -21,7 +21,20 @@
 
 **Fazer God of War funcionar vem antes de otimização fina.** O projeto ainda não comprovou boot real nem gameplay. O foco é gerar e integrar o código do jogo, completar runtime/IOP/VU1, GS/Vulkan, serviços de boot e alcançar primeira imagem, menu e primeiro combate. O tuning para aparelhos modestos fica para depois dessa linha de base.
 
-**Referência futura de otimização:** [Black for Android](https://github.com/RanggaCasper/Black-Android), documentada em [ANDROID_LOW_END_OPTIMIZATION.md](ANDROID_LOW_END_OPTIMIZATION.md). Não estamos adotando agora suas opções nem assumindo equivalência entre Xbox e PS2.
+**Referência principal de otimização Android:** [Black for Android](https://github.com/RanggaCasper/Black-Android), documentada em [ANDROID_LOW_END_OPTIMIZATION.md](ANDROID_LOW_END_OPTIMIZATION.md). Já foram adotados padrões portáveis de apresentação por VSync, espera sem busy-loop, reaproveitamento de buffers e pausa cooperativa em segundo plano. Não importamos o renderer Xbox/D3D/Vulkan do Black para o GS de PS2 nem presumimos equivalência entre as APIs; escalonamento dinâmico de resolução e tuning térmico dependem de medições no aparelho.
+
+## Otimizações Android e apresentação GS — 07/11/2026
+
+**[IMPLEMENTADO NO CÓDIGO; BUILD/TESTE EM APARELHO PENDENTES]**
+- O loop GameActivity espera até 16 ms entre verificações quando há superfície ativa, em vez de ficar em polling de timeout zero. Em segundo plano, bloqueia por evento.
+- O presenter Vulkan trabalha somente quando o contador de VSync do PS2 muda. Antes de copiar o frame, chama `GS::latchHostPresentationFrame()`, seguindo o fluxo de `UploadFrame()` do port PC e evitando depender de um uploader Raylib ausente no Android.
+- Os buffers de frame são alternados/reutilizados entre o runtime e o presenter para reduzir alocações grandes repetidas.
+- O perfil Debug aplica `-O2 -fno-strict-aliasing` ao `ps2_runtime`, `ps2_iop` e `android-game`/AOT gerado; não usa `-ffast-math`.
+- O preparador seleciona o caminho SIMD VIF1 por NEON via sse2neon em ARM64.
+- O scheduler EE recebe pausa cooperativa ao perder foco/superfície e desloca os prazos de VBlank/timers pelo intervalo pausado, sem tentar recuperar esse tempo em rajadas.
+- A Activity inclui um controle virtual com disposição DualShock 2: direcional, ✕/○/□/△, L1/L2/R1/R2, Start/Select, L3/R3 e dois analógicos. Os toques alimentam o mesmo estado de entrada usado pelo pacote DualShock 2 físico.
+
+**Limite de validação:** essas alterações estão na branch `main`, mas não há status de CI para os commits recentes nem compilação ARM64/Gradle ou teste térmico medido neste ciclo. A captura GS por VSync corrige uma omissão do host Android, mas não comprova que o jogo já alcança o menu. O runtime continua dependendo do ELF AOT privado e de cobertura VU1/IOP suficiente; a renderização GS atual ainda é parcialmente rasterizada pela CPU.
 
 ## Auditoria da origem de disco (06/11/2026)
 
