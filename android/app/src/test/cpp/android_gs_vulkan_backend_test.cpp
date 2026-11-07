@@ -153,6 +153,30 @@ int main() {
         }
         backend.Submit(texturedSprite);
 
+        // The same texture must keep the correct UV orientation when the two
+        // GS sprite vertices arrive with a negative X span, negative Y span,
+        // or both. The texture's four corners are red, green, blue and white.
+        GSPrimitiveBatch reversedXSprite = texturedSprite;
+        reversedXSprite.vertices[0].x = 40.0f;
+        reversedXSprite.vertices[0].y = 20.0f;
+        reversedXSprite.vertices[1].x = 36.0f;
+        reversedXSprite.vertices[1].y = 24.0f;
+        backend.Submit(reversedXSprite);
+
+        GSPrimitiveBatch reversedYSprite = texturedSprite;
+        reversedYSprite.vertices[0].x = 36.0f;
+        reversedYSprite.vertices[0].y = 32.0f;
+        reversedYSprite.vertices[1].x = 40.0f;
+        reversedYSprite.vertices[1].y = 28.0f;
+        backend.Submit(reversedYSprite);
+
+        GSPrimitiveBatch reversedBothSprite = texturedSprite;
+        reversedBothSprite.vertices[0].x = 40.0f;
+        reversedBothSprite.vertices[0].y = 40.0f;
+        reversedBothSprite.vertices[1].x = 36.0f;
+        reversedBothSprite.vertices[1].y = 36.0f;
+        backend.Submit(reversedBothSprite);
+
         // Indexed T8 textures must resolve their palette through TEX0/CLUT
         // state instead of treating the palette index as a direct color.
         const std::array<uint32_t, 4> palette = {
@@ -402,11 +426,11 @@ int main() {
             (1ull << 9u) |
             (static_cast<uint64_t>(GS_PSM_CT32) << 15u);
         presentation.display1 =
-            (63ull << 32u) | (31ull << 44u);
+            (63ull << 32u) | (63ull << 44u);
         const PresentationFrame frame = backend.Present(presentation);
-        require(frame.width == 64u && frame.height == 32u,
-                "CRTC presentation did not decode the requested 64x32 display mode.");
-        require(frame.pixels.size() == 640u * 32u * 4u,
+        require(frame.width == 64u && frame.height == 64u,
+                "CRTC presentation did not decode the requested 64x64 display mode.");
+        require(frame.pixels.size() == 640u * 64u * 4u,
                 "CRTC frame does not use the Waffle 640-pixel source row stride.");
         const auto pixelAt = [&frame](uint32_t x, uint32_t y) {
             const size_t offset =
@@ -433,6 +457,34 @@ int main() {
         require(textureBottomRight[0] == 255u && textureBottomRight[1] == 255u &&
                 textureBottomRight[2] == 255u && textureBottomRight[3] == 255u,
                 "Textured GS sprite did not sample its bottom-right CT32 texel.");
+
+        const auto reversedXTopLeft = pixelAt(36u, 20u);
+        const auto reversedXTopRight = pixelAt(39u, 20u);
+        require(reversedXTopLeft[0] == 0u && reversedXTopLeft[1] == 255u &&
+                reversedXTopLeft[2] == 0u && reversedXTopLeft[3] == 255u &&
+                reversedXTopRight[0] == 255u && reversedXTopRight[1] == 0u &&
+                reversedXTopRight[2] == 0u && reversedXTopRight[3] == 255u,
+                "GS sprite with reversed X endpoints did not mirror texture coordinates.");
+
+        const auto reversedYTopLeft = pixelAt(36u, 28u);
+        const auto reversedYBottomLeft = pixelAt(36u, 31u);
+        require(reversedYTopLeft[0] == 0u && reversedYTopLeft[1] == 0u &&
+                reversedYTopLeft[2] == 255u && reversedYTopLeft[3] == 255u &&
+                reversedYBottomLeft[0] == 255u && reversedYBottomLeft[1] == 0u &&
+                reversedYBottomLeft[2] == 0u && reversedYBottomLeft[3] == 255u,
+                "GS sprite with reversed Y endpoints did not mirror texture coordinates.");
+
+        const auto reversedBothTopLeft = pixelAt(36u, 36u);
+        const auto reversedBothBottomRight = pixelAt(39u, 39u);
+        require(reversedBothTopLeft[0] == 255u &&
+                reversedBothTopLeft[1] == 255u &&
+                reversedBothTopLeft[2] == 255u &&
+                reversedBothTopLeft[3] == 255u &&
+                reversedBothBottomRight[0] == 255u &&
+                reversedBothBottomRight[1] == 0u &&
+                reversedBothBottomRight[2] == 0u &&
+                reversedBothBottomRight[3] == 255u,
+                "GS sprite with reversed X and Y endpoints did not preserve UV orientation.");
         const auto indexedTopLeft = pixelAt(44u, 12u);
         require(indexedTopLeft[0] == 255u && indexedTopLeft[1] == 0u &&
                 indexedTopLeft[2] == 0u && indexedTopLeft[3] == 255u,
