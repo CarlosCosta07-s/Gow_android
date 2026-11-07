@@ -30,9 +30,20 @@ O ambiente Codespaces e a ponte Termux/ADB são ferramentas temporárias para ma
 - [x] O orquestrador `--require-full-native-aot` compara SHA-256/tamanho da ISO/ELF atual com as capturas e verifica todos os fontes C++ gerados.
 - [x] O runtime limpa capturas VU1/IOP anteriores quando a identidade do BOOT2 muda.
 - [x] CI #555 passou pelos testes de identidade/AOT, compilou o shell ARM64 e publicou somente artifact `diagnostic-only-not-playable`.
-- [ ] CI host #161 terminar a compilação do PS2Recomp host sem dados do jogo.
+- [x] CI host #161 compilou o PS2Recomp e passou no VFS sintético, sem dados do jogo.
 - [ ] Executar a geração AOT com uma ISO NTSC-U real e recolher capturas do boot.
 - [ ] Atingir primeiro frame real, menu principal e controles; somente então considerar um APK candidato para teste.
+
+## Inventário de IRX da ISO e avaliação de AOT fixo — 07/11/2026
+
+- [x] Implementar `tools/inventory_iop_irx.py` para validar ELF32/MIPS, segmentos, relocations e intervalo IOP.
+- [x] Executar o inventário automaticamente após a extração privada da ISO.
+- [x] Diferenciar candidatos ET_EXEC fixos de módulos que exigem relocação; não gerar AOT de IRX bruto.
+- [x] Adicionar testes com ELF sintético e integrar às CIs Android/host; passos de teste passaram em #559/#165.
+- [ ] Analisar o inventário de uma ISO NTSC-U real e comparar nomes, bases e hashes com módulos capturados em runtime.
+- [ ] Gerar AOT direto somente para módulos fixos cujo nome, bytes e ausência de conflitos forem comprovados.
+
+Detalhes e limites em [IOP_AOT_FROM_ISO.md](IOP_AOT_FROM_ISO.md). A classificação estática não substitui capturas relocadas nem prova boot/menu.
 
 ## Fase 0 — Fundação e auditoria
 
