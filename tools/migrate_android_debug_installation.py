@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import tarfile
+import tempfile
 from pathlib import Path, PurePosixPath
 
 from sync_android_aot_captures import (
@@ -247,14 +248,16 @@ def _pull_private_installation_backup(
     adb: str, serial: str, package_name: str, work_dir: Path,
     installation_directory: str,
 ) -> Path:
-    destination = work_dir / "android-signature-migration" / "private-disc-backup.tar"
-    if destination.parent.exists() and destination.parent.is_symlink():
-        raise ValueError("The private migration workspace may not be a symlink.")
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination = work_dir / "private-disc-backup.tar"
+    temporary = destination.with_name(destination.name + ".partial")
     if destination.exists() or destination.is_symlink():
         raise FileExistsError(
             f"Refusing to overwrite an existing private backup: {destination}"
         )
+    if temporary.exists() or temporary.is_symlink():
+        if temporary.is_symlink():
+            raise ValueError("The partial private backup may not be a symlink.")
+        temporary.unlink()
     remote = (
         f'run-as {package_name} sh -c "cd files && '
         f'toybox tar -cf - installations/{installation_directory}"'
@@ -266,7 +269,7 @@ def _pull_private_installation_backup(
     total = 0
     digest = hashlib.sha256()
     try:
-        with destination.open("xb") as output:
+        with temporary.open("xb") as output:
             while True:
                 chunk = process.stdout.read(4 * 1024 * 1024)
                 if not chunk:
@@ -287,6 +290,13 @@ def _pull_private_installation_backup(
             )
         if total == 0:
             raise NoDeviceCaptures("The Android app returned an empty installation backup.")
+        temporary.replace(destination)
+    except Exception:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+        raise
     finally:
         if process.poll() is None:
             process.kill()
@@ -411,12 +421,16 @@ def migrate_debug_installation(
         raise ValueError("The newly built Android APK is missing or is a symlink.")
 
     adb, serial = resolve_adb_device(device_serial=device_serial)
-    backup_directory = work / "android-signature-migration"
-    if backup_directory.exists() and backup_directory.is_symlink():
+    migration_root = work / "android-signature-migrations"
+    if migration_root.exists() and migration_root.is_symlink():
         raise ValueError("The private migration workspace may not be a symlink.")
-    backup_directory.mkdir(parents=True, exist_ok=True)
+    migration_root.mkdir(parents=True, exist_ok=True)
+    backup_directory = Path(tempfile.mkdtemp(
+        prefix="migration-", dir=str(migration_root)
+    ))
 
-    # Everything through this point is read-only with respect to the installed app.
+    # Each attempt receives a fresh private backup directory. No previous
+    # verified backup is overwritten, even after a failed migration attempt.
     _probe_run_as_and_stdin(adb, serial, package_name)
     old_apks = _pull_installed_apks(adb, serial, package_name, backup_directory)
     backup_tar = _pull_private_installation_backup(
