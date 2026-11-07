@@ -297,7 +297,7 @@ Cobertura atual exercitada em `android_gs_vulkan_backend_test.cpp`:
 - Texturas CT32 e formatos indexados T8/T4/T4HL/T4HH/T8H, com carregamento de CLUT CSM2 e fixture de índices swizzled CSM1.
 - UV e STQ básicos, amostragem nearest/bilinear e modos de clamp suportados pelo caminho CPU.
 - Z32 com teste GEQUAL e escrita de depth; alpha test com ação KEEP; DATE; equação GS ALPHA com color clamp.
-- Fog FGE em pontos, linhas, triângulos e sprites: campo F por vértice, cor FOGCOL por estado, blend após TFX e alpha preservado; o preparador também corrige o latch de F nos caminhos PACKED XYZF2/XYZF3 e A+D/REGLIST, para que XYZ posteriores herdem o F atual. Fixtures sintéticas cobrem F=0/128/255, FGE desligado, ponto texturizado, interpolação de linha e de triângulo, e o F do segundo vértice em sprite. Ainda sem compilação/execução local nesta sessão.
+- Fog FGE em pontos, linhas, triângulos e sprites: campo F por vértice, cor FOGCOL por estado, blend após TFX e alpha preservado; o preparador também corrige o latch de F nos caminhos PACKED XYZF2/XYZF3 e A+D/REGLIST, para que XYZ posteriores herdem o F atual. Fixtures sintéticas cobrem dois grupos RGB de referência (F=0/1/77/128/201/255), FGE desligado, ponto texturizado, interpolação de linha e triângulo, alpha preservado e F do segundo vértice em sprite. Os valores esperados foram recalculados pela fórmula de referência; compilação/execução local continuam pendentes nesta sessão.
 - Composição dos circuitos 1/2 com PMODE, ALP/MMOD e SLBG/BGCOLOR.
 - Testes FBP/VRAM e quadro CRTC com pixels esperados.
 
