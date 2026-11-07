@@ -25,6 +25,146 @@ class NoDeviceCaptures(RuntimeError):
     """ADB/device/app is unavailable or no private game captures exist yet."""
 
 
+DEFAULT_NTSC_INSTALLATION_DIRECTORY = "gow_scus_973_99_ntsc_u"
+MAX_PRIVATE_INSTALLATION_FILE_BYTES = 256 * 1024 * 1024
+
+
+def resolve_adb_device(
+    *, adb_executable: str | None = None, device_serial: str | None = None
+) -> tuple[str, str]:
+    """Resolve the ADB executable and one authorized Android device."""
+    adb = adb_executable or find_adb_executable()
+    if not adb:
+        raise NoDeviceCaptures(
+            "ADB was not found; install Android SDK Platform Tools or connect its PATH."
+        )
+    return adb, _select_device(adb, device_serial)
+
+
+def _safe_disc_relative_path(relative_path: str) -> str:
+    if not relative_path or "\\\\" in relative_path:
+        raise ValueError("The private BOOT2 path is empty or uses an invalid separator.")
+    path = PurePosixPath(relative_path)
+    if path.is_absolute() or not path.parts or len(path.parts) > 32:
+        raise ValueError("The private BOOT2 path is absolute or too deep.")
+    for component in path.parts:
+        if component in ("", ".", "..") or len(component) > 255:
+            raise ValueError("The private BOOT2 path contains an unsafe component.")
+        if any(not (character.isalnum() or character in "_.+-") for character in component):
+            raise ValueError("The private BOOT2 path contains an unsupported character.")
+    return path.as_posix()
+
+
+def pull_private_installed_file(
+    work_dir: Path,
+    repo_root: Path,
+    relative_path: str,
+    *,
+    adb_executable: str | None = None,
+    device_serial: str | None = None,
+    package_name: str = DEFAULT_PACKAGE,
+    installation_directory: str = DEFAULT_NTSC_INSTALLATION_DIRECTORY,
+    max_bytes: int = MAX_PRIVATE_INSTALLATION_FILE_BYTES,
+) -> Path:
+    """Read one file from the installed NTSC-U disc using the app's private UID.
+
+    The original ISO remains on Android. Only SYSTEM.CNF and the BOOT2 ELF
+    needed by the host recompiler are copied into the private host workspace.
+    """
+    root = repo_root.expanduser().resolve()
+    work = work_dir.expanduser().resolve()
+    try:
+        work.relative_to(root)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("The private ADB workspace must be outside the public repository.")
+    if not str(work).isascii():
+        raise ValueError("The private ADB workspace path must use ASCII characters.")
+
+    safe_relative = _safe_disc_relative_path(relative_path)
+    if (
+        not installation_directory
+        or any(not (character.isalnum() or character in "_-.") for character in installation_directory)
+        or installation_directory in (".", "..")
+    ):
+        raise ValueError("The private Android installation directory name is unsafe.")
+    if not package_name or any(
+        not (character.isalnum() or character in "_.") for character in package_name
+    ):
+        raise ValueError("Android package name contains unsupported characters.")
+    if max_bytes <= 0 or max_bytes > MAX_PRIVATE_INSTALLATION_FILE_BYTES:
+        raise ValueError("The private Android file size limit is outside the supported range.")
+
+    adb, serial = resolve_adb_device(
+        adb_executable=adb_executable,
+        device_serial=device_serial,
+    )
+    remote_path = (
+        f"files/installations/{installation_directory}/disc/{safe_relative}"
+    )
+    remote_command = f"run-as {package_name} cat {remote_path}"
+    command = [adb, "-s", serial, "exec-out", remote_command]
+
+    output_dir = work / "android-private-installation"
+    if output_dir.exists() and output_dir.is_symlink():
+        raise ValueError("The private Android input workspace may not be a symlink.")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_name = PurePosixPath(safe_relative).name
+    destination = output_dir / output_name
+    temporary = output_dir / (output_name + ".partial")
+    for path in (destination, temporary):
+        if path.exists() and path.is_symlink():
+            raise ValueError("Private Android input files may not be symlinks.")
+    for path in (destination, temporary):
+        if path.exists():
+            path.unlink()
+
+    print("$ " + " ".join(command), flush=True)
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    assert process.stdout is not None
+    total = 0
+    try:
+        with temporary.open("xb") as output:
+            while True:
+                chunk = process.stdout.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    process.kill()
+                    raise ValueError(
+                        f"Private Android file exceeds its {max_bytes}-byte transfer limit."
+                    )
+                output.write(chunk)
+        stderr = process.stderr.read() if process.stderr is not None else b""
+        return_code = process.wait()
+        if return_code != 0:
+            detail = stderr.decode("utf-8", errors="replace").strip()
+            raise NoDeviceCaptures(
+                f"Could not read {safe_relative} from the installed Android game"
+                + (f": {detail}" if detail else ".")
+            )
+        if total == 0:
+            raise NoDeviceCaptures(
+                f"The installed Android game returned an empty file for {safe_relative}."
+            )
+        temporary.replace(destination)
+        print(
+            f"Private Android disc input synchronized: {safe_relative} "
+            f"({total} bytes) -> {destination}"
+        )
+        return destination
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def _safe_relative_capture(name: str) -> str | None:
     if not name or "\\" in name:
         raise ValueError(f"Unsafe ADB capture path: {name!r}")
