@@ -1,5 +1,7 @@
 # God of War — Android Native Port
 
+> **Compilação somente pelo celular:** consulte [PHONE_ONLY_BUILD.md](docs/PHONE_ONLY_BUILD.md) para usar o GitHub Codespaces no navegador Android e o Termux para a ponte ADB, sem exportar ELF/IRX/capturas manualmente.
+
 **Projeto independente para criar um port nativo de *God of War* (PlayStation 2, 2005), exclusivo para Android ARM64.**
 
 > Estado em 07/11/2026: Android CI #492, #493, #494, #495, #496 e #497 concluíram com sucesso as suítes automatizadas e a compilação/publicação do APK Debug ARM64. A execução #496 compilou a nova ação principal **JOGAR**; a #497 também aprovou a verificação estática desse fluxo, a compilação ARM64 e a publicação do APK. Isso comprova build e testes sintéticos, não instalação em aparelho, boot ou gameplay. O fluxo de desenvolvimento recebe somente a ISO NTSC-U original ou lê SYSTEM.CNF/BOOT2 da instalação privada Android via ADB (`--installed-android`); ELF, IRX, pacotes e código C++ AOT permanecem em workspace privado. A migração de assinatura Debug possui backup SHA-256 e testes sintéticos, mas ainda não foi validada em aparelho real. **O código EE do jogo ainda precisa ser gerado com a ISO do usuário e iterado com capturas VU1/IOP; nenhum boot, gameplay ou cena real foi validado.** O produto final continua Android ARM64; Windows/Linux são apenas ferramentas de geração/compilação AOT.
