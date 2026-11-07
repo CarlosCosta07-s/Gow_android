@@ -11,6 +11,10 @@ on:
       - "tools/test_android_game_build.py"
       - "tools/sync_android_aot_captures.py"
       - "tools/test_sync_android_aot_captures.py"
+      - "tools/migrate_android_debug_installation.py"
+      - "tools/test_migrate_android_debug_installation.py"
+      - "tools/migrate_android_debug_installation.py"
+      - "tools/test_migrate_android_debug_installation.py"
       - "tools/ps2_vfs_cdroot_smoke.cpp"
       - "tools/run_ps2_vfs_cdroot_smoke.py"
       - "tools/test_elf_validation.py"
@@ -73,6 +77,12 @@ jobs:
         run: |
           python -m py_compile tools/sync_android_aot_captures.py tools/test_sync_android_aot_captures.py
           python tools/test_sync_android_aot_captures.py
+
+      - name: Test verified Android Debug installation migration
+        run: |
+          python -m py_compile tools/migrate_android_debug_installation.py tools/test_migrate_android_debug_installation.py
+          python tools/test_migrate_android_debug_installation.py
+          python tools/migrate_android_debug_installation.py --help
 
       - name: Check VU1 generator syntax and strict coverage gate
         run: |
