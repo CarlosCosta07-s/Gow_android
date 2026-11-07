@@ -1615,6 +1615,10 @@ private:
         frameBlitSupported_ = frameUploadSupported_ &&
             (frameFormatFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) != 0u &&
             (frameFormatFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT) != 0u;
+        if (frameUploadSupported_ && !frameBlitSupported_) {
+            logMessage(ANDROID_LOG_INFO,
+                "Vulkan blit scaling is unavailable; the presenter will use its CPU scaling fallback");
+        }
         swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         if (frameUploadSupported_) {
             swapchainInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -1855,6 +1859,7 @@ private:
         swapchainImages_.clear();
         swapchainLayouts_.clear();
         frameUploadSupported_ = false;
+        frameBlitSupported_ = false;
         uploadBufferReady_ = false;
         uploadTargetWidth_ = 0u;
         uploadTargetHeight_ = 0u;
