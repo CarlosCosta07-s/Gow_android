@@ -140,8 +140,11 @@ public final class MainActivity extends AppCompatActivity {
                         updateBattery(reading);
                     }
                 });
-        if (!restoreSelectedDisc()) {
-            restorePrivateInstallationIfAvailable();
+        // Prefer the app-private installation over the original SAF URI.
+        // After a native Activity/process crash, this keeps the installed disc
+        // visible and prevents the launcher from incorrectly offering install again.
+        if (!restorePrivateInstallationIfAvailable()) {
+            restoreSelectedDisc();
         }
     }
 
@@ -1434,7 +1437,7 @@ public final class MainActivity extends AppCompatActivity {
      * This is used after a safe Debug-signing migration or when the user no
      * longer has access to the document provider that supplied the ISO.
      */
-    private void restorePrivateInstallationIfAvailable() {
+    private boolean restorePrivateInstallationIfAvailable() {
         File installation = new File(
                 new File(getFilesDir(), "installations"),
                 "gow_scus_973_99_ntsc_u");
@@ -1442,7 +1445,7 @@ public final class MainActivity extends AppCompatActivity {
         File systemCnf = new File(cdRoot, "SYSTEM.CNF");
         if (!systemCnf.isFile() || systemCnf.length() <= 0L
                 || systemCnf.length() > 64L * 1024L) {
-            return;
+            return false;
         }
 
         try (InputStream input = new FileInputStream(systemCnf)) {
@@ -1476,11 +1479,13 @@ public final class MainActivity extends AppCompatActivity {
                 installDiscButton.setContentDescription(
                         "Verificar a instalação privada existente de God of War");
             }
+            return true;
         } catch (IOException | SecurityException exception) {
             discStatus.setText(
                     "Foi encontrada uma instalação privada, mas SYSTEM.CNF não pôde "
                             + "ser validado: " + safeMessage(exception));
             discStatus.setTextColor(COLOR_ERROR);
+            return false;
         }
     }
 
@@ -1535,6 +1540,22 @@ public final class MainActivity extends AppCompatActivity {
                 discStatus.setText(finalResult);
                 discStatus.setTextColor(
                         isValid ? 0xFF8BC28F : 0xFFE27676);
+                if (installDiscButton != null) {
+                    File privateInstallation = isValid
+                            ? new File(
+                                    new File(getFilesDir(), "installations"),
+                                    installationDirectoryName(finalSerial))
+                            : null;
+                    boolean alreadyInstalled = privateInstallation != null
+                            && privateInstallation.isDirectory();
+                    installationReadyForBoot = false;
+                    installDiscButton.setText(
+                            alreadyInstalled ? "VERIFICAR DISCO" : "INSTALAR JOGO");
+                    installDiscButton.setContentDescription(
+                            alreadyInstalled
+                                    ? "Verificar a instalação privada existente de God of War"
+                                    : "Instalar os dados do disco selecionado");
+                }
                 if (selectDiscButton != null) {
                     selectDiscButton.setEnabled(true);
                     selectDiscButton.setAlpha(1f);
