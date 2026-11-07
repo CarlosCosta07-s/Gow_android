@@ -324,11 +324,11 @@ def _probe_run_as_and_stdin(adb: str, serial: str, package_name: str) -> None:
     _run([adb, "-s", serial, "shell", "run-as", package_name, "id"])
     # Verify before uninstalling anything that the ADB shell forwards stdin to
     # a run-as child process. The probe writes no device files.
+    probe_command = (
+        f'run-as {package_name} sh -c "cat >/dev/null"'
+    )
     probe = subprocess.run(
-        [
-            adb, "-s", serial, "shell",
-            "run-as", package_name, "sh", "-c", "cat >/dev/null",
-        ],
+        [adb, "-s", serial, "shell", probe_command],
         input=b"gow-migration-probe",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -348,8 +348,8 @@ def _restore_private_installation(
     installation_directory: str,
 ) -> None:
     _run([
-        adb, "-s", serial, "shell", "run-as", package_name,
-        "mkdir", "-p", "files/installations",
+        adb, "-s", serial, "shell",
+        f"run-as {package_name} mkdir -p files/installations",
     ])
     remote = (
         f'run-as {package_name} sh -c "cd files && toybox tar -xf -"'
@@ -358,14 +358,16 @@ def _restore_private_installation(
         _run([adb, "-s", serial, "shell", remote], input_stream=archive)
 
     boot_path = "SCUS_973.99"
-    verified = _run([
-        adb, "-s", serial, "shell", "run-as", package_name,
-        "sh", "-c",
+    verify_script = (
         f"test -s files/installations/{installation_directory}/disc/SYSTEM.CNF"
         f" && test -s files/installations/{installation_directory}/disc/{boot_path}"
         f" && test -s files/installations/{installation_directory}/disc/.disc_layout"
         f" && test -s files/installations/{installation_directory}/disc/.disc_meta"
-        f" && test -s files/installations/{installation_directory}/disc/.gow_disc_integrity",
+        f" && test -s files/installations/{installation_directory}/disc/.gow_disc_integrity"
+    )
+    verified = _run([
+        adb, "-s", serial, "shell",
+        f'run-as {package_name} sh -c "{verify_script}"',
     ])
     _ = verified
 
