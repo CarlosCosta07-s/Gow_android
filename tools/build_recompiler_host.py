@@ -353,7 +353,7 @@ def main() -> int:
         "#include <immintrin.h>\n",
         "#if defined(__aarch64__) && defined(__ARM_NEON)\n"
         '#include "sse2neon.h"\n'
-        "#else\n"
+        "#elif defined(_MSC_VER) || defined(__SSE4_1__)\\n"
         "#include <immintrin.h>\n"
         "#endif\n",
         "select sse2neon for the native ARM64 VIF1 UNPACK fast path",
