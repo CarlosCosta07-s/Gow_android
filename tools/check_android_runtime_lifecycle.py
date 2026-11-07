@@ -616,26 +616,6 @@ def main() -> int:
         "Android AOT identity hashing must be compiled into the native game library.",
     )
     for required in (
-        "parse_game_identity_manifest",
-        "game_identity.txt",
-        '"game_identity": game_identity',
-        "game_identity is not None",
-    ):
-        require(required in native_aot_source, f"Host AOT game identity validation is missing: {required}")
-    for required in (
-        "game_identity.txt",
-        "format=gow-android-game-identity-v1",
-    ):
-        require(required in capture_sync, f"Android AOT capture sync is missing game identity: {required}")
-    for required in (
-        "expected_elf_path",
-        "game_identity.get(\"elf_sha256\")",
-        "_sha256_file(elf)",
-        "different BOOT2 ELF/ISO revision",
-    ):
-        require(required in build_host, f"Strict AOT candidate identity gate is missing: {required}")
-
-    for required in (
         "GOW_ANDROID_GENERATED_VU1_DIR",
         "GOW_ANDROID_GENERATED_IOP_DIR",
         "PS2X_IOP_NATIVE_SOURCE_DIR",
@@ -702,6 +682,26 @@ def main() -> int:
         "full_native_aot",
     ):
         require(required in native_aot_source, f"Private native AOT builder is missing: {required}")
+
+    for required in (
+        "parse_game_identity_manifest",
+        "game_identity.txt",
+        '"game_identity": game_identity',
+        "game_identity is not None",
+    ):
+        require(required in native_aot_source, f"Host AOT game identity validation is missing: {required}")
+    for required in (
+        "game_identity.txt",
+        "format=gow-android-game-identity-v1",
+    ):
+        require(required in capture_sync, f"Android AOT capture sync is missing game identity: {required}")
+    for required in (
+        "expected_elf_path",
+        'game_identity.get("elf_sha256")',
+        "_sha256_file(elf)",
+        "different BOOT2 ELF/ISO revision",
+    ):
+        require(required in game_builder, f"Strict AOT candidate identity gate is missing: {required}")
 
     game_builder = (project_root / "tools/build_android_game.py").read_text(encoding="utf-8")
     for required in (
