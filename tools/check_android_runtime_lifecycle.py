@@ -411,7 +411,7 @@ def main() -> int:
     ):
         require(required in main_activity, f"Private installed-disc recovery is missing: {required}")
     private_restore_start = main_activity.find(
-        "private void restorePrivateInstallationIfAvailable()"
+        "private boolean restorePrivateInstallationIfAvailable()"
     )
     private_restore_end = main_activity.find(
         "private void validateAndDisplay(", private_restore_start
