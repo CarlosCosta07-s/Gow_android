@@ -378,6 +378,16 @@ extern "C" bool gowRuntimeGuestExecutionFinishedAndroid(
     }
 }
 
+extern "C" void gowRuntimeSetAndroidPaused(
+    PS2Runtime *runtime, bool paused) noexcept {
+    if (runtime == nullptr) return;
+    try {
+        runtime->setAndroidHostPaused(paused);
+    } catch (...) {
+        // Lifecycle notifications must never unwind through GameActivity.
+    }
+}
+
 extern "C" bool gowRuntimeValidateIopCdvd(
     const char *privateRoot, const char *bootRelativePath,
     char *message, size_t capacity) noexcept {
