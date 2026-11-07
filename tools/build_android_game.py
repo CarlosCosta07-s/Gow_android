@@ -400,6 +400,31 @@ def extract_iso_elf(
     return locate_ntsc_u_elf(destination)
 
 
+def install_and_launch_android_app(
+    apk_path: Path,
+    repo_root: Path,
+    *,
+    device_serial: str | None = None,
+    install: bool = True,
+) -> None:
+    """Install the just-built Debug APK (when requested) and open the FORGE launcher."""
+    if apk_path.is_symlink() or not apk_path.is_file() or apk_path.stat().st_size == 0:
+        raise RuntimeError("Cannot install an APK that is missing, empty or a symbolic link.")
+
+    adb, serial = resolve_adb_device(device_serial=device_serial)
+    if install:
+        _run((adb, "-s", serial, "install", "-r", str(apk_path)), repo_root)
+    _run((adb, "-s", serial, "shell", "am", "force-stop", DEFAULT_PACKAGE), repo_root)
+    _run((
+        adb, "-s", serial, "shell", "am", "start",
+        "-n", f"{DEFAULT_PACKAGE}/org.gowandroid.app.MainActivity",
+    ), repo_root)
+    print(
+        "FORGE launcher started on Android. The private installation remains on the device; "
+        "open INSTALAR JOGO there to enter the native game activity."
+    )
+
+
 def main() -> int:
     default_work = Path("C:/gowport") if os.name == "nt" else Path("/tmp/gowport")
     parser = argparse.ArgumentParser(
@@ -443,6 +468,14 @@ def main() -> int:
             "then replace an ephemeral-signature Debug APK and restore the installation"
         ),
     )
+    parser.add_argument(
+        "--install-and-launch",
+        action="store_true",
+        help=(
+            "after building, install/update the Debug APK on one authorized Android device "
+            "and open the FORGE launcher; use --migrate-installed-debug-signature when the signing key changed"
+        ),
+    )
     # Private ADB synchronization supplies this archive automatically. The
     # hidden option remains only for internal tests and offline maintainer use.
     parser.add_argument(
@@ -483,8 +516,6 @@ def main() -> int:
         elf_path = Path(args.elf).expanduser().resolve()
     else:
         elf_path = None
-    if args.migrate_installed_debug_signature and not args.installed_android:
-        parser.error("--migrate-installed-debug-signature requires --installed-android.")
 
     captures_zip: Path | None = None
     if args.aot_captures:
@@ -523,6 +554,9 @@ def main() -> int:
         "--work-dir",
         str(work),
     )
+
+    if args.install_and_launch and (args.plan_only or args.generate_only):
+        parser.error("--install-and-launch requires a completed APK build, not --plan-only or --generate-only.")
 
     if args.plan_only and iso_path is not None:
         print(f"Original ISO input: {iso_path}")
@@ -728,6 +762,18 @@ def main() -> int:
             work_dir=work,
             repo_root=root,
             device_serial=args.device_serial,
+        )
+        if args.install_and_launch:
+            install_and_launch_android_app(
+                plan.apk_path, root,
+                device_serial=args.device_serial,
+                install=False,
+            )
+    elif args.install_and_launch:
+        install_and_launch_android_app(
+            plan.apk_path, root,
+            device_serial=args.device_serial,
+            install=True,
         )
 
     return 0
